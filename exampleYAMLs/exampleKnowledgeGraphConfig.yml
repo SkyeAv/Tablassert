@@ -14,7 +14,13 @@ config_directories:
  - # <Containing .yml>
  - # <Table Configs>
 
-DB_map : # <Path to Map Database>
-DB_res : # <Path to Resolver Database>
-DB_pref : # <Path to Preferred Names Database>
-DB_hash : # <Path to Hashed Revolver Database>
+DB_map : # <Path to SQLite3 Map Database>
+DB_res : # <Path to SQLite3 Resolver Database>
+DB_pref : # <Path to SQLite3 Preferred Names Database>
+DB_hash : # <Path to SQLite3 Hashed Revolver Database>
+
+# SQLite3 DB Requirements...
+# Map DB : TABLE: "MAP" SCHEMA: | "ALIAS" | "PREFERRED" |
+# Res DB : TABLE:  "SYNONYMS" SCHEMA: | "SYNONYM" | "CURIE" |
+# Pref DB : TABLE: "NAMES" SCHEMA: | "CURIE" | "NAME" | "CATEGORY" |
+# Hash DB : TABLE: "HASHES" SCHEMA: | "HASH" | "CURIE" |
