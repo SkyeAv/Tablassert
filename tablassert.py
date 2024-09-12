@@ -58,7 +58,6 @@ def openIt(PARAM):
         print(f'Sorry. Tablassert doesn\'t yet support {EXT} files.')
     return source, EXT
 
-
 def attributes(source, PARAM):
     for attribute, config in PARAM['attributes'].items():
         if attribute in source.columns and config.get('column_name') != attribute:
