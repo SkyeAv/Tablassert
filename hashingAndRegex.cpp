@@ -1,4 +1,4 @@
-/* Skye Goetz (ISB) 09/11/2024 */
+// Skye Goetz (ISB) 09/11/2024 
 
 // g++ -std=c++11 -o hashingAndRegex hashingAndRegex.cpp -lssl -lcrypto
 
@@ -9,11 +9,9 @@
 #include <iomanip>
 #include <sstream>
 
-// Function prototypes
 std::string hashing(const std::string& INPUT);
 std::string regex(const std::string& INPUT);
 
-// Read lines from standard input, process them, and print the results
 int main(){
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -24,7 +22,6 @@ int main(){
     return 0;
 }
 
-// Process the input with regex, convert to lowercase, and compute SHA-1 hash
 std::string hashing(const std::string& INPUT){
     std::string result;
     result = regex(INPUT);
@@ -41,7 +38,6 @@ std::string hashing(const std::string& INPUT){
     return hex_stream.str();
 }
 
-// Filter out non-alphanumeric characters from the input
 std::string regex(const std::string& INPUT) {
     std::string result;
     for (char c : INPUT) {
