@@ -9,39 +9,36 @@ import subprocess
 import polars as pl
 from concurrent.futures import ProcessPoolExecutor
 
-# Get the path to the knowledge graph info YAML file from command line arguments
 try: GRAPH_INFO = sys.argv[1]
 except IndexError:
     print('Usage : python3 master.py <knowledgeGraphInfo.yml>')
     sys.exit()
 
-# Set up environment variables and paths
 os.environ['tablassert'] = os.path.dirname(os.path.abspath(sys.argv[0]))
 BIN = os.environ['tablassert']
 
-# Load configuration from YAML file
 with open(GRAPH_INFO) as config:
     PARAM = yaml.load(config, Loader=yaml.FullLoader)
 SOURCE_DATA = os.path.join(os.getcwd(), f'{PARAM['knowledge_graph_name']}.source.data')
 LOG_PATH = os.path.join(os.getcwd(), f'{PARAM['knowledge_graph_name']}.log')
 
-# Set up logging configuration
 if os.path.isfile(LOG_PATH): os.remove(LOG_PATH)
+
 logging.basicConfig(
     level=logging.INFO, format='%(asctime)s\t%(levelname)s\t%(message)s',
     filename= LOG_PATH, filemode='w'
 )
+
 logging.info('master.py\tSTARTED')
 
-# Set up database environment variables and process priority
 os.environ['tablassertDBMap'] = PARAM['DB_map']
 os.environ['tablassertDBRes'] = PARAM['DB_res']
 os.environ['tablassertDBPref'] = PARAM['DB_pref']
 os.environ['tablassertDBHash'] = PARAM['DB_hash']
+
 os.environ['tablassertNiceValue'] = str(PARAM['re_nice'])
 os.nice(int(os.environ['tablassertNiceValue']))
 
-# Function to run worker subprocesses
 def callWorker(YAML):
     logging.info(f'{YAML}\tSTARTED')
     try: 
@@ -51,14 +48,12 @@ def callWorker(YAML):
         logging.info(f'{YAML}\tFAILED : {e}')
         pass
 
-# Function to safely convert values to float
 def safeConversion(val):
     try: 
         return float(val)
     except ValueError: 
         return None
 
-# Function to apply cutoff and filtering based on 'p' values
 def pvalCutoff(source):
     floated_vals = [safeConversion(x) if x is not None else None for x in source['p'].to_list()]
     source = source.with_columns(pl.Series('p', floated_vals).alias('p_float'))
@@ -68,7 +63,6 @@ def pvalCutoff(source):
     source = source.drop('p_float')
     return source
 
-# Main function to manage file processing and merging
 def master():
     os.makedirs(SOURCE_DATA, exist_ok=True)
     with ProcessPoolExecutor(max_workers=PARAM['max_workers']) as executor:
@@ -128,7 +122,7 @@ def master():
         os.system(f'gzip {NODES_PATH}')
         os.system(f'gzip {EDGES_PATH}')
     logging.info(f'{os.path.basename(EDGES_PATH)}\tCOMPLETED')
-
+    
 if __name__ == "__main__":
     master()
     logging.info('master.py\tCOMPLETE')
