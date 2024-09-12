@@ -3,7 +3,7 @@
 
 **Tablassert** by **Skye Goetz**\* and **Gwênlyn Glusman**\* is a Multipurpose Tool Designed to Craft Knowledge Assertions from Supplemental Data Tables Across Scientific Literature
 
-*Institute For Systems Biology (ISB), Seattle, WA, United States
+***Institute For Systems Biology** (ISB), Seattle, WA, United States
 
 To Initiate **Tablassert** Pass To Your Command Line :
 
