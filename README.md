@@ -13,4 +13,5 @@ python3 master.py <knowledgeGraphConfig.yml>
 ### Required Libraries
 - polars (Python)
 - yaml (Python)
+- sqlite3 (Python)
 - openssl (C++)
