@@ -12,10 +12,15 @@ import polars as pl
 from urllib.request import urlretrieve
 
 BIN = os.environ['tablassert']
-CONFIG_FILE = sys.argv[1]
-SOURCE_DATA = sys.argv[2]
-LOG_PATH = os.path.join(SOURCE_DATA, 'log')
 
+try:
+    CONFIG_FILE = sys.argv[1]
+    SOURCE_DATA = sys.argv[2]
+except IndexError:
+    print(f'Usage : python3 {os.path.basename(sys.argv[0])} <supplementalTableConfig.yml> <Source Data Path>')
+    sys.exit()
+
+LOG_PATH = os.path.join(SOURCE_DATA, 'log')
 os.makedirs(LOG_PATH, exist_ok=True)
 if os.path.isfile(os.path.join(LOG_PATH, f'{os.path.basename(CONFIG_FILE)}.log')):
     os.remove(os.path.join(LOG_PATH, f'{os.path.basename(CONFIG_FILE)}.log'))

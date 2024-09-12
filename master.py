@@ -9,9 +9,10 @@ import subprocess
 import polars as pl
 from concurrent.futures import ProcessPoolExecutor
 
-try: GRAPH_INFO = sys.argv[1]
+try: 
+    GRAPH_INFO = sys.argv[1]
 except IndexError:
-    print('Usage : python3 master.py <knowledgeGraphInfo.yml>')
+    print(f'Usage : python3 {os.path.basename(sys.argv[0])} <knowledgeGraphInfo.yml>')
     sys.exit()
 
 os.environ['tablassert'] = os.path.dirname(os.path.abspath(sys.argv[0]))
