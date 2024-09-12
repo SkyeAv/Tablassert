@@ -1,0 +1,20 @@
+# Skye Goetz (ISB) 09/11/2024
+
+# FILE MUST BE ".yml" TO BE RECOGNIZED BY TABLASSERT
+
+knowledge_graph_name : # <Name of the Final Knowledge Graph>
+ploverize_graph : # <yes/no About Whether to Make the Graph Plover Compatible>
+max_workers : # <Number of Workers To Run in Parallel>
+p_value_cutoff : # <Float of Maximum Knowledge Graph P-Value>
+re_nice : # <Integer of Value to Nice All Processes By>
+
+config_directories:
+ - # <List of>
+ - # <All Directories>
+ - # <Containing .yml>
+ - # <Table Configs>
+
+DB_map : # <Path to Map Database>
+DB_res : # <Path to Resolver Database>
+DB_pref : # <Path to Preferred Names Database>
+DB_hash : # <Path to Hashed Revolver Database>

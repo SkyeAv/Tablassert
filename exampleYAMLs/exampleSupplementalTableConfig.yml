@@ -1,0 +1,72 @@
+# Skye Goetz (ISB) 09/11/2024
+
+# FILE MUST BE ".yml" TO BE RECOGNIZED BY TABLASSERT
+# USE "~" FOR "None"
+
+data_location :
+ path_to_file : # <Path to the Supplemental Table Relative to Where You Execute the Script>
+ delimiter : # <Delimiter if the Table is a CSV, TSV, TXT File>
+ sheet_to_use : # <Sheet if the Table is an XLS or XLSX File>
+ first_line : # <First Line Containing Data if Table is an XLS or XLSX File>
+ last_line : # <Last Line Containing Data if Table is an XLS or XLSX File>
+
+provenance : 
+ publication : # <CURIE Encoding the Paper the Table's From>
+ publication_name : # <Full Title of the Paper the Table's From>
+ author_year : # <Author and Year of the Paper the Table's From>
+ table_url : # <Valid URL Telling Tablassert Where to Download the Desired Table>
+ yaml_curator_and_organization : # <Name and Organization of the Person Crafting the Config>
+
+subject :
+ curie : # <A CURIE for the Entire Table>
+ # value : <A Value for the Entire Table>
+ # curie_column_name : <A Name of a Column Containing CURIEs>
+ # value_column_name : <A Name of a Column Containing Values>
+ expected_classes : # Can List Multiple
+   - # <List of Classes to Prioritize Mapping>
+ regex_replacements : # Can List Multiple
+   - pattern : # <REGEX Pattern>
+     replacement : # <REGEX Replacement>
+
+predicate : # <Biolink Predicate for All Edges in a Table>
+
+object :
+ value_column_name : # <A-ZZ>
+ # When Filetype is XLS or XLSX Column Names Correspond with the Letters Bordering the Spreadsheet
+ prefix : # Can List Multiple
+   - prefix : # <Prefix for Every Value>
+ explode : # <Delimeter to Split Values by Before Exploding to Separate Rows>
+ fill_values : # <How to Fill Empty Values in Column (Forward or Backward)>
+
+reindex : # Can List Multiple
+  - mode : # <Reindexing Mode (greater_than_or_equal_to, less_than_or_equal_to, if_equals)>
+    column : # <Name of Column to Reindex>
+    # Goes By Final Column Names if Column is Included in the Final KG (Same Excel Filtype Rules Apply)
+    value : # <Value to Reinxed By (Can be Strings if mode == if_equals)>
+
+attributes : 
+ p : # Field Describing the P-Value
+   value : # <Attribute Value for Entire Table>
+   # column_name : <Name of Column to Containing Attribute (Same Excel Filtype Rules Apply)>
+   math : # Can List Multiple
+     - operation : # <Python math Module Attribute>
+       parameter : # Optional: <Second Parameter for Attribute>
+       order_last : # Optional: <yes/no About Whether to Order parameter Last>
+       # order_last is Required when parameter is Specified (Vice-Versa)
+ n : # Sample Size
+ relationship_strength : # Field Describing the Strength of an Edge
+ relationship_type : # Field Describing How the Edge Was Generated
+ p_correction_method : # Field Describing If/How P-Value was Corrected
+ knowledge_level : # Field Describing the Tables Knowledge Level
+ agent_type : # Field Describing the Tables Agent Type
+
+sections : # Can List Multiple
+ - # <Copy of Section Formatted Like the Rest of the Config Nested in A Sections Section> 
+   # For example...
+   # attributes :
+     # p :
+       # value :
+   # object :
+     # curie :
+     # prefix :
+       # - prefix :
