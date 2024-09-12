@@ -6,10 +6,11 @@
 ***Institute For Systems Biology** (ISB), Seattle, WA, United States
 
 To Initiate **Tablassert** Pass To Your Command Line :
-
 ```
 python3 master.py <knowledgeGraphConfig.yml>
 ```
+*Config Format in /exampleYAMLs*
+
 ### Required Libraries
 - polars (Python)
 - yaml (Python)
