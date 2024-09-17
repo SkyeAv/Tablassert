@@ -4,7 +4,7 @@
 # USE "~" FOR "None"
 
 data_location :
- path_to_file : # <Path to the Supplemental Table Relative to Where You Execute the Script>
+ path_to_file : # <Path to the Supplemental Table, Absolute or Relative to Where You Execute the Script>
  delimiter : # <Delimiter if the Table is a CSV, TSV, TXT File>
  sheet_to_use : # <Sheet if the Table is an XLS or XLSX File>
  first_line : # <First Line Containing Data if Table is an XLS or XLSX File>
