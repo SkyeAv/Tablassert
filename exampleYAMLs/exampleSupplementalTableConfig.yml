@@ -38,7 +38,7 @@ object :
  explode : # <Delimeter to Split Values by Before Exploding to Separate Rows>
  fill_values : # <How to Fill Empty Values in Column (Forward or Backward)>
 
-reindex : # Can List Multiple
+reindex : # Can List Multiple (This is the same as filerting/selecting)
   - mode : # <Reindexing Mode (greater_than_or_equal_to, less_than_or_equal_to, if_equals)>
     column : # <Name of Column to Reindex>
     # Goes By Final Column Names if Column is Included in the Final KG (Same Excel Filtype Rules Apply)
