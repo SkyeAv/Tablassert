@@ -12,12 +12,14 @@ from __future__ import annotations
 import gzip
 import hashlib
 import io
+import json
 import shutil
 import subprocess
 import sys
 import tarfile
 from email.message import Message
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from urllib.error import HTTPError, URLError
 
@@ -26,6 +28,7 @@ from cyclopts.exceptions import UnknownOptionError  # pyright: ignore[reportMiss
 
 from tablassert import cli, extras, rs
 from tablassert.cli import build_fullmap_pipeline, build_kg, download_babel_file, download_babel_file_aria2c, validate_graph_pipeline
+from tablassert.distill_reward import normalize_rows, union_keys
 from tablassert.errors import BabelDownloadError, GraphValidationError, QcRuntimeMissingError
 from tablassert.ingests import to_yaml
 from tablassert.progress import PipelineProgress
@@ -50,6 +53,105 @@ class _FakeResponse:
 
     def __exit__(self, *exc_info: object) -> bool:
         return False
+
+
+def test_distill_export_skips_outcome_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The export partition excludes content-classified outcome files before loading.
+
+    Why: outcome rows share the ``*.ndjson`` glob with records but are not training examples;
+    importing ``datasets`` before this partition would make the base-environment guard impossible.
+    """
+    from tablassert.cli import distill_export
+
+    distill_dir: Path = tmp_path / "distill"
+    distill_dir.mkdir()
+    (distill_dir / "records.ndjson").write_text('{"record_type":"record","value":1}\n', encoding="utf-8")
+    (distill_dir / "renamed.ndjson").write_text('{"record_type":"outcome","value":2}\n', encoding="utf-8")
+    loaded: list[Path] = []
+
+    class _Dataset:
+        def __len__(self) -> int:
+            return 1
+
+        def save_to_disk(self, path: str) -> None:
+            Path(path).mkdir()
+
+    datasets_module = ModuleType("datasets")
+
+    def load_dataset(_format: str, *, data_files: list[str], split: str) -> _Dataset:
+        assert split == "train"
+        assert len(data_files) == 1
+        temporary: Path = Path(data_files[0])
+        loaded.append(temporary)
+        rows = [json.loads(line) for line in temporary.read_text(encoding="utf-8").splitlines()]
+        assert rows == [{"record_type": "record", "value": 1}]
+        return _Dataset()
+
+    datasets_module.load_dataset = load_dataset  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+    monkeypatch.setattr(extras, "require", lambda *args, **kwargs: None)
+    distill_export(distill_dir=distill_dir, out=tmp_path / "dataset")
+    assert len(loaded) == 1
+    assert not loaded[0].exists()
+
+
+def test_distill_export_fails_loud_when_only_outcomes_are_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An outcomes-only directory exits 2 before optional dependencies are checked.
+
+    Why: a successful preflight followed by a cryptic ``datasets`` failure would hide the actual
+    corpus mistake; the content partition must explain that records are absent in base installs.
+    """
+    from tablassert.cli import distill_export
+
+    distill_dir: Path = tmp_path / "distill"
+    distill_dir.mkdir()
+    (distill_dir / "anything.ndjson").write_text('{"record_type":"outcome","run_id":"r"}\n', encoding="utf-8")
+    monkeypatch.setattr(extras, "require", lambda *args, **kwargs: pytest.fail("optional extra was checked too early"))
+    with pytest.raises(SystemExit) as exc_info:
+        distill_export(distill_dir=distill_dir, out=tmp_path / "dataset")
+    assert exc_info.value.code == 2
+    assert "only outcome" in capsys.readouterr().err
+
+
+def test_distill_export_normalizes_a_corpus_spanning_schema_versions() -> None:
+    """The pure normalization helpers union and fill keys across v1/v2-shaped rows.
+
+    Why: this is the load-bearing fix for ``datasets`` first-block inference and must remain
+    testable without importing the optional export dependency.
+    """
+    rows: list[dict[str, object]] = [
+        {"record_type": "record", "schema_version": 1, "messages": []},
+        {"record_type": "record", "schema_version": 2, "run_id": "r2", "messages": [], "pmc_id": "PMC2"},
+    ]
+    assert union_keys(rows) == ("record_type", "schema_version", "messages", "run_id", "pmc_id")
+    assert normalize_rows(rows) == [
+        {"record_type": "record", "schema_version": 1, "messages": [], "run_id": None, "pmc_id": None},
+        {"record_type": "record", "schema_version": 2, "messages": [], "run_id": "r2", "pmc_id": "PMC2"},
+    ]
+
+
+def test_distill_export_fails_loud_on_a_type_conflict(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """A corpus-wide non-null type conflict is rejected before optional loading.
+
+    Why: ``datasets`` silently JSON-encodes varying types into a string, which is data corruption
+    rather than a recoverable schema mismatch for a training dataset.
+    """
+    from tablassert.cli import distill_export
+
+    distill_dir: Path = tmp_path / "distill"
+    distill_dir.mkdir()
+    (distill_dir / "records.ndjson").write_text('{"record_type":"record","score":1}\n{"record_type":"record","score":"one"}\n', encoding="utf-8")
+    monkeypatch.setattr(extras, "require", lambda *args, **kwargs: pytest.fail("optional extra was checked too early"))
+    with pytest.raises(SystemExit) as exc_info:
+        distill_export(distill_dir=distill_dir, out=tmp_path / "dataset")
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "score" in error
+    assert "int" in error
+    assert "str" in error
+    assert "JSON-encode" in error
 
 
 def test_validate_graph_pipeline_rejects_malformed_graph(tmp_path: Path) -> None:

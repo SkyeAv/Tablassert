@@ -96,8 +96,26 @@ Use this to convert a distillation dataset recorded with
 [`agent --distill`](#agent) into an on-disk Hugging Face dataset (`save_to_disk`). Requires the
 `[distill]` extra (`pip install "tablassert[distill]"`, pulls `datasets`). The raw NDJSON already
 loads directly in Unsloth Studio and via `datasets.load_dataset("json", ...)` — this export is
-only needed for `datasets`-native workflows. Keep derived training output in a separate directory;
-`distill-export` loads every `*.ndjson` under its input directory.
+only needed for `datasets`-native workflows.
+
+Outcome files are skipped: export recognizes `outcomes.ndjson` by its **content** (a first line
+whose `record_type` is `outcome`), not its name, and loads only the record files — a directory
+holding nothing else exits 2 with a message that says so. A directory with no `*.ndjson` at all
+still fails with the original empty-directory error. Keep derived training output (e.g.
+`distill-weigh`'s `train.ndjson`) in a separate directory: export loads every record `*.ndjson`
+under its input directory, so a weighed file placed there would be loaded as if it were raw
+corpus.
+
+The corpus is schema-normalized before loading: export reads every record file, unions the keys
+seen anywhere in the corpus, and re-emits every row with an explicit `null` for absent keys into
+one uniform temporary file (outside the input directory) that is what actually gets passed to
+`load_dataset`. `datasets` otherwise infers its schema from the **first block of the first file
+only** and dies with a `CastError` the moment a later file carries a column that block lacked —
+which an append-only corpus spanning schema versions (v1 rows without `run_id` next to v2 rows)
+would always trigger. Normalization makes the schema correct by construction, so a v1-only
+corpus still exports. A column whose type varies across rows (say `"2"` in one line and `2` in
+another) is **rejected** with exit 2 naming the column and the types: `datasets` would otherwise
+silently JSON-encode that column into a string, corrupting the corpus without an error.
 
 ```bash
 tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dataset

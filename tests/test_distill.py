@@ -725,3 +725,48 @@ def test_distill_export_fails_loud_on_an_empty_dir(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as exc_info:
         distill_export(distill_dir=tmp_path / "empty", out=tmp_path / "out")
     assert exc_info.value.code == 2
+
+
+def test_distill_export_survives_a_corpus_spanning_schema_versions(tmp_path: Path) -> None:
+    """``distill-export`` unions v1/v2 record files into one schema and skips outcome files.
+
+    Why: ``datasets`` infers features from the first block of the first file only and would raise
+    ``CastError`` on a later file whose column set differs, so an append-only corpus spanning a
+    schema change must be union-normalized before the load. Outcome files in the same directory
+    are recognized by content (a first line whose ``record_type`` is ``outcome``) and excluded.
+    """
+    pytest.importorskip("datasets")
+    from datasets import load_from_disk  # pyright: ignore[reportMissingImports]
+
+    from tablassert.cli import distill_export
+
+    v1_line: str = json.dumps({"record_type": "record", "schema_version": 1, "purpose": "agent", "messages": [{"role": "user", "content": "v1"}]})
+    v2_row: dict[str, Any] = {
+        **dict.fromkeys(distill.RECORD_KEYS),
+        "record_type": "record",
+        "schema_version": 2,
+        "run_id": "run:v2",
+        "purpose": "agent",
+        "call_index": 0,
+        "messages": [{"role": "user", "content": "v2"}],
+        "pmc_id": "PMC2",
+    }
+    # a.ndjson sorts first, so a naive load_dataset would infer v1 features (no run_id) and CastError on b.ndjson.
+    ndjson_dir: Path = tmp_path / "distill"
+    ndjson_dir.mkdir()
+    (ndjson_dir / "a.ndjson").write_text(v1_line + "\n", encoding="utf-8")
+    (ndjson_dir / "b.ndjson").write_text(json.dumps(v2_row) + "\n", encoding="utf-8")
+    (ndjson_dir / "outcomes.ndjson").write_text(
+        json.dumps({"record_type": "outcome", "schema_version": 2, "run_id": "run:v2", "run_status": "MAPPED"}) + "\n", encoding="utf-8"
+    )
+    out: Path = tmp_path / "hf-dataset"
+
+    distill_export(distill_dir=ndjson_dir, out=out)
+
+    dataset = load_from_disk(str(out))
+    assert len(dataset) == 2  # the two records only — the outcome line was skipped
+    assert "run_id" in dataset.column_names  # union schema: the v2 column exists
+    assert "run_status" not in dataset.column_names  # no outcome column leaked in
+    assert dataset[0]["run_id"] is None  # the v1 row keeps the union key with an explicit null
+    assert dataset[1]["run_id"] == "run:v2"
+    assert sorted(path.name for path in ndjson_dir.iterdir()) == ["a.ndjson", "b.ndjson", "outcomes.ndjson"]
