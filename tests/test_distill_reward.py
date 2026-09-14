@@ -748,3 +748,916 @@ def test_no_rl_or_reward_model_dependency_is_imported() -> None:
     assert "quality_score" not in referenced
     allowed: set[str] = set(sys.stdlib_module_names) | {"yaml", "tablassert"}
     assert imported <= allowed, f"non-stdlib, non-yaml import: {imported - allowed}"
+
+
+# ─────────── derived rows: corpus I/O, join, flatten, select, normalization (US-005) ───────────
+
+
+def _record(**overrides: Any) -> dict[str, Any]:
+    """A complete v2 record line in canonical ``RECORD_KEYS`` order, with ``**overrides`` applied."""
+    record: dict[str, Any] = dict.fromkeys(distill.RECORD_KEYS)
+    record.update(
+        {
+            "record_type": "record",
+            "schema_version": 2,
+            "run_id": "inv1:PMC1",
+            "timestamp": "2026-09-11T12:04:31+00:00",
+            "purpose": "agent",
+            "call_index": 0,
+            "messages": [{"role": "user", "content": "build the KG"}, {"role": "assistant", "content": "sections:\n- statement: {}\n"}],
+            "token_usage": {"input_tokens": 120, "output_tokens": 40},
+            "input_tokens": 120,
+            "output_tokens": 40,
+            "n_messages": 2,
+            "pmc_id": "PMC1",
+            "model_id": "gpt-4o",
+        }
+    )
+    record.update(overrides)
+    return record
+
+
+def _row(**overrides: Any) -> dict[str, Any]:
+    """A canonical ``TRAIN_ROW_KEYS`` row for policy tests: every key present, ``**overrides`` applied."""
+    row: dict[str, Any] = dict.fromkeys(distill_reward.TRAIN_ROW_KEYS)
+    row.update({"outcome_matched": True, "weight": 0.0, "selected": False, "replicas": 0})
+    row.update(overrides)
+    return row
+
+
+def _weighed(records: list[dict[str, Any]], outcomes: list[dict[str, Any]], *, edge_ref: float | None = None) -> list[dict[str, Any]]:
+    """Join, then weigh each matched row from its NESTED outcome the way ``distill-weigh`` does.
+
+    Why this shape: the join has no ``RewardConfig``/``edge_ref`` in scope, so a matched row comes
+    back with a null ``weight`` and the caller derives it per ``run_id`` from the outcome line.
+    """
+    rows: list[dict[str, Any]]
+    rows, _ = distill_reward.join_records_outcomes(records, outcomes)
+    config: distill_reward.RewardConfig = distill_reward.RewardConfig()
+    weights: dict[str, float] = {}
+    for outcome in outcomes:
+        run_id: object = outcome.get("run_id")
+        if isinstance(run_id, str):
+            weights[run_id] = distill_reward.reward(outcome, config, edge_ref=edge_ref)
+    for row in rows:
+        run_id = row.get("run_id")
+        if isinstance(run_id, str) and run_id in weights:
+            row["weight"] = weights[run_id]
+    return rows
+
+
+def test_select_threshold_policy() -> None:
+    """Policy A keeps ``weight >= threshold``: selected rows get exactly one replica, the rest zero.
+
+    Why: this is RAFT/RFT rejection sampling (arXiv:2304.06767, arXiv:2308.01825) and the only
+    selection TRL consumes with zero trainer code, because ``SFTConfig`` has no per-example
+    sample-weight column. The comparison is inclusive — a row exactly at the cutoff is a kept
+    example — and zero-weight rows stay in the output as ``selected = False``: they are the
+    negative examples Agent-FLAN shows are worth keeping, so dropping them would be a silent
+    corpus edit. An empty corpus selects nothing rather than raising.
+    """
+    rows: list[dict[str, Any]] = [_row(weight=0.9), _row(weight=0.75), _row(weight=0.74), _row(weight=0.0)]
+
+    selected: list[dict[str, Any]] = distill_reward.select(rows, policy="threshold")
+    assert [row["selected"] for row in selected] == [True, True, False, False]  # 0.75 is AT the default cutoff
+    assert [row["replicas"] for row in selected] == [1, 1, 0, 0]
+    assert [row["weight"] for row in selected] == [0.9, 0.75, 0.74, 0.0]  # weights pass through unchanged
+    assert [row["policy"] for row in selected] == ["threshold"] * 4  # the policy is stamped for reproducibility
+    assert [row["threshold"] for row in selected] == [0.75] * 4  # ... and so is the cutoff that produced it
+    assert [row["run_id"] for row in selected] == [None] * 4  # a non-annotation column is untouched
+    assert len(selected) == len(rows)  # zero-weight rows are emitted, never dropped
+
+    strict: list[dict[str, Any]] = distill_reward.select(rows, policy="threshold", threshold=1.0)
+    assert [row["selected"] for row in strict] == [False] * 4  # nothing weighs a perfect 1.0
+    assert [row["threshold"] for row in strict] == [1.0] * 4
+
+    permissive: list[dict[str, Any]] = distill_reward.select(rows, policy="threshold", threshold=0.0)
+    assert [row["selected"] for row in permissive] == [True] * 4  # a 0.0 cutoff keeps every row, even weight 0.0
+
+    assert distill_reward.select([], policy="threshold") == []  # an empty corpus is not an error
+
+
+def test_select_best_of_n_is_deterministic_and_tie_breaks(tmp_path: Path) -> None:
+    """Policy B keeps the top ``top_n`` per ``pmc_id`` with a TOTAL, reproducible ranking.
+
+    Why: this is literally RAFT's ``y := argmax_j r(x, y_j)`` generalized to top-N, and the corpus
+    is append-only and long-lived — two weighs of one corpus must emit byte-identical output, so
+    the ranking may not depend on dict iteration order, filesystem order, or the sort
+    implementation's stability. Hence the four documented keys (highest weight, then fewer
+    attempts, then fewer failed tool calls, then the earlier call) plus the row's own position as
+    the final tie-break, which makes the order total even for two rows identical on all four.
+    Rows with a null ``pmc_id`` form their own group, and a null ranking figure sorts AFTER every
+    known one rather than winning the tie by accident.
+    """
+    tied: list[dict[str, Any]] = [
+        _row(pmc_id="PMC1", weight=0.9, outcome_attempts=3, outcome_tool_calls_failed=2, call_index=4),
+        _row(pmc_id="PMC1", weight=0.9, outcome_attempts=1, outcome_tool_calls_failed=2, call_index=9),  # fewer attempts wins
+        _row(pmc_id="PMC1", weight=0.9, outcome_attempts=1, outcome_tool_calls_failed=0, call_index=9),  # then fewer failed calls
+        _row(pmc_id="PMC1", weight=0.9, outcome_attempts=1, outcome_tool_calls_failed=0, call_index=2),  # then the earlier call
+        _row(pmc_id="PMC1", weight=0.9, outcome_attempts=1, outcome_tool_calls_failed=0, call_index=2),  # identical on all four:
+    ]
+    top_one: list[dict[str, Any]] = distill_reward.select(tied, policy="best-of-n", top_n=1)
+    assert [row["selected"] for row in top_one] == [False, False, False, True, False]  # ... so the earlier input position wins
+    assert [row["replicas"] for row in top_one] == [0, 0, 0, 1, 0]  # a kept row is emitted once, never duplicated
+    assert [row["policy"] for row in top_one] == ["best-of-n"] * 5
+
+    # Weight outranks every tie-break: a leaner trajectory that built a worse KG still loses.
+    by_weight: list[dict[str, Any]] = [
+        _row(pmc_id="PMC2", weight=0.4, outcome_attempts=1, outcome_tool_calls_failed=0, call_index=0),
+        _row(pmc_id="PMC2", weight=0.8, outcome_attempts=9, outcome_tool_calls_failed=9, call_index=9),
+    ]
+    assert [row["selected"] for row in distill_reward.select(by_weight, policy="best-of-n", top_n=1)] == [False, True]
+
+    # Groups are independent, a null pmc_id is its own group, and an unknown figure sorts last.
+    grouped: list[dict[str, Any]] = [
+        _row(pmc_id="PMC3", weight=0.2),
+        _row(pmc_id="PMC3", weight=0.6),
+        _row(pmc_id="PMC4", weight=0.1),  # a single-row group is always kept
+        _row(pmc_id=None, weight=0.9),  # null pmc_id: its own group
+        _row(pmc_id=None, weight=0.95),
+        _row(pmc_id="PMC5", weight=0.7, outcome_attempts=None),  # an unmeasured attempt count sorts after a known one
+        _row(pmc_id="PMC5", weight=0.7, outcome_attempts=5),
+    ]
+    kept: list[dict[str, Any]] = distill_reward.select(grouped, policy="best-of-n", top_n=1)
+    assert [row["selected"] for row in kept] == [False, True, True, False, True, False, True]
+    assert len(kept) == len(grouped)  # ranking annotates; it never reorders or drops
+    assert [row["replicas"] for row in kept] == [0, 1, 1, 0, 1, 0, 1]  # a kept row is emitted once
+
+    # The bare outcome spellings rank exactly like the canonical flat columns.
+    bare: list[dict[str, Any]] = [_row(pmc_id="PMC6", weight=0.5, attempts=7), _row(pmc_id="PMC6", weight=0.5, attempts=1)]
+    assert [row["selected"] for row in distill_reward.select(bare, policy="best-of-n", top_n=1)] == [False, True]
+
+    # Determinism: repeated runs are equal, and their serialized bytes are identical.
+    corpus: list[dict[str, Any]] = [*tied, *grouped, *by_weight]
+    first: list[dict[str, Any]] = distill_reward.select(corpus, policy="best-of-n", top_n=2)
+    second: list[dict[str, Any]] = distill_reward.select(corpus, policy="best-of-n", top_n=2)
+    assert first == second
+    assert [row["pmc_id"] for row in first] == [row["pmc_id"] for row in corpus]  # emitted in the ORIGINAL record order
+    left: Path = tmp_path / "left.ndjson"
+    right: Path = tmp_path / "right.ndjson"
+    assert distill_reward.write_ndjson(left, first) == distill_reward.write_ndjson(right, second) == len(corpus)
+    assert left.read_bytes() == right.read_bytes()  # two runs over one corpus: byte-identical output
+
+    # Policy B has NO weight floor: it keeps the best AVAILABLE sample per prompt, so a zero-weight
+    # singleton group is selected where policy A would drop it. That is REQ-RW-17 verbatim (RAFT's
+    # argmax over the samples that exist) and the documented difference between the two policies.
+    zero: list[dict[str, Any]] = [_row(pmc_id="PMC7", weight=0.0)]
+    assert distill_reward.select(zero, policy="best-of-n")[0]["selected"] is True
+    assert distill_reward.select(zero, policy="threshold")[0]["selected"] is False
+    assert distill_reward.select(zero, policy="replication")[0]["selected"] is False  # policy C selects on weight > 0
+
+
+def test_select_replication_is_monotone_and_bounded() -> None:
+    """Policy C selects ``weight > 0`` and scales ``replicas`` monotonically across the weight spread.
+
+    Why: replication is the only way to approximate importance weighting natively, because TRL has
+    no per-example weight column — so the weight becomes a COUNT of how many times the trainer
+    should see the row, bounded by ``1 + replication_k``. ``replicas`` is never a physical
+    duplication: repeating rows here would inflate the file, destroy per-example identity under
+    ``packing=True``, and double-count once the trainer applies its own replication. All-equal
+    weights encode no gradient, so every selected row gets exactly one replica rather than an
+    invented spread, and an all-zero corpus selects nothing.
+    """
+    rows: list[dict[str, Any]] = [_row(weight=0.0), _row(weight=0.25), _row(weight=0.5), _row(weight=1.0)]
+
+    scaled: list[dict[str, Any]] = distill_reward.select(rows, policy="replication", replication_k=2)
+    assert [row["selected"] for row in scaled] == [False, True, True, True]  # weight > 0, not >= a threshold
+    assert [row["replicas"] for row in scaled] == [0, 1, 2, 3]  # 1 + round(2 * (w - 0.25) / 0.75)
+    assert all(isinstance(row["replicas"], int) for row in scaled)  # a COUNT, so an int column
+    assert len(scaled) == len(rows)  # one row per example, always
+
+    monotone: list[int] = [row["replicas"] for row in scaled if row["selected"]]
+    assert monotone == sorted(monotone)  # never inverted: a better example cannot replicate less
+    assert all(1 <= count <= 1 + distill_reward.MAX_REPLICATION_K for count in monotone)
+
+    flat: list[dict[str, Any]] = distill_reward.select([_row(weight=0.6), _row(weight=0.6), _row(weight=0.0)], policy="replication")
+    assert [row["replicas"] for row in flat] == [1, 1, 0]  # all-equal weights: no gradient to encode
+
+    empty: list[dict[str, Any]] = distill_reward.select([_row(weight=0.0), _row(weight=0.0)], policy="replication")
+    assert [row["selected"] for row in empty] == [False, False]
+    assert [row["replicas"] for row in empty] == [0, 0]
+
+    zero_slope: list[dict[str, Any]] = distill_reward.select(rows, policy="replication", replication_k=0)
+    assert [row["replicas"] for row in zero_slope] == [0, 1, 1, 1]  # k = 0 is pure filtering
+    max_slope: list[dict[str, Any]] = distill_reward.select(rows, policy="replication", replication_k=3)
+    assert [row["replicas"] for row in max_slope] == [0, 1, 2, 4]  # bounded by 1 + k
+    assert [row["policy"] for row in max_slope] == ["replication"] * 4
+
+
+def test_select_emits_the_same_key_set_for_every_policy() -> None:
+    """All three policies emit the SAME key set — only the annotation values differ.
+
+    Why: ``datasets`` infers its features from the first block of the first file, so a schema that
+    depended on the policy chosen would make two exports of one corpus incomparable (and a
+    re-weigh under a different policy would raise ``CastError`` instead of producing a dataset).
+    Asserted both on canonical joined rows (where the key ORDER must survive too) and on a bare
+    row that carries nothing but its weight (where the five annotations are all there is).
+    """
+    assert distill_reward.POLICIES == ("threshold", "best-of-n", "replication")
+    assert distill_reward.SELECTION_KEYS == ("weight", "selected", "replicas", "policy", "threshold")
+    assert (distill_reward.DEFAULT_THRESHOLD, distill_reward.DEFAULT_TOP_N, distill_reward.DEFAULT_REPLICATION_K) == (0.75, 2, 2)
+
+    canonical: list[dict[str, Any]] = [_row(pmc_id="PMC1", weight=0.9), _row(pmc_id="PMC1", weight=0.2)]
+    canonical_sets: list[tuple[str, ...]] = []
+    for policy in distill_reward.POLICIES:
+        emitted: list[dict[str, Any]] = distill_reward.select(canonical, policy=policy)
+        assert all(tuple(row) == distill_reward.TRAIN_ROW_KEYS for row in emitted)  # order survives annotation
+        canonical_sets.append(tuple(emitted[0]))
+    assert len(set(canonical_sets)) == 1  # identical key tuples across policies
+
+    bare: list[dict[str, Any]] = [{"weight": 0.9}, {"weight": 0.2}]
+    bare_sets: list[frozenset[str]] = []
+    for policy in distill_reward.POLICIES:
+        emitted = distill_reward.select(bare, policy=policy)
+        assert all(frozenset(row) == frozenset(distill_reward.SELECTION_KEYS) for row in emitted)
+        bare_sets.append(frozenset(emitted[0]))
+    assert len(set(bare_sets)) == 1
+
+    values: dict[str, list[bool]] = {
+        policy: [row["selected"] for row in distill_reward.select(canonical, policy=policy)] for policy in distill_reward.POLICIES
+    }
+    assert values["threshold"] == [True, False]  # the VALUES are where the policies differ
+    assert values["best-of-n"] == [True, True]  # top_n defaults to 2, so a 2-row group keeps both
+    assert values["replication"] == [True, True]  # weight > 0
+
+
+def test_select_rejects_unknown_policy_and_out_of_range_knobs() -> None:
+    """An unknown policy or an out-of-range knob fails LOUD, naming the valid set.
+
+    Why: these knobs decide which examples train the LoRA, so a typo (``"best_of_n"``, a threshold
+    of ``75``, a ``top_n`` of ``0``, a ``replication_k`` of ``30``) must stop the weigh with an
+    actionable message rather than silently producing an empty or wildly over-replicated dataset
+    that still looks like a success. Validation precedes any row work, so an empty corpus does not
+    hide a bad knob, and a wrong TYPE is a ``TypeError`` (a call-contract violation) while an
+    out-of-range value is a ``ValueError`` (a policy the module refuses).
+    """
+    rows: list[dict[str, Any]] = [_row(weight=0.9)]
+
+    with pytest.raises(ValueError, match="best_of_n") as excinfo:
+        distill_reward.select(rows, policy="best_of_n")
+    message: str = str(excinfo.value)
+    for policy in distill_reward.POLICIES:
+        assert policy in message  # the valid set is named, so the fix is obvious
+    with pytest.raises(ValueError, match="policy"):
+        distill_reward.select([], policy="")  # knob validation precedes row handling
+    with pytest.raises(ValueError, match="policy"):
+        distill_reward.select(rows, policy=None)  # pyright: ignore[reportArgumentType]  # a non-str policy is simply unknown
+
+    for bad_threshold in (-0.1, 1.5, 100.0):
+        with pytest.raises(ValueError, match=r"\[0, 1\]"):
+            distill_reward.select(rows, policy="threshold", threshold=bad_threshold)
+    for wrong_type in ("0.75", True, float("nan"), float("inf")):
+        with pytest.raises(TypeError):
+            distill_reward.select(rows, policy="threshold", threshold=wrong_type)  # pyright: ignore[reportArgumentType]
+
+    for bad_top_n in (0, -1):
+        with pytest.raises(ValueError, match="top_n"):
+            distill_reward.select(rows, policy="best-of-n", top_n=bad_top_n)
+    for wrong_type in (1.5, "2", True):
+        with pytest.raises(TypeError):
+            distill_reward.select(rows, policy="best-of-n", top_n=wrong_type)  # pyright: ignore[reportArgumentType]
+
+    for bad_k in (-1, 4, 30):
+        with pytest.raises(ValueError, match=r"\[0, 3\]"):
+            distill_reward.select(rows, policy="replication", replication_k=bad_k)
+    for wrong_type in ("2", True, float("nan")):
+        with pytest.raises(TypeError):
+            distill_reward.select(rows, policy="replication", replication_k=wrong_type)  # pyright: ignore[reportArgumentType]
+
+    assert distill_reward.select(rows, policy="replication", replication_k=3)[0]["selected"] is True  # the bounds are inclusive
+    assert distill_reward.select(rows, policy="replication", replication_k=0)[0]["replicas"] == 1
+
+
+def test_reward_config_is_frozen_and_select_does_not_mutate_rows() -> None:
+    """The policy is immutable and ``select`` returns NEW dicts, leaving its input untouched.
+
+    Why: a ``RewardConfig`` mutated between two rows of one export would silently break the
+    cross-row comparability the deterministic reward exists to guarantee, and a ``select`` that
+    annotated its input in place would make the caller's corpus depend on which policy ran last —
+    so two policies could not be compared over one corpus, and a re-run would annotate already
+    annotated rows. Frozenness is proven by direct assignment (``dataclasses.replace`` on a frozen
+    dataclass does NOT raise, so it proves nothing).
+    """
+    config: distill_reward.RewardConfig = distill_reward.RewardConfig()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        config.w_coverage = 0.9  # pyright: ignore[reportAttributeAccessIssue]  # a frozen policy rejects mutation, loudly
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        config.edge_ref = 10.0  # pyright: ignore[reportAttributeAccessIssue]
+    assert hasattr(distill_reward.RewardConfig, "__slots__")  # slots: no per-instance __dict__ to smuggle state into
+
+    rows: list[dict[str, Any]] = [_row(pmc_id="PMC1", weight=0.9), _row(pmc_id="PMC1", weight=0.2)]
+    before: list[dict[str, Any]] = [dict(row) for row in rows]
+    emitted: dict[str, list[dict[str, Any]]] = {policy: distill_reward.select(rows, policy=policy) for policy in distill_reward.POLICIES}
+
+    assert rows == before  # no policy touched the caller's rows
+    assert all(row["policy"] is None and row["selected"] is False for row in rows)  # ... so they stay unannotated
+    for policy in distill_reward.POLICIES:
+        assert all(emitted[policy][index] is not rows[index] for index in range(len(rows)))  # NEW dicts, not aliases
+        assert [row["policy"] for row in emitted[policy]] == [policy] * 2
+
+    reselected: list[dict[str, Any]] = distill_reward.select(emitted["threshold"], policy="replication")
+    assert [row["policy"] for row in reselected] == ["replication"] * 2  # re-annotating overwrites, never accumulates
+    assert [row["selected"] for row in emitted["threshold"]] == [True, False]  # the first annotation is unchanged
+
+
+def test_emitted_rows_keep_the_preference_pairing_keys() -> None:
+    """A weighed row keeps the pairing keys a future DPO/KTO path needs, with no re-recording.
+
+    Why: TRL KTO consumes UNPAIRED ``{"prompt","completion","label"}`` data, and ``selected`` maps
+    1:1 onto its ``label`` — so keeping ``pmc_id`` (the pairing key), the config identity hash,
+    ``call_index`` and ``weight`` costs nothing now and is the difference between a corpus that can
+    be re-used for preference training later and one that must be re-recorded. The config identity
+    rides as the flattened ``outcome_config_yaml_sha256`` column: REQ-DS-5's canonical key set
+    prefixes every outcome-derived column, and the prefix is what keeps it distinguishable from a
+    record column of the same name.
+    """
+    records: list[dict[str, Any]] = [_record(run_id="inv1:PMC1", pmc_id="PMC1", call_index=3)]
+    outcomes: list[dict[str, Any]] = [_outcome(run_id="inv1:PMC1", pmc_id="PMC1", config_yaml_sha256=hashlib.sha256(b"sections: []").hexdigest())]
+    rows: list[dict[str, Any]] = _weighed(records, outcomes, edge_ref=3338.0)
+
+    emitted: list[dict[str, Any]] = distill_reward.select(rows, policy="threshold", threshold=0.5)
+    row: dict[str, Any] = emitted[0]
+    assert (row["pmc_id"], row["call_index"]) == ("PMC1", 3)  # the record's own pairing keys
+    assert row["outcome_config_yaml_sha256"] == hashlib.sha256(b"sections: []").hexdigest()  # the config identity
+    assert isinstance(row["weight"], float)  # the reward
+    assert row["weight"] > 0.0  # a matched, measured run earns weight
+    assert isinstance(row["selected"], bool)  # KTO's `label`
+    for key in ("pmc_id", "call_index", "weight", "selected", "outcome_config_yaml_sha256"):
+        assert key in distill_reward.TRAIN_ROW_KEYS  # pinned in the canonical key set, not incidentally present
+
+
+def test_read_ndjson_names_the_file_and_line_of_a_malformed_row(tmp_path: Path) -> None:
+    """A malformed line fails LOUD, naming the FILE and the 1-based LINE NUMBER; blanks are skipped.
+
+    Why: the corpus is append-only and a supervisor may be mid-write when a weigh reads it, so a
+    torn last line is a live risk — silently truncating there would drop the newest examples and
+    report a smaller corpus as if it were complete. Line numbers are PHYSICAL (a skipped blank line
+    still counts), because that is what an editor shows the operator — and only ``\\n`` ends a line:
+    U+2028/U+2029/U+0085 inside a value are ordinary characters (``str.splitlines()`` disagrees, and
+    used to mis-report the number below). A line that parses to something other than an object is
+    malformed too: every corpus line is one record or outcome.
+    """
+    corpus: Path = tmp_path / "records.ndjson"
+    corpus.write_text('{"a": 1}\n\n   \n{"b": 2}\n', encoding="utf-8")
+    assert distill_reward.read_ndjson(corpus) == [{"a": 1}, {"b": 2}]  # blank and whitespace-only lines carry nothing
+
+    torn: Path = tmp_path / "torn.ndjson"
+    torn.write_text('{"a": 1}\n\n{"run_id": "x", "ok": tru\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed NDJSON") as excinfo:
+        distill_reward.read_ndjson(torn)
+    message: str = str(excinfo.value)
+    assert str(torn) in message  # the FILE is named
+    assert "line 3" in message  # ... and its PHYSICAL 1-based line number, blanks included
+
+    separated: Path = tmp_path / "separated.ndjson"
+    separated.write_text('{"text": "a\u2028b"}\n{"text": "c"}\n{"run_id": "x", "ok": tru\n', encoding="utf-8")
+    with pytest.raises(ValueError, match=r"malformed NDJSON") as excinfo:
+        distill_reward.read_ndjson(separated)
+    shifted: str = str(excinfo.value)
+    assert f"{separated} line 3:" in shifted  # the U+2028 on line 1 is NOT a line break: line 3 stays line 3
+    assert f"{separated} line 1:" not in shifted  # splitlines() used to slice line 1 and blame it for the tear
+
+    not_object: Path = tmp_path / "array.ndjson"
+    not_object.write_text('{"a": 1}\n[1, 2]\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="line 2") as excinfo:
+        distill_reward.read_ndjson(not_object)
+    assert "expected a JSON object" in str(excinfo.value)
+    for position, scalar in enumerate(("5\n", '"text"\n', "null\n", "true\n")):
+        scalar_file: Path = tmp_path / f"scalar-{position}.ndjson"
+        scalar_file.write_text(scalar, encoding="utf-8")
+        with pytest.raises(ValueError, match="expected a JSON object"):
+            distill_reward.read_ndjson(scalar_file)  # a scalar line is not a record
+
+    blank: Path = tmp_path / "blank.ndjson"
+    blank.write_text("\n\n", encoding="utf-8")
+    assert distill_reward.read_ndjson(blank) == []  # an all-blank file is empty, not malformed
+    empty: Path = tmp_path / "empty.ndjson"
+    empty.write_text("", encoding="utf-8")
+    assert distill_reward.read_ndjson(empty) == []
+
+    with pytest.raises(FileNotFoundError):
+        distill_reward.read_ndjson(tmp_path / "missing.ndjson")  # a missing corpus is an I/O error, never []
+    with pytest.raises(TypeError):
+        distill_reward.read_ndjson("records.ndjson")  # pyright: ignore[reportArgumentType]  # a call-contract violation
+
+
+def test_ndjson_round_trips_the_unicode_line_separators_splitlines_would_break_on(tmp_path: Path) -> None:
+    """U+2028, U+2029 and U+0085 inside a value are VALID NDJSON and round-trip losslessly.
+
+    Why: the capture layer writes ``json.dumps(payload, ensure_ascii=False)`` plus one ``\\n``, so
+    those three code points land RAW inside the string values of any LLM output over PMC full text
+    (U+0085 also arises from latin-1 mojibake) and are perfectly valid NDJSON. ``str.splitlines()``
+    treats all three as line breaks, so it sliced one valid record into two invalid ones: a good
+    corpus became unreadable and aborted the weigh — the fail-loud contract firing on a non-error.
+    Iterating the open handle gives ``\\n``-only semantics, matching both the writer in
+    ``distill.py`` and ``is_outcome_file``.
+    """
+    separators: tuple[str, ...] = ("\u2028", "\u2029", "\u0085")  # escapes, not literals: keeps this file diff-safe
+    rows: list[dict[str, Any]] = [
+        _row(pmc_id=f"PMC{index}", weight=0.5, messages=[{"role": "assistant", "content": f"before{sep}after"}])
+        for index, sep in enumerate(separators)
+    ]
+    corpus: Path = tmp_path / "separators.ndjson"
+    assert distill_reward.write_ndjson(corpus, rows) == 3
+    assert len(corpus.read_text(encoding="utf-8").split("\n")) == 4  # three PHYSICAL lines plus the trailing empty one
+
+    round_tripped: list[dict[str, Any]] = distill_reward.read_ndjson(corpus)  # no raise: nothing was sliced
+    assert round_tripped == rows  # lossless
+    contents: list[str] = [str(row["messages"][0]["content"]) for row in round_tripped]
+    assert contents == [f"before{sep}after" for sep in separators]  # each separator survives verbatim
+
+    captured: Path = tmp_path / "captured.ndjson"
+    recorder: distill.DistillRecorder = distill.DistillRecorder(captured, invocation_id="unicode")
+    for separator in separators:
+        recorder.record("agent", [{"role": "user", "content": f"a{separator}b"}])
+    captured_rows: list[dict[str, Any]] = distill_reward.read_ndjson(captured)  # exercise the REAL capture writer
+    assert [row["messages"][0]["content"] for row in captured_rows] == [f"a{separator}b" for separator in separators]
+
+
+def test_is_outcome_file_detects_by_content_not_by_name(tmp_path: Path) -> None:
+    """The discriminator is the first non-blank line's ``record_type``, never the filename.
+
+    Why: an outcomes file that was renamed, relocated or merged into a differently named corpus
+    must still be separated from the training records — ``distill-export`` globs every ``*.ndjson``
+    in a directory, and one non-ChatML row in the exported dataset corrupts both consumers. Name-
+    based detection would silently mis-partition on exactly the renamed file. An unreadable, empty,
+    binary or malformed file is NOT an outcome file: this predicate only partitions, and
+    ``read_ndjson`` is what fails loud on the malformed line afterwards.
+    """
+    outcome_line: str = json.dumps({"record_type": "outcome", "run_id": "inv1:PMC1"})
+    record_line: str = json.dumps({"record_type": "record", "run_id": "inv1:PMC1"})
+
+    misnamed_records: Path = tmp_path / "records.ndjson"
+    misnamed_records.write_text(outcome_line + "\n", encoding="utf-8")
+    assert distill_reward.is_outcome_file(misnamed_records) is True  # named like records, IS outcomes
+
+    misnamed_outcomes: Path = tmp_path / "outcomes.ndjson"
+    misnamed_outcomes.write_text(record_line + "\n", encoding="utf-8")
+    assert distill_reward.is_outcome_file(misnamed_outcomes) is False  # named like outcomes, IS records
+
+    leading_blanks: Path = tmp_path / "blanks.ndjson"
+    leading_blanks.write_text("\n\n   \n" + outcome_line + "\n", encoding="utf-8")
+    assert distill_reward.is_outcome_file(leading_blanks) is True  # the first NON-BLANK line decides
+
+    v1_corpus: Path = tmp_path / "v1.ndjson"
+    v1_corpus.write_text('{"messages": [], "purpose": "agent"}\n', encoding="utf-8")
+    assert distill_reward.is_outcome_file(v1_corpus) is False  # a pre-v2 line has no record_type at all
+
+    empty: Path = tmp_path / "empty.ndjson"
+    empty.write_text("", encoding="utf-8")
+    assert distill_reward.is_outcome_file(empty) is False
+    blanks_only: Path = tmp_path / "blanks-only.ndjson"
+    blanks_only.write_text("\n \n", encoding="utf-8")
+    assert distill_reward.is_outcome_file(blanks_only) is False
+    malformed: Path = tmp_path / "malformed.ndjson"
+    malformed.write_text('{"record_type": "outco\n', encoding="utf-8")
+    assert distill_reward.is_outcome_file(malformed) is False  # read_ndjson fails loud on it later
+    not_object: Path = tmp_path / "list.ndjson"
+    not_object.write_text('[{"record_type": "outcome"}]\n', encoding="utf-8")
+    assert distill_reward.is_outcome_file(not_object) is False
+    binary: Path = tmp_path / "binary.ndjson"
+    binary.write_bytes(b"\xff\xfe\x00binary")
+    assert distill_reward.is_outcome_file(binary) is False
+    assert distill_reward.is_outcome_file(tmp_path / "missing.ndjson") is False  # absent: not an outcome file
+    assert distill_reward.is_outcome_file(tmp_path) is False  # a directory is unreadable as a line source
+
+    with pytest.raises(TypeError):
+        distill_reward.is_outcome_file("outcomes.ndjson")  # pyright: ignore[reportArgumentType]  # a call-contract violation
+
+
+def test_iter_record_files_returns_sorted_ndjson_paths(tmp_path: Path) -> None:
+    """Every ``*.ndjson`` FILE under the directory, sorted by path; a missing directory is empty.
+
+    Why: the corpus order must be a function of the directory's contents alone — never of
+    filesystem enumeration order — or the emitted row order (and every rank-based policy) would
+    drift between two weighs of one corpus. Non-``.ndjson`` siblings and a directory that happens
+    to be named ``*.ndjson`` are excluded, because reading either would fail the weigh. Both kinds
+    of NDJSON are returned: partitioning them is ``is_outcome_file``'s content-based job.
+    """
+    (tmp_path / "b-records.ndjson").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "a-outcomes.ndjson").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a corpus\n", encoding="utf-8")
+    (tmp_path / "nested.ndjson").mkdir()  # a directory named like a corpus file is not readable as one
+
+    found: list[Path] = distill_reward.iter_record_files(tmp_path)
+    assert found == [tmp_path / "a-outcomes.ndjson", tmp_path / "b-records.ndjson"]  # sorted, files only
+    assert distill_reward.iter_record_files(tmp_path / "absent") == []  # "no corpus yet" is the caller's message
+    with pytest.raises(TypeError):
+        distill_reward.iter_record_files(str(tmp_path))  # pyright: ignore[reportArgumentType]
+
+
+def test_join_matches_on_run_id_and_flags_unmatched_rows() -> None:
+    """The join keeps EVERY record: matched rows carry the flattened outcome, unmatched rows nulls.
+
+    Why: a record whose ``run_id`` is null (a v1 corpus, or a judge/reflexion row recorded outside
+    a run scope) or whose outcome was never written (the run crashed before the supervisor's
+    status decision) is still a recorded example. Dropping it would silently shrink the corpus and
+    hide exactly the failure cases the negative examples are worth keeping, so it is emitted with
+    ``outcome_matched = False``, every ``outcome_*`` column null, and a DEFINITIVE ``weight = 0.0``
+    — no outcome exists to reward, so it can never earn one. Row order is record order, and
+    ``stats`` is what tells ``distill-weigh`` whether zero matches means an empty corpus or a
+    corpus it cannot join (REQ-DS-6).
+    """
+    records: list[dict[str, Any]] = [
+        _record(run_id="inv1:PMC1", pmc_id="PMC1", call_index=0),
+        _record(run_id="inv1:PMC2", pmc_id="PMC2", call_index=1),  # no outcome was ever written for this run
+        _record(run_id=None, pmc_id="PMC3", call_index=2),  # recorded outside a run scope: unjoinable
+    ]
+    outcomes: list[dict[str, Any]] = [_outcome(run_id="inv1:PMC1", pmc_id="PMC1"), _outcome(run_id=None)]
+
+    rows: list[dict[str, Any]]
+    stats: dict[str, int]
+    rows, stats = distill_reward.join_records_outcomes(records, outcomes)
+
+    assert tuple(stats) == distill_reward.JOIN_STAT_KEYS
+    assert stats == {"records": 3, "outcomes": 2, "matched": 1, "unmatched": 2, "duplicate_run_ids": 0}
+    assert len(rows) == len(records)  # one row per record: nothing is dropped, nothing is duplicated
+    assert [row["run_id"] for row in rows] == ["inv1:PMC1", "inv1:PMC2", None]  # record order is preserved
+    assert all(tuple(row) == distill_reward.TRAIN_ROW_KEYS for row in rows)  # the full canonical key set on every row
+
+    matched: dict[str, Any] = rows[0]
+    assert matched["outcome_matched"] is True
+    assert (matched["outcome_run_status"], matched["outcome_coverage_pct"], matched["outcome_edge_count"]) == ("MAPPED", 0.83, 3338)
+    assert matched["outcome_tool_calls_total"] == 9  # the struct was flattened, not passed through
+    assert matched["weight"] is None  # derived by the reward step, which needs a RewardConfig and an edge_ref
+    assert (matched["selected"], matched["replicas"], matched["policy"], matched["threshold"]) == (False, 0, None, None)
+
+    for position in (1, 2):
+        unmatched: dict[str, Any] = rows[position]
+        assert unmatched["outcome_matched"] is False
+        assert all(unmatched[column] is None for column in distill_reward.OUTCOME_COLUMNS)  # every outcome column null
+        assert (unmatched["weight"], unmatched["selected"], unmatched["replicas"]) == (0.0, False, 0)
+        assert unmatched["messages"] == records[position]["messages"]  # the record's own columns survive
+        assert unmatched["call_index"] == records[position]["call_index"]  # ... including the preference-pairing ones
+
+    # Zero matched rows is a legitimate join result (the CLI turns it into exit 2, REQ-DS-6).
+    unjoinable: list[dict[str, Any]]
+    unjoinable, zero_stats = distill_reward.join_records_outcomes([_record(run_id="v1-only")], [_outcome(run_id="other")])
+    assert zero_stats == {"records": 1, "outcomes": 1, "matched": 0, "unmatched": 1, "duplicate_run_ids": 0}
+    assert [row["outcome_matched"] for row in unjoinable] == [False]
+
+    empty_rows: list[dict[str, Any]]
+    empty_rows, empty_stats = distill_reward.join_records_outcomes([], [])
+    assert empty_rows == []
+    assert empty_stats == {"records": 0, "outcomes": 0, "matched": 0, "unmatched": 0, "duplicate_run_ids": 0}
+
+    # An unknown record key is KEPT (appended after the canonical set), never silently discarded.
+    drifted: list[dict[str, Any]]
+    drifted, _ = distill_reward.join_records_outcomes([_record(future_column="x")], [])
+    assert drifted[0]["future_column"] == "x"
+    assert tuple(drifted[0])[: len(distill_reward.TRAIN_ROW_KEYS)] == distill_reward.TRAIN_ROW_KEYS
+
+    with pytest.raises(TypeError):
+        distill_reward.join_records_outcomes(["not a mapping"], [])  # pyright: ignore[reportArgumentType]
+    with pytest.raises(TypeError):
+        distill_reward.join_records_outcomes([], [42])  # pyright: ignore[reportArgumentType]
+
+
+def test_join_counts_duplicate_run_ids_instead_of_silently_overwriting() -> None:
+    """A duplicate ``run_id`` keeps the LAST outcome AND increments ``duplicate_run_ids``.
+
+    Why: the corpus is append-only, so a later line for one run supersedes an earlier one — but a
+    duplicate means two supervisors wrote the same run's outcome (a re-run under one invocation id,
+    or a torn append), and an operator must be able to SEE that rather than discover it as a
+    weight that quietly changed. Last-wins with a counter is the semantics that keeps a re-weigh
+    reproducible while making the collision visible in the manifest. An outcome with no ``run_id``
+    is never indexed (it can join nothing) but still counts toward ``stats["outcomes"]``.
+    """
+    records: list[dict[str, Any]] = [_record(run_id="inv1:PMC1"), _record(run_id="inv1:PMC2")]
+    outcomes: list[dict[str, Any]] = [
+        _outcome(run_id="inv1:PMC1", coverage_pct=0.10, edge_count=10),
+        _outcome(run_id="inv1:PMC2", coverage_pct=0.20),
+        _outcome(run_id="inv1:PMC1", coverage_pct=0.95, edge_count=999),  # a later line for the same run
+        _outcome(run_id=None, coverage_pct=0.50),  # unjoinable: counted, never indexed
+    ]
+
+    rows: list[dict[str, Any]]
+    stats: dict[str, int]
+    rows, stats = distill_reward.join_records_outcomes(records, outcomes)
+
+    assert stats == {"records": 2, "outcomes": 4, "matched": 2, "unmatched": 0, "duplicate_run_ids": 1}
+    assert (rows[0]["outcome_coverage_pct"], rows[0]["outcome_edge_count"]) == (0.95, 999)  # the LAST line won
+    assert rows[1]["outcome_coverage_pct"] == 0.20  # an unduplicated run is untouched
+
+    thrice: list[dict[str, Any]] = [_outcome(run_id="inv1:PMC1", coverage_pct=0.1), _outcome(run_id="inv1:PMC1", coverage_pct=0.2)]
+    _, triple_stats = distill_reward.join_records_outcomes(records[:1], [*thrice, _outcome(run_id="inv1:PMC1", coverage_pct=0.3)])
+    assert triple_stats["duplicate_run_ids"] == 2  # three lines for one run: two supersessions
+    assert distill_reward.join_records_outcomes(records[:1], thrice)[1]["duplicate_run_ids"] == 1
+
+    non_string: list[dict[str, Any]]
+    non_string, id_stats = distill_reward.join_records_outcomes([_record(run_id=7)], [_outcome(run_id=7)])
+    assert id_stats["matched"] == 0  # a non-string run id joins nothing on either side
+    assert non_string[0]["outcome_matched"] is False
+
+
+def test_flatten_outcome_emits_only_flat_stable_scalars() -> None:
+    """Every outcome entry becomes flat ``outcome_``-prefixed SCALARS; no struct or list survives.
+
+    Why: ``datasets`` infers a STRUCT column from the first block of the first file, so a sub-field
+    that first appears in a later line of an append-only, multi-release corpus raises ``CastError``,
+    and a key whose type varies is silently JSON-encoded into a string column
+    (``JsonConfig.on_mixed_types = "use_json"``) — a silent demotion that corrupts a training corpus
+    without an error. Flat scalars with a DECLARED type each are the only shape that survives, which
+    is also why a wrong-typed legacy value flattens to null (the corpus's own "unmeasured"
+    spelling) instead of creating a mixed-type column: ``reward`` still reads the nested outcome and
+    fails loud there, so a malformed figure can never silently set a weight.
+    """
+    flat: dict[str, Any] = distill_reward.flatten_outcome(distill_reward.build_outcome(**_full_kwargs()))
+
+    assert tuple(flat) == distill_reward.OUTCOME_COLUMNS  # the canonical column set, in order
+    assert all(column.startswith(distill_reward.OUTCOME_COLUMN_PREFIX) for column in flat)
+    assert all(value is None or isinstance(value, (str, int, float, bool)) for value in flat.values())  # scalars only
+    assert not any(isinstance(value, (dict, list)) for value in flat.values())  # no struct, no list
+
+    for key in distill.OUTCOME_KEYS:  # every captured entry is represented, so none can drift out
+        assert any(column.startswith(f"{distill_reward.OUTCOME_COLUMN_PREFIX}{key}") for column in flat), key
+
+    assert (flat["outcome_run_status"], flat["outcome_coverage_pct"], flat["outcome_edge_count"]) == ("MAPPED", 0.83, 3338)
+    assert (flat["outcome_ok"], flat["outcome_measured"], flat["outcome_head"]) == (True, True, False)
+    assert tuple(key for key in flat if key.startswith("outcome_tool_calls_")) == tuple(f"outcome_tool_calls_{sub}" for sub in distill.TOOL_CALL_KEYS)
+    assert (flat["outcome_tool_calls_total"], flat["outcome_tool_calls_failed"], flat["outcome_tool_calls_redundant"]) == (9, 1, 1)
+    assert (flat["outcome_gate_map_threshold"], flat["outcome_gate_biolink_threshold"], flat["outcome_gate_judge_threshold"]) == (0.25, 0.0, 0.5)
+    assert tuple(key for key in flat if key.startswith("outcome_versions_")) == ("outcome_versions_tablassert", "outcome_versions_biolink_model")
+    assert flat["outcome_versions_biolink_model"] is None or isinstance(flat["outcome_versions_biolink_model"], str)
+
+    # The variable-shape entries become stable JSON TEXT, never a column per element.
+    assert json.loads(flat["outcome_error_codes_json"]) == []
+    assert json.loads(flat["outcome_judge_dimensions_json"]) == {"biolink_validity": 2, "schema_validity": 3}
+    coded: dict[str, Any] = distill_reward.flatten_outcome(_outcome(error_codes=["BIO_LINK_INVALID"], judge_dimensions={"z": 1, "a": 2}))
+    assert coded["outcome_error_codes_json"] == '["BIO_LINK_INVALID"]'
+    assert coded["outcome_judge_dimensions_json"] == '{"a": 2, "z": 1}'  # keys sorted: byte-stable text
+
+    # A wrong-typed legacy value flattens to null and cannot change the column set or its type.
+    legacy: dict[str, Any] = distill_reward.flatten_outcome(
+        _outcome(coverage_pct="high", edge_count=None, ok="yes", tool_calls=None, gate="0.25", error_codes="BIO_LINK_INVALID")
+    )
+    assert tuple(legacy) == distill_reward.OUTCOME_COLUMNS
+    assert (legacy["outcome_coverage_pct"], legacy["outcome_edge_count"], legacy["outcome_ok"]) == (None, None, None)
+    assert legacy["outcome_tool_calls_total"] is None  # an absent struct flattens to null sub-columns, not to a struct
+    assert legacy["outcome_gate_map_threshold"] is None
+    assert legacy["outcome_error_codes_json"] is None
+
+    assert all(value is None for value in distill_reward.flatten_outcome({}).values())  # nothing captured: all null
+    assert tuple(distill_reward.flatten_outcome({})) == distill_reward.OUTCOME_COLUMNS
+    with pytest.raises(TypeError):
+        distill_reward.flatten_outcome(["not", "a", "mapping"])  # pyright: ignore[reportArgumentType]
+
+
+def test_train_row_key_set_is_canonical_and_fully_emitted(tmp_path: Path) -> None:
+    """``TRAIN_ROW_KEYS`` is the canonical emitted set, and every row carries every key.
+
+    Why: the derived layer inherits the capture layer's schema-uniformity rule for the same reason —
+    ``datasets`` infers its features from the first block of the first file and raises ``CastError``
+    on a column that first appears later, so a row whose key set depended on whether it matched an
+    outcome would make the weighed dataset unloadable. Asserted end to end: through the join (both
+    matched and unmatched rows), through every selection policy, and through a write/read
+    round-trip, where the on-disk key order must be the canonical one.
+    """
+    expected: tuple[str, ...] = (*distill.RECORD_KEYS, "outcome_matched", *distill_reward.OUTCOME_COLUMNS, *distill_reward.SELECTION_KEYS)
+    assert expected == distill_reward.TRAIN_ROW_KEYS  # the composition AND the order are pinned
+    assert len(set(distill_reward.TRAIN_ROW_KEYS)) == len(distill_reward.TRAIN_ROW_KEYS)  # no duplicate column
+    flattened: tuple[str, ...] = tuple(
+        column for column in distill_reward.TRAIN_ROW_KEYS if column.startswith("outcome_") and column != "outcome_matched"
+    )
+    assert flattened == distill_reward.OUTCOME_COLUMNS  # every flattened column, and nothing else, carries the prefix
+    assert "outcome_matched" in distill_reward.TRAIN_ROW_KEYS
+    assert all(key in distill_reward.TRAIN_ROW_KEYS for key in distill.RECORD_KEYS)  # the record columns are all kept
+
+    records: list[dict[str, Any]] = [_record(run_id="inv1:PMC1"), _record(run_id=None)]
+    rows: list[dict[str, Any]]
+    rows, _ = distill_reward.join_records_outcomes(records, [_outcome(run_id="inv1:PMC1")])
+    for row in rows:
+        assert tuple(row) == distill_reward.TRAIN_ROW_KEYS  # matched and unmatched alike
+        assert all(key in row for key in distill_reward.TRAIN_ROW_KEYS)  # explicit nulls, never absent keys
+
+    for policy in distill_reward.POLICIES:
+        weighed: list[dict[str, Any]] = _weighed(records, [_outcome(run_id="inv1:PMC1")])
+        for row in distill_reward.select(weighed, policy=policy):
+            assert tuple(row) == distill_reward.TRAIN_ROW_KEYS
+
+    written: Path = tmp_path / "nested" / "train.ndjson"
+    count: int = distill_reward.write_ndjson(written, distill_reward.select(_weighed(records, [_outcome(run_id="inv1:PMC1")]), policy="threshold"))
+    assert count == 2
+    assert [tuple(row) for row in distill_reward.read_ndjson(written)] == [distill_reward.TRAIN_ROW_KEYS] * 2
+
+
+def test_union_keys_and_normalize_rows_make_every_row_schema_identical() -> None:
+    """The union makes every row's key set identical, with explicit nulls for absent keys.
+
+    Why: ``load_dataset("json")`` infers ``features`` from the FIRST BLOCK OF THE FIRST FILE and
+    casts every later block to it, raising ``CastError`` when a later block of an append-only corpus
+    carries a column the inferred schema lacks. Normalizing every row to the corpus-wide union makes
+    the inferred schema correct by construction — which is what lets a v1 corpus (no ``run_id``) sit
+    beside a v2 one and still export. First-appearance order (not sorted) keeps the corpus's own
+    canonical order, and normalizing never changes a VALUE's type: that is
+    ``detect_type_conflicts``'s job to report.
+    """
+    v1: dict[str, Any] = {"messages": [{"role": "user", "content": "hi"}], "purpose": "agent"}
+    v2: dict[str, Any] = {"purpose": "agent", "run_id": "inv1:PMC1", "schema_version": 2}
+    rows: list[dict[str, Any]] = [v1, v2, {"extra": True}]
+
+    union: tuple[str, ...] = distill_reward.union_keys(rows)
+    assert union == ("messages", "purpose", "run_id", "schema_version", "extra")  # first-appearance order
+    normalized: list[dict[str, Any]] = distill_reward.normalize_rows(rows)
+    assert [tuple(row) for row in normalized] == [union] * 3  # every row is schema-identical
+    assert normalized[0]["run_id"] is None  # an absent key becomes an explicit null, not a missing column
+    assert normalized[1]["messages"] is None
+    assert normalized[2]["extra"] is True
+    assert normalized[0]["messages"] == v1["messages"]  # a present value is passed through untouched
+    assert isinstance(normalized[1]["schema_version"], int)  # ... and keeps its type
+
+    uniform: list[dict[str, Any]] = [_record(), _record(run_id="inv1:PMC2")]
+    assert distill_reward.union_keys(uniform) == distill.RECORD_KEYS  # a uniform corpus unions to its own canonical order
+    assert distill_reward.normalize_rows(uniform) == uniform  # normalization is a no-op on a uniform corpus
+
+    assert distill_reward.union_keys([]) == ()  # an empty corpus has no schema
+    assert distill_reward.normalize_rows([]) == []
+    assert distill_reward.union_keys([{}, {}]) == ()
+    assert distill_reward.normalize_rows([{}]) == [{}]
+
+    weighed: list[dict[str, Any]]
+    weighed, _ = distill_reward.join_records_outcomes([_record()], [_outcome()])
+    assert distill_reward.union_keys(weighed) == distill_reward.TRAIN_ROW_KEYS  # a joined corpus is already uniform
+
+    with pytest.raises(TypeError):
+        distill_reward.union_keys(["not a mapping"])  # pyright: ignore[reportArgumentType]
+
+
+def test_detect_type_conflicts_flags_a_silently_demoted_column() -> None:
+    """A column whose non-null type varies across the corpus is reported, per key.
+
+    Why: ``JsonConfig.on_mixed_types = "use_json"`` means ``datasets`` JSON-encodes such a column
+    into a STRING instead of raising — a silent type demotion that corrupts a training corpus with
+    no error anywhere. Scanning the WHOLE corpus (not the first block) is the point, because a type
+    that first varies in block two is invisible to first-block inference. Nulls are skipped rather
+    than reported as a type: null is the corpus's "unmeasured" spelling and every nullable column
+    carries it, so counting it would flag every legitimate nullable column. ``int`` and ``float``
+    are NOT conflated — that alternation is exactly the demotion hazard.
+    """
+    rows: list[dict[str, Any]] = [
+        {"edge_count": 3338, "coverage_pct": 0.83, "pmc_id": "PMC1", "messages": [{"role": "user", "content": "hi"}]},
+        {"edge_count": "3338", "coverage_pct": None, "pmc_id": "PMC2", "messages": [{"role": "user", "content": "yo"}]},
+        {"edge_count": None, "pmc_id": None, "gate": {"map_threshold": 0.25}},
+    ]
+    observed: dict[str, set[str]] = distill_reward.detect_type_conflicts(rows)
+
+    assert observed["edge_count"] == {"int", "str"}  # the demoted column, flagged with both type names
+    assert len(observed["edge_count"]) > 1  # the caller's fail-loud condition
+    assert observed["coverage_pct"] == {"float"}  # a null beside a float is not a conflict
+    assert observed["pmc_id"] == {"str"}  # ... and neither is a null beside a string
+    assert observed["messages"] == {"list"}
+    assert observed["gate"] == {"dict"}
+    assert set(observed) == {"edge_count", "coverage_pct", "pmc_id", "messages", "gate"}  # every observed key
+
+    numeric: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"weight": 1}, {"weight": 1.5}])
+    assert numeric["weight"] == {"int", "float"}  # NOT conflated: datasets would stringify this column
+
+    all_null: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"unmeasured": None}, {"unmeasured": None}])
+    assert all_null["unmeasured"] == set()  # an all-null column has no observed type
+    assert distill_reward.detect_type_conflicts([]) == {}  # an empty corpus has no columns
+    assert distill_reward.detect_type_conflicts([{}]) == {}
+
+    weighed: list[dict[str, Any]]
+    weighed, _ = distill_reward.join_records_outcomes([_record(run_id="inv1:PMC1"), _record(run_id=None)], [_outcome(run_id="inv1:PMC1")])
+    clean: dict[str, set[str]] = distill_reward.detect_type_conflicts(weighed)
+    assert all(len(names) <= 1 for names in clean.values()), {key: names for key, names in clean.items() if len(names) > 1}
+    assert clean["outcome_coverage_pct"] == {"float"}  # a matched figure and a null: one type
+    assert clean["weight"] == {"float"}  # the definitive 0.0 and the not-yet-derived null
+
+    with pytest.raises(TypeError):
+        distill_reward.detect_type_conflicts([["not", "a", "mapping"]])  # pyright: ignore[reportArgumentType]
+
+
+def test_detect_type_conflicts_does_not_conflate_bool_and_int() -> None:
+    """``bool`` and ``int`` count as ONE type; ``bool`` and ``str`` (or ``int``/``float``) do not.
+
+    Why: Python's ``bool`` IS an ``int`` subclass and ``datasets`` maps the two predictably
+    (``Value("bool")``/``Value("int64")``), so a column alternating ``True`` and ``1`` is not the
+    silent-demotion hazard this scan exists to catch — flagging it would cry wolf on every flag
+    column beside a count and train operators to ignore the real finding. The distinction still has
+    to hold against a genuine conflict, which is why the string and float cases are asserted here
+    too: collapsing bool into int must not collapse the scan's sensitivity with it.
+    """
+    mixed_bool_int: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"ok": True}, {"ok": 1}, {"ok": False}, {"ok": 0}])
+    assert mixed_bool_int["ok"] == {"int"}  # one type, so no conflict
+    assert all(len(names) <= 1 for names in mixed_bool_int.values())
+
+    bool_only: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"selected": True}, {"selected": False}])
+    assert bool_only["selected"] == {"int"}  # reported under the one canonical name for the int family
+
+    bool_and_text: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"ok": True}, {"ok": "yes"}])
+    assert bool_and_text["ok"] == {"int", "str"}  # a truthy STRING beside a flag is a real conflict
+
+    bool_and_float: dict[str, set[str]] = distill_reward.detect_type_conflicts([{"ok": True}, {"ok": 1.0}])
+    assert bool_and_float["ok"] == {"int", "float"}  # bool collapses into int, not into float
+
+    records: list[dict[str, Any]] = [_record(run_id="inv1:PMC1"), _record(run_id=None)]
+    annotated: list[dict[str, Any]] = distill_reward.select(_weighed(records, [_outcome(run_id="inv1:PMC1")]), policy="threshold")
+    flagged: dict[str, set[str]] = distill_reward.detect_type_conflicts(annotated)
+    assert flagged["selected"] == {"int"}  # the bool columns stay clean
+    assert flagged["outcome_matched"] == {"int"}
+    assert flagged["weight"] == {"float"}  # and a weight is always a float: select coerces, and a null is skipped
+
+
+def test_write_ndjson_overwrites_with_a_stable_key_order_and_returns_the_count(tmp_path: Path) -> None:
+    """``write_ndjson`` creates the parent, OVERWRITES, keeps canonical key order, returns the count.
+
+    Why: the derived layer is a reproducible build artifact of one reward config plus one policy, so
+    a re-weigh must replace the dataset rather than append to it — appending would silently double
+    every example and mix two schemas in one file. Canonical key order on disk is what makes two
+    weighs byte-identical and what ``datasets`` infers its schema from, so it comes from
+    ``TRAIN_ROW_KEYS`` rather than from whatever order the caller's dict happened to have. A value
+    JSON cannot serialize raises instead of being stringified: fail-soft ``default=str`` belongs to
+    the capture layer, and here it would quietly turn a structured column into text. The write is
+    atomic (sibling temp + ``os.replace``), so a failure on a LATER row leaves no truncated dataset
+    behind: US-006 points ``datasets``/a trainer at this path, and a half-written ``train.ndjson``
+    would be consumed silently as a smaller training set instead of raising.
+    """
+    nested: Path = tmp_path / "out" / "deep" / "train.ndjson"  # the parent need not exist
+    rows: list[dict[str, Any]] = [_row(pmc_id="PMC1", weight=0.9), _row(pmc_id="PMC2", weight=0.1)]
+    assert distill_reward.write_ndjson(nested, rows) == 2  # the row count
+    assert nested.is_file()
+    lines: list[str] = nested.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2  # one object per line, no outer array, no separators
+    assert [tuple(json.loads(line)) for line in lines] == [distill_reward.TRAIN_ROW_KEYS] * 2  # canonical order on disk
+
+    assert distill_reward.write_ndjson(nested, rows[:1]) == 1  # overwrite, never append
+    assert len(nested.read_text(encoding="utf-8").splitlines()) == 1
+
+    scrambled: dict[str, Any] = dict(reversed(list(_row(weight=0.5).items())))
+    reordered: Path = tmp_path / "reordered.ndjson"
+    distill_reward.write_ndjson(reordered, [scrambled])
+    assert tuple(json.loads(reordered.read_text(encoding="utf-8").splitlines()[0])) == distill_reward.TRAIN_ROW_KEYS
+
+    extra: Path = tmp_path / "extra.ndjson"
+    distill_reward.write_ndjson(extra, [{**_row(), "future_column": "x"}])
+    written_keys: tuple[str, ...] = tuple(json.loads(extra.read_text(encoding="utf-8").splitlines()[0]))
+    assert written_keys == (*distill_reward.TRAIN_ROW_KEYS, "future_column")  # an extra key is kept, after the canonical set
+
+    unicode_path: Path = tmp_path / "unicode.ndjson"
+    distill_reward.write_ndjson(unicode_path, [_row(pmc_id="PMCéµø")])
+    assert "PMCéµø" in unicode_path.read_text(encoding="utf-8")  # ensure_ascii=False: text stays readable and byte-stable
+
+    empty: Path = tmp_path / "empty.ndjson"
+    assert distill_reward.write_ndjson(empty, []) == 0
+    assert empty.read_text(encoding="utf-8") == ""  # the destination is still (re)created
+    assert distill_reward.read_ndjson(empty) == []  # ... and round-trips
+
+    assert distill_reward.read_ndjson(reordered)[0]["weight"] == 0.5  # a round-trip preserves values
+
+    with pytest.raises(TypeError):
+        distill_reward.write_ndjson(tmp_path / "bad.ndjson", [{"weight": {1, 2}}])  # a set is not serializable: loud, not stringified
+    assert not (tmp_path / "bad.ndjson").exists()  # a failed write leaves no destination, not even an empty one
+    with pytest.raises(TypeError):
+        distill_reward.write_ndjson(tmp_path / "bad.ndjson", ["not a mapping"])  # pyright: ignore[reportArgumentType]
+    with pytest.raises(TypeError):
+        distill_reward.write_ndjson("train.ndjson", rows)  # pyright: ignore[reportArgumentType]
+
+    later: Path = tmp_path / "nested" / "train.ndjson"
+    with pytest.raises(TypeError, match="not JSON serializable"):
+        distill_reward.write_ndjson(later, [*rows, {"weight": {1, 2}}])  # the bad value is in the LAST row
+    assert not later.exists()  # rows 1..n did NOT reach the destination: nothing partial, nothing truncated
+    assert list(later.parent.iterdir()) == []  # ... and the sibling temp was cleaned up, not left behind
+
+    intact: Path = tmp_path / "intact.ndjson"
+    assert distill_reward.write_ndjson(intact, rows) == 2
+    before: str = intact.read_text(encoding="utf-8")
+    with pytest.raises(TypeError):
+        distill_reward.write_ndjson(intact, [*rows, {"weight": {1, 2}}])
+    assert intact.read_text(encoding="utf-8") == before  # the previous dataset survives intact, un-truncated
+    assert distill_reward.read_ndjson(intact) == rows  # ... and is still readable
+
+
+def test_select_requires_a_weighed_row() -> None:
+    """A row with a missing, null or mistyped ``weight`` fails LOUD instead of selecting on nothing.
+
+    Why: ``weight`` is the only thing a policy ranks on, and the join deliberately leaves a matched
+    row's weight null (it has neither a ``RewardConfig`` nor an ``edge_ref`` in scope). Defaulting
+    that null to ``0.0`` would silently empty the training set — or, with a ``0.0`` threshold,
+    select rows that were never measured — so an unweighed corpus is a caller bug and says so,
+    naming the row's position.
+    """
+    with pytest.raises(ValueError, match="null 'weight'"):
+        distill_reward.select([_row(weight=None)], policy="threshold")  # exactly what the join emits for a matched row
+
+    no_key: dict[str, Any] = _row()
+    del no_key["weight"]
+    with pytest.raises(ValueError, match="no 'weight' key"):
+        distill_reward.select([no_key], policy="threshold")
+
+    joined: list[dict[str, Any]]
+    joined, _ = distill_reward.join_records_outcomes([_record(run_id="inv1:PMC1")], [_outcome(run_id="inv1:PMC1")])
+    with pytest.raises(ValueError, match="row 0"):
+        distill_reward.select(joined, policy="best-of-n")  # a joined-but-unweighed corpus cannot be selected
+
+    unjoinable: list[dict[str, Any]]
+    unjoinable, _ = distill_reward.join_records_outcomes([_record(run_id=None)], [])
+    assert distill_reward.select(unjoinable, policy="threshold")[0]["selected"] is False  # a definitive 0.0 IS a weight
+
+    for bad in ("high", True, float("nan"), float("inf")):
+        with pytest.raises(TypeError):
+            distill_reward.select([_row(weight=bad)], policy="replication")
+    with pytest.raises(TypeError):
+        distill_reward.select(["not a mapping"], policy="threshold")  # pyright: ignore[reportArgumentType]
+    with pytest.raises(ValueError, match="row 1"):
+        distill_reward.select([_row(weight=0.5), _row(weight=None)], policy="threshold")  # the position is named
