@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+- **Logging now requires the optional `log` extra and is completely disabled without it.** Removed the stdlib-backed loguru fallback, startup missing-extra warning, and base-install creation of `.tablassert/log/`. Installs without loguru emit no file, progress, or warning logs; `pip install "tablassert[log]"` remains the way to enable loguru-backed logging.
+
 ## 18.1.0 - 2026-09-14
 
 ### Added
