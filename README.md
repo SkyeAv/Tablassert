@@ -1,7 +1,6 @@
 # Tablassert
 
 [![PyPI](https://img.shields.io/pypi/v/tablassert.svg)](https://pypi.org/project/tablassert/)
-[![Downloads](https://img.shields.io/pypi/dm/tablassert.svg)](https://pypi.org/project/tablassert/)
 [![Python](https://img.shields.io/pypi/pyversions/tablassert.svg)](https://pypi.org/project/tablassert/)
 [![CI](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml/badge.svg)](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml)
 [![License](https://img.shields.io/pypi/l/tablassert.svg)](https://github.com/SkyeAv/Tablassert/blob/main/LICENSE)
