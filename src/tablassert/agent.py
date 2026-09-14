@@ -30,12 +30,11 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, get_args, get_origin
-from urllib.request import Request, urlopen
 
 import pydantic
 import yaml
 
-from tablassert import distill_reward
+from tablassert import distill_reward, net
 from tablassert._lazy import LazyModule
 from tablassert.biolink import ENUM_RANGED_QUALIFIERS, Categories
 from tablassert.enums import EncodingMethods
@@ -358,19 +357,26 @@ def is_open_access(metadata: str | dict[str, object]) -> bool:
 
 
 def _http_get_text(url: str, *, timeout: int = 120) -> str:
-    """GET a URL and return decoded text (the single I/O seam tests monkeypatch)."""
-    with urlopen(
-        Request(url, headers={"User-Agent": "tablassert"}), timeout=timeout
-    ) as resp:  # pragma: no cover - live network seam; tests monkeypatch this function
-        return resp.read().decode("utf-8")
+    """GET a URL and return decoded text (the single I/O seam tests monkeypatch).
+
+    Notes:
+        Retry lives BELOW this documented seam so monkeypatching the name still replaces the entire
+        transport, while production gets bounded retries and visible warnings from
+        :func:`tablassert.net.http_get_text`. The fleet lost 2,194 articles to transient DNS/socket
+        failures because each wrapper made a single ``urlopen`` call.
+    """
+    return net.http_get_text(url, timeout=timeout)
 
 
 def _http_get_bytes(url: str, *, timeout: int = 120) -> bytes:
-    """GET a URL and return raw bytes (the single I/O seam tests monkeypatch)."""
-    with urlopen(
-        Request(url, headers={"User-Agent": "tablassert"}), timeout=timeout
-    ) as resp:  # pragma: no cover - live network seam; tests monkeypatch this function
-        return resp.read()
+    """GET a URL and return raw bytes (the single I/O seam tests monkeypatch).
+
+    Notes:
+        Retry lives BELOW this documented seam so monkeypatching the name still replaces the entire
+        transport, while production gets bounded retries and visible warnings from
+        :func:`tablassert.net.http_get_bytes`.
+    """
+    return net.http_get_bytes(url, timeout=timeout)
 
 
 def candidate_tables(files: list[Path], *, min_rows: int = MIN_TABLE_ROWS) -> list[Path]:
