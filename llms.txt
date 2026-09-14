@@ -42,6 +42,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [CLI Module](src/tablassert/cli.py): command implementations and build pipeline stages.
 - [Coercion Helpers](src/tablassert/coerce.py): annotation and value coercion helpers.
 - [Distillation Module](src/tablassert/distill.py): ChatML distillation record serialization.
+- [Distill Reward Module](src/tablassert/distill_reward.py): pure per-run outcome assembly (`build_outcome`) and config-provenance checks (`provenance_ok`) over the distillation capture schema.
 - [Enums Catalog](src/tablassert/enums.py): Tablassert-owned configuration vocabularies (`Tokens`, `Repositories`, `InformationResources`, `Contributions`, `Comparisons`, `Functions`, `Files`, `EncodingMethods`, `FillMethods`, `SourceStatuses`, `ProvisionMechanisms`, `DataFormats`, `IngestCategories`, `ContentCategories`, `ModelingCategories`).
 - [Error Types](src/tablassert/errors.py): coded exceptions and validation warnings.
 - [Extras Registry](src/tablassert/extras.py): optional-dependency checks and install hints.

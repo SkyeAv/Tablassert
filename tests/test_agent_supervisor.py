@@ -188,6 +188,64 @@ def test_supervisor_distill_records_every_generate_call(tmp_path: Path, fullmap_
     assert "final_answer" in final_messages[-1]["content"]
 
 
+def test_supervisor_captures_an_outcome_per_run(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end outcome capture: exactly one outcome line per article, joined by ``run_id``.
+
+    Why: the outcome is what makes a trajectory weightable, so a MAPPED run and a CRASHED run alike
+    must land in ``outcomes.ndjson`` exactly once — the crashed one as a SKIPPED negative example
+    rather than vanishing from the corpus. ``begin_run`` opens the article's scope at the START of
+    the iteration (before the model is wrapped), so the agent's records and the outcome share the
+    same ``<invocation_id>:<pmc_id>`` join key. This module skips without ``[agent]``; the base-env
+    proof for the wrapper lives in ``tests/test_distill.py``.
+    """
+    table: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+
+    def fake_fetch(pmc_id: str, outdir: Path, *, timeout: int = 120) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        if pmc_id == "PMC2":
+            raise OSError("simulated fetch failure")
+        return [table]
+
+    monkeypatch.setattr("tablassert.agent.fetch_pmc_article", fake_fetch)
+    good_yaml: str = yaml.safe_dump(_column_cfg(table), sort_keys=False)
+    state_dir: Path = tmp_path / "state"
+    recorder = distill.DistillRecorder(distill_dir(state_dir) / distill.RECORDS_FILENAME, invocation_id="a1b2c3d4e5f6")
+
+    result = run_supervisor(
+        ["PMC1", "PMC2"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(final_yaml=good_yaml),
+        map_threshold=0.8,
+        state_dir=state_dir,
+        workdir=tmp_path / "w",
+        min_rows=0,
+        distill_recorder=recorder,
+    )
+
+    assert result["records"]["PMC1"].status == "MAPPED"  # pyright: ignore[reportIndexIssue]
+    assert result["records"]["PMC2"].status == "SKIPPED"  # pyright: ignore[reportIndexIssue]
+    outcomes: list[dict[str, object]] = [json.loads(line) for line in recorder.outcome_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert [o["pmc_id"] for o in outcomes] == ["PMC1", "PMC2"]  # exactly once per article, in order
+    assert [o["run_status"] for o in outcomes] == ["MAPPED", "SKIPPED"]
+    assert [o["run_id"] for o in outcomes] == ["a1b2c3d4e5f6:PMC1", "a1b2c3d4e5f6:PMC2"]
+    for outcome in outcomes:
+        assert tuple(outcome) == distill.OUTCOME_KEYS
+    mapped, crashed = outcomes
+    assert mapped["ok"] is True
+    assert cast(float, mapped["coverage_pct"]) >= 0.8
+    assert cast(int, mapped["steps"]) >= 1
+    assert mapped["config_yaml_sha256"]  # the terminal config is hashed
+    assert mapped["provenance_ok"] is True  # the fixture config carries repo + publication
+    assert mapped["judge_score"] is None  # no judge model ran
+    assert crashed["ok"] is None  # crashed before any build: nothing measured
+    assert crashed["error_codes"] == []
+
+    # begin_run opened the scope before the wrap: every agent record carries its article's run_id.
+    records: list[dict[str, object]] = [json.loads(line) for line in recorder.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert records, "the wrapped model must record at least one call"
+    assert {r["run_id"] for r in records} == {"a1b2c3d4e5f6:PMC1"}  # PMC2 crashed before its model was built
+    assert recorder.call_index == len(records)  # outcome lines never advance the record counter
+
+
 def test_supervisor_improve_loop_accepts_better(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A first config below threshold is genuinely improved by propose_config_edit and accepted.
 
