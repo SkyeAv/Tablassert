@@ -1,6 +1,6 @@
 [project]
 name = "tablassert"
-version = "18.0.0"
+version = "18.1.0"
 description = "Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON — declaratively, with entity resolution and quality control built in."
 authors = [
     { name = "Skye Lane Goetz", email = "sgoetz@isbscience.org" }
