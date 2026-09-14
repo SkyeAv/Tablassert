@@ -1437,7 +1437,7 @@ config lives elsewhere). The <code>rig:</code> section is required; see the
 <h2 id="step-4-run-tablassert">Step 4: Run Tablassert<a class="headerlink" href="#step-4-run-tablassert" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>tutorial-graph.yaml
 </code></pre></div>
-<p>To also run the quality-control audit stage, add <code>--qc</code> (and <code>--log</code> for verbose per-section logging):</p>
+<p>To also run the quality-control audit stage, add <code>--qc</code>; add <code>--log</code> for verbose per-section logging when the <code>[log]</code> extra is installed:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>tutorial-graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
 </code></pre></div>
 <p><strong>What happens:</strong>

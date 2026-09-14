@@ -1537,7 +1537,7 @@
 <p>The single parent working directory. All runtime artifacts live beneath it.</p>
 <p><strong><code>STORE: Path</code></strong>: <code>BASE / "store"</code></p>
 <p>Intermediate parquet storage for compiled subgraphs (<code>.tablassert/store/</code>). Created on import.</p>
-<p>The log directory (<code>log.LOGASSERT</code>, <code>.tablassert/log/</code>) holding the loguru sink file <code>.tablassert/log/tablassert.log</code>, and the cached SapBERT model (<code>.tablassert/sapbert/</code>, <code>qc.MODEL</code>) are likewise derived from <code>BASE</code>.</p>
+<p>The log directory (<code>log.LOGASSERT</code>, <code>.tablassert/log/</code>) holding the loguru sink file <code>.tablassert/log/tablassert.log</code> when the <code>log</code> extra is installed, and the cached SapBERT model (<code>.tablassert/sapbert/</code>, <code>qc.MODEL</code>) are likewise derived from <code>BASE</code>.</p>
 <h2 id="mkhash">mkhash()<a class="headerlink" href="#mkhash" title="Permanent link">&para;</a></h2>
 <p>Generates an <strong>xxh64</strong> digest (hex string, 16 characters) for arbitrary input, computed by the Rust extension (<code>tablassert.rs.xxh64</code>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">mkhash</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>

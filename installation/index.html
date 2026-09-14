@@ -1674,9 +1674,10 @@ distill-export</code>) additionally requires the <code>distill</code> extra.</p>
 <p>The <code>rt</code> extra is the exception: it installs <code>polars[rtcompat]</code>, which imports as plain <code>polars</code>, so
 it cannot be detected by inspection. It is suggested when polars itself fails to import; the usual
 cause is a CPU that lacks the instructions the default polars wheel requires.</p>
-<p>The <code>log</code> extra is the other exception: it never fails at all. Without loguru, Tablassert logs
-through a stdlib-based fallback to the same <code>log/tablassert.log</code> file and warns once at startup;
-install <code>pip install "tablassert[log]"</code> for the full loguru setup (rotation, enqueue).</p>
+<p>The <code>log</code> extra is the other exception: it never fails at all. Without loguru, Tablassert produces
+no logs: it does not create <code>.tablassert/log/</code>, write <code>tablassert.log</code>, forward messages to the
+progress display, honor <code>build-kg --log</code>, or warn about the missing extra. Install
+<code>pip install "tablassert[log]"</code> for loguru-backed file and progress logging (rotation, enqueue).</p>
 <h3 id="method-3-install-from-github-main">Method 3: Install from GitHub main<a class="headerlink" href="#method-3-install-from-github-main" title="Permanent link">&para;</a></h3>
 <p>Use this when you want the latest main-branch build.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Install from main branch</span>
