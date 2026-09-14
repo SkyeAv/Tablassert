@@ -46,6 +46,7 @@ TablassertErrorCodes = Literal[
     "uuid-bad-fields",
     "uuid-fields-not-a-key",
     "uuid-merge-without-fields",
+    "network-transient",
     "reward-config-invalid",
 ]
 
@@ -187,6 +188,29 @@ class BabelDownloadError(TablassertError):
             f"BABEL download failed after {retries} attempts: {url} (last error: {last_error}). Check network connectivity or pin a different BABEL version.",
             code="babel-download-failed",
         )
+
+
+class NetworkTransientError(TablassertError):
+    """A network operation exhausted its retries on a failure classified as TRANSIENT.
+
+    Notes:
+        WHY its own code: the agent supervisor records ``error_code`` on the article record, and a fleet
+        consumer must be able to requeue these without keyword-matching the notes string. The underlying
+        condition -- DNS ``EAI_NONAME`` behind ``resolve [!UNAVAIL=return]``, a gateway 503 wrapping an
+        upstream 429, a reset socket -- is recoverable by simply trying again later, which is the opposite
+        of the terminal ``PermissionError`` / ``FileNotFoundError`` skips it was previously
+        indistinguishable from.
+    """
+
+    def __init__(self, target: str, attempts: int, last_error: BaseException) -> None:
+        super().__init__(
+            f"Transient network failure for {target} after {attempts} attempts (last error: {last_error}). "
+            "This is retryable later — it is not a permanent rejection of the request.",
+            code="network-transient",
+        )
+        self.target: str = target
+        self.attempts: int = attempts
+        self.last_error: BaseException = last_error
 
 
 class RewardConfigError(TablassertError):

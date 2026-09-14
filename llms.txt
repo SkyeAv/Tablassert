@@ -52,6 +52,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Core Pipeline](src/tablassert/lib.py): extraction transforms, statement assembly, and graph compilation.
 - [Logging](src/tablassert/log.py): optional loguru logging abstraction.
 - [Pydantic Models](src/tablassert/models.py): table, graph, and RIG configuration models.
+- [Network Resilience](src/tablassert/net.py): transient-failure classification, bounded jittered backoff, and the retrying HTTP seam.
 - [NLP Helpers](src/tablassert/nlp.py): text normalization levels and preprocessing helpers.
 - [Progress](src/tablassert/progress.py): pipeline progress reporting and validation formatting.
 - [Quality Control](src/tablassert/qc.py): exact, fuzzy, abbreviation, and SapBERT validation stages.
