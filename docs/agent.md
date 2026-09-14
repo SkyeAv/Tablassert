@@ -455,20 +455,17 @@ count of what was actually written to `configs/<pmc_id>.yaml` — in `state.json
 auditable per article.
 
 Each record also carries `error_code` — the stable kebab-case `code` of the exception that caused a
-`SKIPPED` record, or `null` when the skip came from a **deterministic gate** (the
-`validate_table_config` final-answer gate, or the coverage / Biolink / judge threshold), when no
-coded error was raised, or when the `state.json` was written before the field existed. It always
-describes the **most recent attempt**: starting an attempt clears it back to `null`, so a rerun that
-ends `MAPPED` never keeps a stale transient code. Two values mean *requeue the article and try again
-later*: `network-transient` (the PMC/BABEL HTTP seam exhausted its bounded retries on a DNS, socket,
-or 5xx/429 failure) and `llm-transient` (the model call did the same). Every other value — for
-example `section-validation-failed` or `missing-extra` — is terminal for that payload, so requeueing
-it would only burn budget again. Consumers should inspect `error_code` only when `status == "SKIPPED"`,
-and switch on it rather than keyword-matching the free-text `notes`: `status` stays `SKIPPED` in all
-cases and `notes` keeps its verbatim
-`SKIPPED: <error>` prefix, so an older consumer keeps working unchanged. Every skip that reaches the
-supervisor's catch-all also writes one `ERROR` log line naming the article and attempt, so a network
-outage is visible in the worker log instead of only in `state.json`.
+`SKIPPED` record, or `null` for a deterministic gate, an uncoded error, or a pre-field `state.json`.
+It describes the **most recent attempt**: starting an attempt clears it, so a later `MAPPED` result
+cannot retain a stale transient code. Consumers should inspect it only when `status == "SKIPPED"`.
+`network-transient` and `llm-transient` mean requeue the article; the CLI emits the latter through one
+bounded retry layer for the inner agent, reflexion, and judge. Smolagents' retryer and OpenAI's client
+retryer are disabled; LiteLLM's internal retry setting is not exposed by `LiteLLMModel.__init__`.
+The worst case is 29 logical calls per article (20 agent + 3 reflexion + 6 judge) × 45 seconds =
+1,305 seconds (about 21.8 minutes), leaving the rest of the 90-minute timeout for real work. Other
+codes are terminal for that payload. Switch on `error_code` rather than keyword-matching `notes`;
+`status` remains `SKIPPED` and the `SKIPPED: <error>` prefix remains for older consumers. The
+supervisor also writes one `ERROR` log line for every catch-all skip.
 
 A result is appended to the target graph only when it is `MAPPED` or `BUILT_UNMEASURED`. `SKIPPED`
 articles never append. If the same PMC is processed again, its old table entry is replaced and the new

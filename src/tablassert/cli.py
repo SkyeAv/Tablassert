@@ -986,7 +986,8 @@ def agent(
         print(f"tablassert agent: distilling LLM calls -> {distill_path}")
 
     def build_model_factory() -> object:
-        return agent_mod.build_model(resolved_id, resolved_base, resolved_key, backend=backend)
+        base_model: object = agent_mod.build_model(resolved_id, resolved_base, resolved_key, backend=backend)
+        return agent_mod.make_retrying_model(base_model, secrets=(resolved_key,) if resolved_key else ())
 
     # Tier-2 reflexion (optional): a prompt-callable over the same model config, built lazily per call.
     reflexion_factory: Callable[[], object] | None = None
@@ -994,6 +995,7 @@ def agent(
 
         def _make_reflexion() -> object:
             reflexion_model: object = agent_mod.build_model(resolved_id, resolved_base, resolved_key, backend=backend)
+            reflexion_model = agent_mod.make_retrying_model(reflexion_model, secrets=(resolved_key,) if resolved_key else ())
             if distill_recorder is not None:
                 reflexion_model = agent_mod.make_distilling_model(reflexion_model, distill_recorder, purpose="reflexion")
             return agent_mod.make_prompt_callable(reflexion_model)
@@ -1004,6 +1006,7 @@ def agent(
     judge: object | None = None
     if judge_model is not None:
         judge_base_model: object = agent_mod.build_model(judge_model, resolved_base, resolved_key, backend=backend)
+        judge_base_model = agent_mod.make_retrying_model(judge_base_model, secrets=(resolved_key,) if resolved_key else ())
         if distill_recorder is not None:
             judge_base_model = agent_mod.make_distilling_model(judge_base_model, distill_recorder, purpose="judge")
         judge = agent_mod.make_prompt_callable(judge_base_model)

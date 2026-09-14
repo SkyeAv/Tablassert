@@ -752,12 +752,35 @@ def test_retry_logs_bind_the_error_as_text_so_the_enqueued_sink_can_pickle_it(mo
         raise _http_error(503, "Service Unavailable")
 
     with pytest.raises(NetworkTransientError):
-        net.retry_transient(operation, target="https://pmc.example/x.json", attempts=2, sleep=lambda _s: None, rng=lambda: 1.0)
+        net.retry_transient(
+            operation, target="https://pmc.example/x.json", attempts=2, sleep=lambda _s: None, rng=lambda: 1.0, secrets=("secret-value",)
+        )
 
     assert len(bound) == 2, "one retry line plus one exhaustion line"
     for kwargs in bound:
         assert isinstance(kwargs["error"], str), f"error must be pre-stringified, got {type(kwargs['error'])}"
         pickle.loads(pickle.dumps(kwargs))
+
+
+def test_retry_logs_redact_configured_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shared retry logger redacts configured provider credentials before enqueue serialization."""
+    bound: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        net, "logger", SimpleNamespace(warning=lambda _message, **kwargs: bound.append(kwargs), error=lambda _message, **kwargs: bound.append(kwargs))
+    )
+
+    class ServiceUnavailableError(Exception):
+        pass
+
+    def operation() -> str:
+        raise ServiceUnavailableError("api_key=secret-value; Authorization: Bearer token-value")
+
+    with pytest.raises(NetworkTransientError):
+        net.retry_transient(operation, target="model", attempts=2, sleep=lambda _s: None, secrets=("secret-value",))
+    assert len(bound) == 2
+    assert all("secret-value" not in str(values["error"]) for values in bound)
+    assert all("token-value" not in str(values["error"]) for values in bound)
+    assert all("api_key=[REDACTED]" in str(values["error"]) for values in bound)
 
 
 def test_retry_transient_honours_a_custom_error_factory() -> None:

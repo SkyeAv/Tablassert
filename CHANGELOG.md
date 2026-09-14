@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 - **Level-one normalization now defines fullmap keys by cleaned Unicode-lowercase, whitespace-tokenized, Porter2-normalized terms, with duplicate removal and byte-wise token ordering.** Existing fullmap databases are schema-v5 and are rejected by the current resolver; rebuild fullmaps before use. Preferred-name ranking now compares normalized forms under the same level-one semantics.
 
 ### Added
+- **Agent LLM calls now use one bounded, jittered retry layer across the inner agent, reflexion, and judge.** Smolagents' long rate-limit retryer and the OpenAI client's transport retries are disabled, while the shared seam retries DNS, timeouts, 429, and 5xx failures with Retry-After and a 45-second per-call budget; LiteLLM's backend-internal retry remains outside its constructor controls. The worst-case 29 logical calls per article add at most 21.8 minutes, and exhausted calls persist `llm-transient` without exposing configured credentials in logs or state.
 - **Agent checkpoint records now expose machine-readable `error_code` values for skipped articles.** `network-transient` and `llm-transient` identify outcomes that a fleet consumer should requeue (the latter is emitted by the upcoming LLM retry layer); deterministic gates and pre-field state files remain `null`. The supervisor also emits one visible `ERROR` log line for every catch-all skip while preserving the existing `SKIPPED` status and notes prefix for mixed-version consumers.
 
 ### Fixed

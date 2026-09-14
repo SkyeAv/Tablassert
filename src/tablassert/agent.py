@@ -19,6 +19,7 @@ import copy
 import gc
 import json
 import os
+import random
 import tempfile
 import threading
 import time
@@ -40,7 +41,14 @@ from tablassert import distill_reward, net
 from tablassert._lazy import LazyModule
 from tablassert.biolink import ENUM_RANGED_QUALIFIERS, Categories
 from tablassert.enums import EncodingMethods
-from tablassert.errors import GraphValidationError, QcRuntimeMissingError, SectionValidationError, TablassertValidationError, error_code_of
+from tablassert.errors import (
+    GraphValidationError,
+    QcRuntimeMissingError,
+    SectionValidationError,
+    TablassertValidationError,
+    error_code_of,
+    redact_secrets,
+)
 from tablassert.extras import install_command, require_module
 from tablassert.fullmap import distinct, fullmap_db_path, is_lock_contention, lookup_rows
 from tablassert.graph_target import append_successful_config
@@ -3073,6 +3081,8 @@ def llm_propose_config_edit(current_config: str, coverage_report: dict[str, obje
 ENV_MODEL_ID: str = "TABLASSERT_AGENT_MODEL_ID"
 ENV_API_BASE: str = "TABLASSERT_AGENT_API_BASE"
 ENV_API_KEY: str = "TABLASSERT_AGENT_API_KEY"
+LLM_RETRY_ATTEMPTS: int = net.DEFAULT_ATTEMPTS
+LLM_MAX_TOTAL_BACKOFF: float = 45.0
 
 
 def resolve_model_config(
@@ -3103,7 +3113,11 @@ def build_model(model_id: str | None, api_base: str | None, api_key: str | None,
     secret is NEVER defaulted or hardcoded.
 
     ``backend="openai"`` -> ``smolagents.OpenAIModel``; ``backend="litellm"`` ->
-    ``smolagents.LiteLLMModel``.
+    ``smolagents.LiteLLMModel``. The returned object is the RAW provider model with both
+    smolagents' retryer and (for OpenAI) the OpenAI client's retryer disabled; callers compose
+    :func:`make_retrying_model` for the single bounded retry policy and may then compose
+    :func:`make_distilling_model` outside it. LiteLLM's own internal retry behavior is not
+    configurable through ``LiteLLMModel.__init__`` and remains its backend-specific asymmetry.
     """
     resolved_id, resolved_base, resolved_key = resolve_model_config(model_id, api_base, api_key)
 
@@ -3123,10 +3137,97 @@ def build_model(model_id: str | None, api_base: str | None, api_key: str | None,
         _require("litellm")
         from smolagents import LiteLLMModel  # local import keeps module import lazy  # pyright: ignore[reportMissingImports]
 
-        return LiteLLMModel(model_id=rid, api_base=rbase, api_key=rkey)
+        return LiteLLMModel(model_id=rid, api_base=rbase, api_key=rkey, retry=False)
     from smolagents import OpenAIModel  # local import keeps module import lazy  # pyright: ignore[reportMissingImports]
 
-    return OpenAIModel(model_id=rid, api_base=rbase, api_key=rkey)
+    return OpenAIModel(model_id=rid, api_base=rbase, api_key=rkey, retry=False, client_kwargs={"max_retries": 0})
+
+
+def make_retrying_model(
+    model: object,
+    *,
+    attempts: int = LLM_RETRY_ATTEMPTS,
+    base_delay: float = net.DEFAULT_BASE_DELAY,
+    max_delay: float = net.DEFAULT_MAX_DELAY,
+    max_total_backoff: float = LLM_MAX_TOTAL_BACKOFF,
+    sleep: Callable[[float], None] = time.sleep,
+    rng: Callable[[], float] = random.random,
+    secrets: Sequence[str] = (),
+) -> object:
+    """Wrap a smolagents model so ``generate`` retries classified-transient failures.
+
+    Delegates through the single shared :func:`tablassert.net.retry_transient` policy and falls
+    through to the wrapped provider for metadata. Compose INNER of :func:`make_distilling_model` so
+    one logical call produces one distillation record. The worst case is 29 logical calls per article
+    (20 agent + 3 reflexion + 6 judge) x 45 seconds = 1,305 seconds (about 21.8 minutes), against
+    the harness's 90-minute timeout. This replaces smolagents' 120-240 and 240-720 second retry
+    sleeps and its narrower predicate, which misses bare 502/503/504, DNS, and read timeouts.
+    """
+    _require("smolagents")
+    from smolagents.models import ChatMessage, Model  # local import keeps module import lazy  # pyright: ignore[reportMissingImports]
+
+    from tablassert.errors import LlmTransientError
+
+    raw_model_id: object = getattr(model, "model_id", None)
+    # The target is deliberately metadata-only: accept ordinary provider model ids but never put
+    # an API-key-shaped identifier into the exception/state/log path.
+    target: str = "llm"
+    if isinstance(raw_model_id, str) and raw_model_id and redact_secrets(raw_model_id, secrets) == raw_model_id:
+        target = raw_model_id
+
+    class RetryingModel(Model):  # pyright: ignore[reportMissingImports]
+        def __init__(self) -> None:
+            with contextlib.suppress(Exception):
+                super().__init__()
+            self._wrapped: object = model
+            # Model defines these attributes itself, so __getattr__ cannot delegate them. Preserve
+            # provider metadata explicitly; this matters for message flattening and stop handling.
+            if isinstance(raw_model_id, str):
+                self.model_id = raw_model_id
+            for attribute in ("flatten_messages_as_text", "custom_role_conversions", "client"):
+                with contextlib.suppress(AttributeError):
+                    setattr(self, attribute, getattr(model, attribute))
+
+        @property
+        def supports_stop_parameter(self) -> bool:
+            provider_value: object = getattr(self._wrapped, "supports_stop_parameter", None)
+            return bool(provider_value) if provider_value is not None else super().supports_stop_parameter
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._wrapped, name)
+
+        def generate(
+            self,
+            messages: list[ChatMessage],
+            stop_sequences: list[str] | None = None,
+            response_format: dict[str, str] | None = None,
+            tools_to_call_from: object = None,
+            **kwargs: Any,
+        ) -> ChatMessage:
+            def operation() -> object:
+                return self._wrapped.generate(  # pyright: ignore[reportAttributeAccessIssue]
+                    messages, stop_sequences=stop_sequences, response_format=response_format, tools_to_call_from=tools_to_call_from, **kwargs
+                )
+
+            return cast(
+                ChatMessage,
+                net.retry_transient(
+                    operation,
+                    target=target,
+                    attempts=attempts,
+                    base_delay=base_delay,
+                    max_delay=max_delay,
+                    max_total_backoff=max_total_backoff,
+                    sleep=sleep,
+                    rng=rng,
+                    error_factory=lambda target_name, attempt_count, last_error: LlmTransientError(
+                        target_name, attempt_count, last_error, secrets=secrets
+                    ),
+                    secrets=tuple(secrets),
+                ),
+            )
+
+    return RetryingModel()
 
 
 def make_prompt_callable(model: object) -> Callable[[str], str]:

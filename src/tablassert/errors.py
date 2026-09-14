@@ -1,10 +1,40 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
 DOCS_URL: str = "https://tablassert.readthedocs.io/errors/"
+
+_SECRET_ASSIGNMENT_RE: re.Pattern[str] = re.compile(
+    r"""(?ix)
+    (?P<prefix>
+        ["']?(?:api[_-]?key|x-api-key)["']?\s*[:=]\s*
+      | ["']?authorization["']?\s*[:=]\s*(?:bearer\s+)?
+      | \bbearer\s+
+      | \b(?:token|secret)\b\s*[:=]\s*
+    )
+    (?P<quote>["']?)(?P<value>[^,\s;}"']+)(?P=quote)
+    """
+)
+_SECRET_TOKEN_RE: re.Pattern[str] = re.compile(r"(?i)\bsk(?:ant)?-[A-Za-z0-9_-]{8,}\b")
+
+
+def redact_secrets(text: str, secrets: Sequence[str] = ()) -> str:
+    """Redact configured credentials and common credential-shaped values from ``text``.
+
+    This is used at both the retry log boundary and coded-error construction boundary. Exact configured
+    values are replaced first; the shape rules cover provider messages that expose a credential under
+    ``api_key=``, ``Authorization: Bearer``, or a public ``sk-`` token without requiring optional SDKs.
+    """
+    redacted: str = text
+    for secret in secrets:
+        if secret:
+            redacted = redacted.replace(secret, "[REDACTED]")
+    redacted = _SECRET_ASSIGNMENT_RE.sub(lambda match: f"{match.group('prefix')}{match.group('quote')}[REDACTED]{match.group('quote')}", redacted)
+    return _SECRET_TOKEN_RE.sub("[REDACTED]", redacted)
+
 
 TablassertErrorCodes = Literal[
     "qc-runtime-missing",
@@ -47,6 +77,7 @@ TablassertErrorCodes = Literal[
     "uuid-fields-not-a-key",
     "uuid-merge-without-fields",
     "network-transient",
+    "llm-transient",
     "reward-config-invalid",
 ]
 
@@ -104,6 +135,17 @@ class UnpairedEffectAnnotationWarning(UserWarning):
     """
 
 
+def _direct_error_code(exc: BaseException) -> str | None:
+    """Return the stable ``code`` attached directly to ``exc``, without inspecting its chain."""
+    if not isinstance(exc, _Coded):
+        return None
+    try:
+        code: object = exc.code
+    except BaseException:  # a hostile `code` descriptor must not escape the caller's error handler
+        return None
+    return code if isinstance(code, str) else None
+
+
 def error_code_of(exc: BaseException) -> str | None:
     """Return the stable kebab-case ``code`` of a coded Tablassert error, else ``None``.
 
@@ -126,13 +168,22 @@ def error_code_of(exc: BaseException) -> str | None:
         handler down with it. This deliberately treats hostile ``KeyboardInterrupt``/``SystemExit``
         descriptors as malformed code attributes, because this helper runs inside a catch-all handler.
     """
-    if not isinstance(exc, _Coded):
-        return None
-    try:
-        code: object = exc.code
-    except BaseException:  # a hostile `code` descriptor must not escape the caller's error handler
-        return None
-    return code if isinstance(code, str) else None
+    # smolagents wraps provider failures in an uncoded ``AgentGenerationError``; a cause/context walk
+    # preserves the machine-readable ``llm-transient`` code through that wrapper, matching the bounded
+    # classification walk already used by ``net.is_transient``.
+    current: BaseException | None = exc
+    for _ in range(3):
+        if current is None:
+            return None
+        code: str | None = _direct_error_code(current)
+        if code is not None:
+            return code
+        try:
+            nxt: BaseException | None = current.__cause__
+            current = nxt if nxt is not None else current.__context__
+        except Exception:
+            break
+    return None
 
 
 def format_missing_extra(extra: str, problem: str) -> str:
@@ -233,11 +284,30 @@ class NetworkTransientError(TablassertError):
         indistinguishable from.
     """
 
-    def __init__(self, target: str, attempts: int, last_error: BaseException) -> None:
+    def __init__(self, target: str, attempts: int, last_error: BaseException, *, secrets: Sequence[str] = ()) -> None:
+        safe_error: str = redact_secrets(str(last_error), secrets)
         super().__init__(
-            f"Transient network failure for {target} after {attempts} attempts (last error: {last_error}). "
+            f"Transient network failure for {target} after {attempts} attempts (last error: {safe_error}). "
             "This is retryable later — it is not a permanent rejection of the request.",
             code="network-transient",
+        )
+        self.target: str = target
+        self.attempts: int = attempts
+        self.last_error: BaseException = last_error
+
+
+class LlmTransientError(TablassertError):
+    """An LLM call exhausted its bounded retries on a transient failure."""
+
+    def __init__(self, target: str, attempts: int, last_error: BaseException, *, secrets: Sequence[str] = ()) -> None:
+        # Provider exceptions may include request URLs, headers, or provider messages. The retry
+        # wrapper sanitizes its model target, but this final error must also avoid echoing credentials
+        # into state.json and worker logs.
+        safe_error: str = redact_secrets(str(last_error), secrets)
+        super().__init__(
+            f"Transient LLM failure for {target} after {attempts} attempts (last error: {safe_error}). "
+            "This is retryable later — it is not a permanent rejection of the request.",
+            code="llm-transient",
         )
         self.target: str = target
         self.attempts: int = attempts
