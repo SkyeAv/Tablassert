@@ -680,9 +680,14 @@ def test_prebuilt_fullmap_urls_derive_installed_version() -> None:
     archive, checksum = cli._prebuilt_fullmap_urls("2026jul22")
     assert archive == f"https://stars.renci.org/var/babel_outputs/2026jul22/fullmap/{release}/fullmap.tar.zst"
     assert checksum == f"https://stars.renci.org/var/babel_outputs/2026jul22/fullmap/{release}/sha256sum.txt"
-    # The version slot is exactly the live installed version (equality above pins position);
-    # an old release stamp like 8.1.0 must never appear in that slot.
-    assert "8.1.0" not in archive
+    # The version slot is exactly the live installed version, compared as a PATH SEGMENT: a
+    # substring check false-positives because a stale stamp like "8.1.0" is contained in a
+    # legitimate "18.1.0" release directory. Any hardcoded literal still fails the full-URL
+    # equality above, which is built from `release`.
+    archive_slot: str = archive.split("/fullmap/", 1)[1].split("/", 1)[0]
+    checksum_slot: str = checksum.split("/fullmap/", 1)[1].split("/", 1)[0]
+    assert archive_slot == release
+    assert checksum_slot == release
 
 
 def test_fetch_prebuilt_sha256_parses_fullmap_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
