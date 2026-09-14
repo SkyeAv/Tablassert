@@ -334,6 +334,36 @@ fn taxon_allowlist_metadata_is_stable_and_omitted_for_default_builds() {
     assert_eq!(Some(identity.clone()), read_allowlist(&filtered_b));
     assert_eq!(None, read_allowlist(&unfiltered));
     assert!(identity.starts_with("count=2;xxh64="));
+
+    // The exposed probes must agree with the recorded META exactly: the CLI
+    // decides whether a database already at `--output` is the one this build
+    // would produce by comparing `fullmap_taxon_allowlist_identity(existing)`
+    // with `taxon_allowlist_identity(built-in ids)`, so any drift between the
+    // encoding and the recording silently reuses (or endlessly rebuilds) the
+    // wrong database.
+    assert_eq!(
+        tablassert_rs::taxon_allowlist_identity(vec![9606, 10090]),
+        identity
+    );
+    assert_eq!(
+        tablassert_rs::taxon_allowlist_identity(vec![10090, 0, 9606, -5]),
+        identity,
+        "the identity is order-insensitive and ignores non-positive ids"
+    );
+    assert_eq!(
+        tablassert_rs::fullmap_taxon_allowlist_identity(filtered_a),
+        Some(identity.clone())
+    );
+    assert_eq!(
+        tablassert_rs::fullmap_taxon_allowlist_identity(unfiltered),
+        None,
+        "an unfiltered build records no identity"
+    );
+    assert_eq!(
+        tablassert_rs::fullmap_taxon_allowlist_identity(dir.path().join("absent.redb")),
+        None,
+        "an absent database reports not-reusable instead of raising"
+    );
 }
 
 // ---------------------------------------------------------------------------

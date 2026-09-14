@@ -91,6 +91,16 @@ fn shard_members(fixture_primary: &Path, count: usize) -> Vec<(String, PathBuf)>
 /// to fail; assert the error message carries every expected context fragment
 /// (each negative must tell the user WHAT is wrong and HOW to recover).
 fn extract_expect_error(archive: &Path, output: &Path, fragments: &[&str]) {
+    extract_expect_error_requiring(archive, output, None, fragments)
+}
+
+/// Same, with an explicit `taxon_allowlist` requirement passed to the pyfunction.
+fn extract_expect_error_requiring(
+    archive: &Path,
+    output: &Path,
+    taxon_allowlist: Option<Vec<i32>>,
+    fragments: &[&str],
+) {
     pyo3::Python::initialize();
     let error = pyo3::Python::attach(|py| {
         tablassert_rs::extract_prebuilt_fullmap(
@@ -98,6 +108,7 @@ fn extract_expect_error(archive: &Path, output: &Path, fragments: &[&str]) {
             archive.to_path_buf(),
             output.to_path_buf(),
             None,
+            taxon_allowlist,
         )
         .expect_err("extraction of a broken/hostile archive must fail")
         .to_string()
@@ -193,8 +204,14 @@ fn extract_prebuilt_matches_force_build() {
     let output = out_dir.path().join("custom.redb");
     pyo3::Python::initialize();
     pyo3::Python::attach(|py| {
-        tablassert_rs::extract_prebuilt_fullmap(py, archive_path.clone(), output.clone(), None)
-            .unwrap();
+        tablassert_rs::extract_prebuilt_fullmap(
+            py,
+            archive_path.clone(),
+            output.clone(),
+            None,
+            None,
+        )
+        .unwrap();
     });
 
     // 4. The primary landed at `output` and exactly s0..s15 exist beside it,
@@ -572,7 +589,8 @@ fn named_fullmap_primary_is_preferred_over_strays() {
     let output = out_dir.path().join("fullmap.redb");
     pyo3::Python::initialize();
     pyo3::Python::attach(|py| {
-        tablassert_rs::extract_prebuilt_fullmap(py, archive.clone(), output.clone(), None).unwrap();
+        tablassert_rs::extract_prebuilt_fullmap(py, archive.clone(), output.clone(), None, None)
+            .unwrap();
     });
     assert!(
         !out_dir.path().join("stray.redb").exists(),
@@ -620,8 +638,14 @@ fn progress_callback_details_are_pinned() {
             .unwrap();
 
         let output = fixture_dir.path().join("out").join("fullmap.redb");
-        tablassert_rs::extract_prebuilt_fullmap(py, archive.clone(), output, Some(callback.into()))
-            .unwrap();
+        tablassert_rs::extract_prebuilt_fullmap(
+            py,
+            archive.clone(),
+            output,
+            Some(callback.into()),
+            None,
+        )
+        .unwrap();
 
         let recorded: Vec<String> = details.extract().unwrap();
         assert_eq!(
@@ -646,4 +670,119 @@ fn progress_callback_details_are_pinned() {
             "one extracting detail per member, got: {recorded:?}"
         );
     });
+}
+
+// ---------------------------------------------------------------------------
+// Taxon-allowlist identity requirement
+// ---------------------------------------------------------------------------
+
+/// Package one built bundle (primary + every shard) into a `fullmap.tar.zst`
+/// inside `dir` and return the archive path.
+fn package_bundle(fixture_primary: &Path, dir: &Path) -> PathBuf {
+    let mut members = vec![("fullmap.redb".to_string(), fixture_primary.to_path_buf())];
+    members.extend(shard_members(fixture_primary, common::SHARD_COUNT));
+    let archive = dir.join("fullmap.tar.zst");
+    package_tar_zst(&archive, &members);
+    archive
+}
+
+/// WHY: `build-fullmap` filters every database it installs with the built-in
+/// top-100 taxon allowlist, so a prebuilt published WITHOUT that filter is not
+/// the database the command promises.  Extraction must refuse it BEFORE any
+/// rename, name both identities, and leave nothing behind — the caller then
+/// falls back to a filtered source build.
+#[test]
+fn unfiltered_prebuilt_is_rejected_when_an_allowlist_is_required() {
+    let fixture_dir = tempfile::tempdir().unwrap();
+    let fixture_primary = common::build_fixture(fixture_dir.path());
+    let archive = package_bundle(&fixture_primary, fixture_dir.path());
+    let out_dir = tempfile::tempdir().unwrap();
+    let output = out_dir.path().join("fullmap.redb");
+    extract_expect_error_requiring(
+        &archive,
+        &output,
+        Some(vec![9606]),
+        &[
+            "not filtered by the required taxon allowlist",
+            "expected META.taxon_allowlist count=1;xxh64=",
+            "no allowlist identity",
+            "build-fullmap",
+        ],
+    );
+    assert_failed_extraction_left_nothing(out_dir.path(), &output);
+}
+
+/// WHY: the requirement is an IDENTITY match, not merely "some filter" — an
+/// archive filtered by a different allowlist resolves a different term set than
+/// the one this Tablassert build promises, and accepting it would silently ship
+/// the wrong database.
+#[test]
+fn differently_filtered_prebuilt_is_rejected() {
+    let fixture_dir = tempfile::tempdir().unwrap();
+    let fixture_primary = common::build_filtered_fixture(fixture_dir.path(), vec![9606]);
+    let archive = package_bundle(&fixture_primary, fixture_dir.path());
+    let out_dir = tempfile::tempdir().unwrap();
+    let output = out_dir.path().join("fullmap.redb");
+    extract_expect_error_requiring(
+        &archive,
+        &output,
+        Some(vec![10090]),
+        &[
+            "not filtered by the required taxon allowlist",
+            "count=1;xxh64=",
+            "build-fullmap",
+        ],
+    );
+    assert_failed_extraction_left_nothing(out_dir.path(), &output);
+}
+
+/// WHY: the MATCHING archive must install exactly as an unrestricted one does —
+/// the identity check may never reject the prebuilt this Tablassert version
+/// publishes for itself.  The required IDs are passed out of order with
+/// non-positive noise, pinning that the identity comes from the same normalized
+/// set the build used (order-insensitive, `<= 0` ignored).
+#[test]
+fn matching_filtered_prebuilt_is_installed() {
+    let fixture_dir = tempfile::tempdir().unwrap();
+    let fixture_primary = common::build_filtered_fixture(fixture_dir.path(), vec![10090, 9606]);
+    let archive = package_bundle(&fixture_primary, fixture_dir.path());
+    let out_dir = tempfile::tempdir().unwrap();
+    let output = out_dir.path().join("fullmap.redb");
+    pyo3::Python::initialize();
+    pyo3::Python::attach(|py| {
+        tablassert_rs::extract_prebuilt_fullmap(
+            py,
+            archive.clone(),
+            output.clone(),
+            None,
+            Some(vec![9606, 0, 10090, -1]),
+        )
+        .unwrap();
+    });
+    assert!(
+        output.exists(),
+        "a prebuilt filtered by the required allowlist must land"
+    );
+    for index in 0..common::SHARD_COUNT {
+        assert!(
+            common::shard_path(&output, index).exists(),
+            "missing extracted shard s{index}"
+        );
+    }
+    let built = common::canonical_dump(&common::term_curie_map(&fixture_primary));
+    assert!(!built.is_empty(), "filtered fixture must index some term");
+    assert_eq!(
+        common::canonical_dump(&common::term_curie_map(&output)),
+        built,
+        "the extracted bundle must match the filtered force build exactly"
+    );
+    // The recorded identity survives extraction, and both exposed probes agree
+    // with it — the identity the CLI compares against cannot drift from the one
+    // the build recorded.
+    assert_eq!(
+        tablassert_rs::fullmap_taxon_allowlist_identity(output),
+        Some(tablassert_rs::taxon_allowlist_identity(vec![
+            9606, 0, 10090, -1
+        ]))
+    );
 }

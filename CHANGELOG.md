@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+- **BREAKING: `build-fullmap` always applies the built-in top-100 experimental-taxon allowlist, and `--taxon-allowlist` is removed.** The checked-in `src/tablassert/data/experimental_taxa.yaml` filter is no longer opt-in: every source build passes those 100 NCBI taxon IDs to Rust, and the resulting database records the same deterministic `META.taxon_allowlist` identity introduced in 18.1.0. The identity now also guards both reuse paths, so an unfiltered database can never satisfy an allowlisted `build-fullmap` invocation. A prebuilt archive whose recorded identity is absent or different fails extraction validation before anything is renamed, surfacing as the existing `PrebuiltFullmapUnavailable` fallback to a filtered BABEL build; an existing file at `--output` is reused only when its identity matches, and is otherwise rebuilt with a warning. Scripts passing `--taxon-allowlist` or `--no-taxon-allowlist` must drop the flag — parsing now fails with an unknown-option error. `build_fullmap_pipeline`, `fetch_prebuilt_fullmap`, and `_extract_prebuilt_fullmap` accept the IDs through their existing/extended `taxon_allowlist` parameter, and the Rust extension exposes `taxon_allowlist_identity` plus `fullmap_taxon_allowlist_identity` so Python can compare identities without duplicating the encoding.
+
 ## 18.1.0 - 2026-09-14
 
 ### Added

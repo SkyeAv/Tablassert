@@ -130,6 +130,32 @@ pub fn build_fixture(dir: &Path) -> PathBuf {
     output
 }
 
+/// Build the fixed fixture with a taxon allowlist applied (the shape a filtered
+/// published archive carries) at `<dir>/filtered.redb`; returns the primary path.
+/// Only `extract_prebuilt` needs a filtered bundle today; the allow keeps this
+/// shared module compiling under `deny(dead_code)` for `build_golden`.
+#[allow(dead_code)]
+pub fn build_filtered_fixture(dir: &Path, taxon_allowlist: Vec<i32>) -> PathBuf {
+    pyo3::Python::initialize();
+    let classes = dir.join("classes.ndjson");
+    let synonyms = dir.join("SRC.ndjson");
+    write_jsonl(&classes, CLASS_LINES);
+    write_jsonl(&synonyms, SYNONYM_LINES);
+    let output = dir.join("filtered.redb");
+    pyo3::Python::attach(|py| {
+        tablassert_rs::build_fullmap_db(
+            py,
+            output.clone(),
+            vec![classes],
+            vec![synonyms],
+            None,
+            Some(taxon_allowlist),
+        )
+        .unwrap();
+    });
+    output
+}
+
 /// Open a COPY of the (flock-locked) primary so its dims/CURIES/META tables can
 /// be read directly.  The build commits everything before caching the original,
 /// so the copied bytes are a complete, consistent database on a fresh inode.

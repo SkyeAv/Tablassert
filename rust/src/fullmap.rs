@@ -507,6 +507,27 @@ fn allowlist_identity(taxa: &HashSet<i32>) -> String {
     )
 }
 
+/// The positive-ID set an allowlist argument describes.  Shared by the build
+/// path and every identity probe so a recorded `META.taxon_allowlist` and the
+/// identity computed for the same input list always agree (a non-positive id
+/// never filters anything, so it must never change the identity either).
+fn allowlist_set(taxon_allowlist: Vec<i32>) -> HashSet<i32> {
+    taxon_allowlist.into_iter().filter(|id| *id > 0).collect()
+}
+
+/// The `META.taxon_allowlist` identity recorded in a primary DB, or `None` for
+/// an unfiltered build — the key is written only when an allowlist was applied,
+/// so its absence IS the unfiltered marker.
+fn read_taxon_allowlist_identity(database: &ReadOnlyDatabase) -> PyResult<Option<String>> {
+    let read = database.begin_read().map_err(py_err)?;
+    let meta = read.open_table(META).map_err(py_err)?;
+    let identity = meta
+        .get("taxon_allowlist")
+        .map_err(py_err)?
+        .map(|value| value.value().to_string());
+    Ok(identity)
+}
+
 fn retain_for_taxon_allowlist(row: &SynonymRow<'_>, allowlist: Option<&HashSet<i32>>) -> bool {
     let Some(allowlist) = allowlist else {
         return true;
@@ -2480,8 +2501,7 @@ pub fn build_fullmap_db(
             PathBuf::from(p)
         });
 
-    let taxon_allowlist: Option<HashSet<i32>> =
-        taxon_allowlist.map(|ids| ids.into_iter().filter(|id| *id > 0).collect());
+    let taxon_allowlist: Option<HashSet<i32>> = taxon_allowlist.map(allowlist_set);
     let taxon_allowlist_identity: Option<String> = taxon_allowlist.as_ref().map(allowlist_identity);
     let progress = progress.map(|cb| Arc::new(Progress { cb }));
 
@@ -2659,6 +2679,7 @@ fn extract_validate_rename(
     temp_dir: &Path,
     output: &Path,
     progress: &Option<Py<PyAny>>,
+    taxon_allowlist: Option<&HashSet<i32>>,
 ) -> PyResult<()> {
     // Stream File -> 8 MiB BufReader -> zstd decoder -> tar entries; the
     // decompressed tar is NEVER materialized on disk.
@@ -2860,7 +2881,9 @@ fn extract_validate_rename(
     // Validate the extracted bundle against the force-build contract BEFORE
     // any rename, reusing the exact read-path helpers so the contract cannot
     // drift: exact v5 schema (older tags are rejected loudly), a parseable
-    // build_id, and the META-advertised shard count.
+    // build_id, the META-advertised shard count, and — when the caller
+    // requires a taxon allowlist — the matching `META.taxon_allowlist`
+    // identity.
     let validation_ctx = |err: PyErr| {
         py_err(format!(
             "prebuilt archive {} failed validation: {err}",
@@ -2871,7 +2894,24 @@ fn extract_validate_rename(
     validate_schema(&database).map_err(&validation_ctx)?;
     let build_id = read_build_id(&database).map_err(&validation_ctx)?;
     let shard_count = shard_count_of(&database).map_err(&validation_ctx)?;
+    let recorded_allowlist = read_taxon_allowlist_identity(&database).map_err(&validation_ctx)?;
     drop(database);
+
+    // A published archive built WITHOUT the required filter is not the database
+    // the caller asked to install: reject it here (nothing has been renamed
+    // yet) so the command falls back to a filtered source build instead of
+    // silently landing an unfiltered DB.
+    if let Some(expected) = taxon_allowlist.map(allowlist_identity) {
+        if recorded_allowlist.as_deref() != Some(expected.as_str()) {
+            return Err(py_err(format!(
+                "prebuilt archive {} is not filtered by the required taxon allowlist \
+                 (expected META.taxon_allowlist {expected}, found {}); republish the archive \
+                 from a filtered build or force a local rebuild with 'tablassert build-fullmap'",
+                archive.display(),
+                recorded_allowlist.unwrap_or_else(|| "no allowlist identity".to_string())
+            )));
+        }
+    }
 
     // The archive must contain EXACTLY s0..s{shard_count-1}: a gap or an
     // extra shard (e.g. s16 alongside a 16-shard primary) means a torn or
@@ -2958,33 +2998,39 @@ fn extract_validate_rename(
 /// temp dir inside `output`'s directory (same filesystem -> atomic renames),
 /// then VALIDATES the extracted bundle against the same contract the read path
 /// enforces — exact v5 schema, a parseable `build_id`, the META-advertised
-/// shard count with no gaps or extras, and a matching `build_id` in every
-/// shard — BEFORE renaming anything into place: primary -> `output`, shard
-/// `i` -> `<output stem>.s<i>.redb`.  A failing validation therefore never
-/// lands a broken DB at the output path, and the temp dir is removed on every
-/// exit path (guaranteed on success, best-effort on error, so a failed
-/// extraction never leaks multi-GB partials).  Runs with the GIL released;
-/// the optional `progress` callback receives `(detail: str)` updates
-/// (`"opening archive"`, `"extracting <entry>"`, `"validating"`) and is
-/// best-effort.
+/// shard count with no gaps or extras, a matching `build_id` in every shard,
+/// and (when `taxon_allowlist` is given) a `META.taxon_allowlist` identity
+/// equal to the one a filtered build would record — BEFORE renaming anything
+/// into place: primary -> `output`, shard `i` -> `<output stem>.s<i>.redb`.  A
+/// failing validation therefore never lands a broken DB at the output path, and
+/// the temp dir is removed on every exit path (guaranteed on success,
+/// best-effort on error, so a failed extraction never leaks multi-GB
+/// partials).  Runs with the GIL released; the optional `progress` callback
+/// receives `(detail: str)` updates (`"opening archive"`,
+/// `"extracting <entry>"`, `"validating"`) and is best-effort.
 #[pyfunction]
-#[pyo3(signature = (archive, output, progress=None))]
+#[pyo3(signature = (archive, output, progress=None, taxon_allowlist=None))]
 pub fn extract_prebuilt_fullmap(
     py: Python<'_>,
     archive: PathBuf,
     output: PathBuf,
     progress: Option<Py<PyAny>>,
+    taxon_allowlist: Option<Vec<i32>>,
 ) -> PyResult<()> {
     // Release the GIL for the whole extract->validate->rename so the multi-GB
     // streaming extraction never blocks the interpreter; progress callbacks
     // re-acquire it briefly (see `extract_report`).
-    py.detach(|| extract_prebuilt_fullmap_inner(archive, output, progress))
+    let taxon_allowlist: Option<HashSet<i32>> = taxon_allowlist.map(allowlist_set);
+    py.detach(|| {
+        extract_prebuilt_fullmap_inner(archive, output, progress, taxon_allowlist.as_ref())
+    })
 }
 
 fn extract_prebuilt_fullmap_inner(
     archive: PathBuf,
     output: PathBuf,
     progress: Option<Py<PyAny>>,
+    taxon_allowlist: Option<&HashSet<i32>>,
 ) -> PyResult<()> {
     extract_report(&progress, "opening archive");
 
@@ -3043,7 +3089,7 @@ fn extract_prebuilt_fullmap_inner(
         ))
     })?;
 
-    match extract_validate_rename(&archive, &temp_dir, &output, &progress) {
+    match extract_validate_rename(&archive, &temp_dir, &output, &progress, taxon_allowlist) {
         Ok(()) => Ok(()),
         Err(err) => {
             // Best-effort: never leak multi-GB partials from a failed run.
@@ -3697,6 +3743,30 @@ pub fn hydrate_categories<'py>(py: Python<'py>, db: PathBuf) -> PyResult<Bound<'
 #[pyfunction]
 pub fn fullmap_source_version() -> &'static str {
     FULLMAP_SOURCE_VERSION
+}
+
+/// The deterministic identity a taxon allowlist records in
+/// `META.taxon_allowlist` (`count=N;xxh64=...`), exposed so callers can state
+/// which filter a database was built with without reimplementing the encoding.
+#[pyfunction]
+pub fn taxon_allowlist_identity(taxon_allowlist: Vec<i32>) -> String {
+    allowlist_identity(&allowlist_set(taxon_allowlist))
+}
+
+/// The `META.taxon_allowlist` identity recorded in an existing fullmap primary,
+/// or `None` when that database was built unfiltered.
+///
+/// A best-effort probe for the "is the database already at this path the one I
+/// would build?" check: a missing, unreadable, foreign, or outdated-schema file
+/// yields `None` (meaning "not reusable") rather than raising, so the caller
+/// rebuilds instead of failing on a file it is about to overwrite.
+#[pyfunction]
+pub fn fullmap_taxon_allowlist_identity(db: PathBuf) -> Option<String> {
+    let database = open_read_only(&db).ok()?;
+    if validate_schema(&database).is_err() {
+        return None;
+    }
+    read_taxon_allowlist_identity(&database).ok().flatten()
 }
 
 #[cfg(test)]
