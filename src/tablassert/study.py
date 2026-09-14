@@ -20,6 +20,7 @@ _MESSAGES: dict[str, str] = {
     "unnamed-nodes": "nodes with no name or an empty name",
     "unidentified-nodes": "nodes with no id or an empty id",
     "incomplete-edges": "edges missing subject, predicate, or object",
+    "demoted-edges": "edges demoted to bare biolink:Association despite a declared category_override",
     "undeclared-nodes": "nodes referenced by edges but not declared in the nodes file",
     "isolated-nodes": "declared nodes participating in no edge",
 }
@@ -56,6 +57,10 @@ class _FileScan:
     unnamed: Counter[str]
     idless: Counter[str]
     incomplete: Counter[str]
+    #: Edges whose resolved ``category`` is bare ``biolink:Association``, keyed by
+    #: predicate. A demotion is only a violation when the build declared a
+    #: ``category_override`` (see :func:`study_kgx`); the count is collected either way.
+    demoted: Counter[str]
     malformed: int
     missing: bool
     path: Path
@@ -98,7 +103,9 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
         A :class:`_FileScan`; ``missing`` is set (and nothing else) when the
         file does not exist, so a typo'd path can never read as a clean pass.
     """
-    scan: _FileScan = _FileScan(set(), set(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), 0, not path.is_file(), path)
+    scan: _FileScan = _FileScan(
+        set(), set(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), 0, not path.is_file(), path
+    )
     if scan.missing:
         return scan
     with path.open(encoding="utf-8") as handle:
@@ -155,6 +162,22 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
                     slot_value: object = record.get(slot)
                     if slot_value is None or (isinstance(slot_value, str) and not slot_value.strip()):
                         scan.incomplete[slot] += 1
+                # Bare ``biolink:Association`` means the row lost every specific class:
+                # ``lib.edge_category`` derives a class from the (subject role, object
+                # role) pair -- optionally pinned per object category by the section's
+                # ``category_override`` -- and ``biolink.resolve_association_class``
+                # walks up the hierarchy until the predicate is legal, with
+                # ``Association`` as the floor. ``prune_to_class`` then nulls every
+                # class-specific slot into the inlined ``has_supporting_studies`` junk
+                # drawer, so a demoted edge ships without its evidence fields. Counted
+                # per predicate; :func:`study_kgx` decides whether it is a violation.
+                categories: object = record.get("category")
+                category: str = (
+                    categories[0] if isinstance(categories, list) and categories and isinstance(categories[0], str) else str(categories or "")
+                )
+                if category == "biolink:Association":
+                    predicate: object = record.get("predicate")
+                    scan.demoted[predicate if isinstance(predicate, str) and predicate else "<no predicate>"] += 1
             else:
                 ident = record.get("id")
                 if isinstance(ident, str):
@@ -186,7 +209,7 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
     return scan
 
 
-def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10) -> list[StudyViolation]:
+def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10, category_override_declared: bool = False) -> list[StudyViolation]:
     """Assert over the final KGX NDJSON files, in the spirit of studyKGtsvs.pl.
 
     Streams both files once each and checks: duplicate node ids, duplicate edge
@@ -196,13 +219,22 @@ def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10) ->
     never declared (``undeclared``), declared nodes participating in no edge
     (``isolated``), empty/malformed lines, string values carrying leading/trailing
     whitespace, and null or empty values in any field (a stronger contract than
-    the writer's strip_nulls). Every check is an assertion -- the caller decides
+    the writer's strip_nulls). When ``category_override_declared``, it also fails
+    on edges demoted to bare ``biolink:Association``: a section that pins the
+    association class per object category promises every row lands on a pinned
+    class, so a demotion means a row escaped the pin -- typically an object
+    category the config vocabulary could not name (see
+    ``biolink.CATEGORY_OVERRIDES``) -- and the edge shipped without the
+    class-specific slots ``prune_to_class`` nulled into
+    ``has_supporting_studies``. Every check is an assertion -- the caller decides
     whether violations fail the build.
 
     Args:
         nodes_path: Path to ``<name>_<version>.nodes.ndjson``.
         edges_path: Path to ``<name>_<version>.edges.ndjson``.
         example_limit: Maximum number of examples retained per violation.
+        category_override_declared: Whether any built section declared a
+            ``statement.category_override``; gates the demoted-edge assertion.
 
     Returns:
         A list of :class:`StudyViolation`; empty when every assertion passes.
@@ -238,6 +270,9 @@ def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10) ->
     if edges.incomplete:
         examples = [f"{slot} ({n})" for slot, n in edges.incomplete.most_common(example_limit)]
         violations.append(StudyViolation("incomplete-edges", "edges", sum(edges.incomplete.values()), examples))
+    if category_override_declared and edges.demoted:
+        examples = [f"{predicate} ({n})" for predicate, n in edges.demoted.most_common(example_limit)]
+        violations.append(StudyViolation("demoted-edges", "edges", sum(edges.demoted.values()), examples))
     if not nodes.missing and not edges.missing:
         undeclared: list[str] = sorted(edges.ids - nodes.ids)
         if undeclared:

@@ -489,6 +489,26 @@ def test_statement_accepts_category_override() -> None:
     assert stmt.category_override == {"Disease": "EntityToDiseaseAssociation", "PhenotypicFeature": "EntityToPhenotypicFeatureAssociation"}
 
 
+def test_category_surfaces_accept_fullmap_mixin_categories() -> None:
+    """``CATEGORY_OVERRIDES`` names are first-class on every category-keyed surface.
+
+    ``GenomicEntity`` is a Biolink mixin the ``Categories`` enum's Entity-subclass scan
+    cannot see, yet the fullmap assigns it to real terms -- so it must validate in
+    ``avoid``/``prioritize`` and as a ``category_override`` key, or an allow-list can
+    never exclude it and the row falls through to bare ``biolink:Association``.
+    """
+    node: NodeEncoding = NodeEncoding(method="value", encoding="A", avoid=["GenomicEntity"], prioritize=["GenomicEntity"])  # pyright: ignore
+    assert "GenomicEntity" in (node.avoid or [])
+    assert "GenomicEntity" in (node.prioritize or [])
+    stmt: Statement = Statement(  # pyright: ignore
+        subject={"method": "value", "encoding": "A"},
+        object={"method": "value", "encoding": "B"},
+        predicate="treats",
+        category_override={"GenomicEntity": "EntityToDiseaseAssociation"},
+    )
+    assert stmt.category_override == {"GenomicEntity": "EntityToDiseaseAssociation"}
+
+
 def test_statement_rejects_unknown_override_value() -> None:
     """Override values must be EdgeCategories members; arbitrary names fail at config time."""
     with pytest.raises(ValidationError):

@@ -59,6 +59,7 @@ if TYPE_CHECKING:
 __all__ = [
     "ALLOWED_EDGE_FIELDS",
     "BIOLINK_VERSION",
+    "CATEGORY_OVERRIDES",
     "CLASS_FIELD_OVERRIDES",
     "DISABLED_EDGE_FIELDS",
     "EFFECT_TYPE_VALUES",
@@ -153,18 +154,54 @@ def _category_name(cls: Any) -> str:
     return str(cls.__name__)
 
 
+CATEGORY_OVERRIDES: frozenset[str] = frozenset({"GenomicEntity"})
+"""Biolink category names the ``Categories`` enum must carry ahead of the pinned model.
+
+The enum is built from the ``pydanticmodel_v2`` classes that subclass ``Entity``, but
+Biolink declares some node categories as MIXINS -- and a mixin is generated as a plain
+``ConfiguredBaseModel`` that is NOT an ``Entity`` subclass (``GenomicEntity``'s MRO is
+``GenomicEntity -> ConfiguredBaseModel -> BaseModel -> object``). The scan therefore
+cannot see them, while the fullmap -- whose ``CATEGORY_NAME`` vocabulary comes from
+BABEL, not from the Pydantic class tree -- assigns them to real terms (UMLS
+"gene mutation" -> ``UMLS:C0678941``, the ``* wt Allele`` CUIs).
+
+An unnameable category is a hole in every category-keyed config surface:
+``NodeEncoding.avoid`` / ``prioritize`` and ``Statement.category_override`` keys are
+validated against the enum, so an ``avoid``-list allow-list can never exclude a
+category the resolver actually emits, and the row falls through to whatever the
+(subject role, object role) pair derives -- for a mixin object with no
+``CATEGORY_PARENT`` rollup that is bare ``biolink:Association``, whose
+``prune_to_class`` then nulls every class-specific slot into the inlined
+``has_supporting_studies`` junk drawer. (DAKP shipped 35 such edges before this
+override existed.) ``fullmap.filter_and_rank`` additionally drops unnameable
+categories when ``avoid`` is set, so a future vocabulary drift degrades to lost rows
+rather than mis-classed edges.
+
+Names here are unioned into :func:`_entity_category_names`, so each is a first-class
+``Categories`` member: valid in ``avoid``/``prioritize``, valid as a
+``category_override`` key, and included in generated complements. Node emission is
+unaffected -- ``resolve_node_class`` walks the MRO independently of this enum.
+
+A tripwire test asserts every override is still invisible to the ``Entity`` scan: the
+moment a biolink-model release promotes a mixin to a real ``Entity`` subclass (or the
+scan otherwise picks it up), the suite fails and the stale name is removed from
+``CATEGORY_OVERRIDES`` -- the same philosophy as ``CLASS_FIELD_OVERRIDES``.
+"""
+
+
 def _entity_category_names() -> list[str]:
     """Collect all Biolink entity category names from the Pydantic model.
 
     A category is any ``pydanticmodel_v2`` class that subclasses ``Entity`` but is
     not an ``Association`` subclass (associations are edge categories, handled
-    separately). This mirrors the Biolink notion of a node category while also
-    including the upper-level ``Entity`` / ``NamedThing`` classes.
+    separately), plus the curated :data:`CATEGORY_OVERRIDES` mixin names the
+    ``Entity`` scan cannot see. This mirrors the Biolink notion of a node category
+    while also including the upper-level ``Entity`` / ``NamedThing`` classes.
 
     Returns:
         Sorted unique category names.
     """
-    names: set[str] = set()
+    names: set[str] = set(CATEGORY_OVERRIDES)
     for cls in vars(_bm).values():
         if inspect.isclass(cls) and cls.__module__ == _bm.__name__ and issubclass(cls, _bm.Entity) and not issubclass(cls, _bm.Association):
             names.add(_category_name(cls))
@@ -431,6 +468,7 @@ if TYPE_CHECKING:
     class Categories(str, Enum):
         DISEASE: Categories
         GENE: Categories
+        GENOMIC_ENTITY: Categories
         NAMED_THING: Categories
         PHENOTYPIC_FEATURE: Categories
         PROTEIN: Categories

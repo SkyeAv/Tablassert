@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Fixed
+- **The `Categories` config vocabulary now names fullmap-emitted Biolink mixins via `CATEGORY_OVERRIDES`.** Biolink declares some node categories as mixins, and the pydantic model generates a mixin as a plain `ConfiguredBaseModel` that is not an `Entity` subclass -- invisible to the scan that builds `Categories`. The fullmap's BABEL vocabulary assigns one such mixin (`GenomicEntity`) to real terms, so an `avoid` allow-list could never name it: the category sailed through the guard and the edge fell back to bare `biolink:Association`, whose `prune_to_class` then nulled every class-specific slot into the inlined `has_supporting_studies` junk drawer (DAKP shipped 35 such edges). `GenomicEntity` is now a first-class member -- valid in `avoid`/`prioritize` and as a `category_override` key -- and a tripwire test drops the override the moment the installed model makes the mixin an `Entity` subclass (tests in `tests/test_biolink.py` and `tests/test_models.py`).
+- **`filter_and_rank` drops categories the `Categories` enum cannot name when `avoid` is set.** An `avoid` list is an allow-list by complement, and a complement can only name what the enum knows: a fullmap `CATEGORY_NAME` outside the enum could never appear in it, so without this guard the hard filter had a silent hole for any future vocabulary drift. Degradation is now to lost rows (surfaced in the resolution report) rather than mis-classed edges (regression tests in `tests/test_fullmap.py`).
+- **The `--qc` study stage now fails the build on edges demoted to bare `biolink:Association` when any section declares a `category_override`.** A pinned section promises every row lands on a pinned class, so a demotion means a row escaped the pin -- typically an object category the config vocabulary could not name -- and shipped without its class-specific evidence slots. Without a pin, bare `Association` remains the author's accepted default, so the assertion is gated. `study_kgx` gained the `category_override_declared` keyword; `study_final_ndjson` forwards it from the built sections (regression tests in `tests/test_study.py`).
+
 ## 18.0.0 - 2026-09-10
 
 ### Changed

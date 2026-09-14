@@ -324,12 +324,20 @@ def build_graph_pipeline(
     # Stage 7/7 (only with --qc): assert over the final NDJSON files.
     if qc:
         progress.stage("Studying Graph")
-        study_final_ndjson(g.name, g.version, Path(g.rig.artifact_base_path))
+        # The demotion assertion is graph-wide: the study runs on the merged NDJSON with no
+        # section attribution, so one pinned section makes every bare biolink:Association edge
+        # in the graph a failure -- including edges from unpinned sections, for which bare
+        # Association is the author's accepted default. Graphs where every section is pinned
+        # are unaffected; a mixed graph should split or accept the stricter gate. An empty
+        # ``category_override: {}`` pins nothing and counts as undeclared.
+        study_final_ndjson(
+            g.name, g.version, Path(g.rig.artifact_base_path), category_override_declared=any(x.statement.category_override for x in tcode)
+        )
 
     logger.info("Built graph {name} v{version}: {n} sections", name=g.name, version=g.version, n=n)
 
 
-def study_final_ndjson(name: str, version: str, out_dir: Path) -> None:
+def study_final_ndjson(name: str, version: str, out_dir: Path, *, category_override_declared: bool = False) -> None:
     """Run study assertions over a build's final NDJSON files (the ``--qc`` stage 7).
 
     Args:
@@ -337,13 +345,18 @@ def study_final_ndjson(name: str, version: str, out_dir: Path) -> None:
         version: Graph version, used to locate ``<name>_<version>.edges.ndjson``.
         out_dir: Artifact directory the build wrote into
             (``rig.artifact_base_path``).
+        category_override_declared: Whether any built section declared a
+            ``statement.category_override``; when set, edges demoted to bare
+            ``biolink:Association`` violate the study (a row escaped its pin).
 
     Raises:
         SystemExit: With status 1 when any study assertion is violated.
     """
     from tablassert.study import format_violations, study_kgx
 
-    violations = study_kgx(out_dir / f"{name}_{version}.nodes.ndjson", out_dir / f"{name}_{version}.edges.ndjson")
+    violations = study_kgx(
+        out_dir / f"{name}_{version}.nodes.ndjson", out_dir / f"{name}_{version}.edges.ndjson", category_override_declared=category_override_declared
+    )
     if violations:
         summary: str = format_violations(violations)
         print(summary, file=sys.stderr)
@@ -734,7 +747,12 @@ def build_kg(
     has finished. It also runs a final study stage that asserts over the emitted NDJSON
     -- no duplicate node ids, every node has a non-empty id and name, every edge has a
     non-empty subject, predicate, and object, no undeclared or isolated nodes, no
-    malformed lines, no null or empty values in any field, and no stray whitespace --
+    malformed lines, no null or empty values in any field, no stray whitespace, and (when
+    any section declares a ``category_override``) no edge demoted to bare
+    ``biolink:Association``. The demotion assertion is GRAPH-WIDE: the study reads the
+    merged NDJSON with no section attribution, so a single pinned section also fails
+    demoted edges from unpinned sections (a row escaped its pin and shipped without the
+    class-specific slots ``prune_to_class`` nulled into ``has_supporting_studies``) --
     and fails the build (non-zero exit) when any assertion is violated.
     """
     if qc:

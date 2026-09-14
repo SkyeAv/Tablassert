@@ -1043,3 +1043,75 @@ def test_is_lock_contention_matches_redb_lock_errors(message: str) -> None:
 def test_is_lock_contention_rejects_other_errors(message: str) -> None:
     """Non-lock errors must NOT be classified as contention: outer retry loops rely on this to retry them."""
     assert not is_lock_contention(RuntimeError(message))
+
+
+def test_filter_and_rank_drops_unnameable_categories_when_avoid_set() -> None:
+    """An avoid list also drops fullmap categories the Categories enum cannot name.
+
+    ``avoid`` is an allow-list by complement, and a complement can only name what the
+    enum knows: a ``CATEGORY_NAME`` outside it (a Biolink mixin the Entity-subclass
+    scan misses -- the ``GenomicEntity`` leak class) is unnameable, so it must be
+    dropped alongside the named avoids or the hard guard has a silent hole. Without
+    ``avoid`` there is no allow-list intent and the row survives.
+    """
+    terms: pl.DataFrame = pl.DataFrame({"term": ["mutation"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(
+        {
+            "term": ["mutation", "mutation"],
+            "CURIE": ["UMLS:C1", "MONDO:1"],
+            "PREFERRED_NAME": ["mutation", "mutation"],
+            "CATEGORY_NAME": ["NotANameableCategory", "Disease"],
+            "TAXON_ID": [0, 0],
+            "SOURCE_NAME": ["UMLS", "MONDO"],
+            "SOURCE_VERSION": [rs.fullmap_source_version()] * 2,
+        }
+    )
+
+    guarded: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=[Categories.GENE], column_context=False)
+    assert guarded["CURIE"].to_list() == ["MONDO:1"]
+
+    ungated: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=None, column_context=False)
+    assert set(ungated["CURIE"].to_list()) == {"UMLS:C1", "MONDO:1"}
+
+
+def test_filter_and_rank_avoids_overridden_mixin_category() -> None:
+    """The GenomicEntity override is a real enum member, so a named avoid drops it."""
+    terms: pl.DataFrame = pl.DataFrame({"term": ["mutation"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(
+        {
+            "term": ["mutation", "mutation"],
+            "CURIE": ["UMLS:C0678941", "MONDO:1"],
+            "PREFERRED_NAME": ["mutation", "mutation"],
+            "CATEGORY_NAME": ["GenomicEntity", "Disease"],
+            "TAXON_ID": [0, 0],
+            "SOURCE_NAME": ["UMLS", "MONDO"],
+            "SOURCE_VERSION": [rs.fullmap_source_version()] * 2,
+        }
+    )
+
+    matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=[Categories.GENOMIC_ENTITY], column_context=False)
+    assert matches["CURIE"].to_list() == ["MONDO:1"]
+
+
+def test_dimension_maps_warns_on_unnameable_fullmap_categories(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A fullmap category outside the config vocabulary surfaces as a loud once-per-db warning.
+
+    ``filter_and_rank`` drops those rows when a column sets ``avoid`` and they fall through
+    to pair-derived classes otherwise, so vocabulary drift must not stay silent.
+    """
+
+    def fake_retry(fn: Callable[..., Any], db: Path, *args: object) -> list[str]:
+        if fn is fullmap.rs.hydrate_categories:
+            return ["ChemicalEntity", "NotANameableCategory"]
+        return []
+
+    monkeypatch.setattr(fullmap, "_call_with_lock_retry", fake_retry)
+    fullmap._SOURCE_CACHE.clear()
+    captured: list[str] = []
+    sink_id: int = fullmap.logger.add(lambda message: captured.append(message.record["message"]), level="WARNING")
+    try:
+        fullmap._dimension_maps(tmp_path / "fullmap.redb", (tmp_path / "fullmap.redb", 0.0))
+    finally:
+        fullmap.logger.remove(sink_id)
+        fullmap._SOURCE_CACHE.clear()
+    assert any("NotANameableCategory" in message for message in captured)

@@ -200,7 +200,7 @@ Defines how to extract and resolve entities.
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
 | `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human) |
 | `prioritize` | List[String] | No | Preferred Biolink categories (must be valid `Categories` enum values such as `Gene`, `Protein`) |
-| `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values) |
+| `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
 | `exclude_prefixes` | List[String] | No | CURIE namespace prefixes excluded during entity resolution: the prefix is the text before the first `:` of a resolved CURIE, and every candidate whose prefix is listed is dropped. Matching is exact and case-sensitive (`OMIM` drops `OMIM:100100` but not `OMIMPS:100` or `omim:100100`). Optional; defaults to null (no prefix filtering). See [Resolution Filters](#resolution-filters). |
 | `exclude_regex` | List[String] | No | Case-sensitive regex patterns; any resolved CURIE matching one is dropped during entity resolution. Polars-compatible patterns only (no backreferences or lookarounds); an empty or whitespace-only pattern is rejected at config time (`regex-bad-pattern`) because an empty pattern would match every CURIE and silently drop all candidates. Optional; defaults to null (no regex filtering). See [Resolution Filters](#resolution-filters). |
 | `regex` | List[Regex] | No | Pattern replacements |
@@ -300,7 +300,7 @@ subject:
   avoid: [Gene]
 ```
 
-Prevents misclassifying organism names as genes.
+Prevents misclassifying organism names as genes. Because `avoid` is an allow-list by complement, it also drops any fullmap category the `Categories` enum cannot name, keeping the guard hard against vocabulary drift.
 
 #### Resolution Filters
 
