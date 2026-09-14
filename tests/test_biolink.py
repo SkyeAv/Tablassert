@@ -22,6 +22,7 @@ import pytest
 from tablassert.biolink import (
     ALLOWED_EDGE_FIELDS,
     BIOLINK_VERSION,
+    CATEGORY_OVERRIDES,
     CLASS_FIELD_OVERRIDES,
     DISABLED_EDGE_FIELDS,
     EFFECT_TYPE_VALUES,
@@ -214,8 +215,8 @@ def test_effect_types_match_pr1774() -> None:
 
 
 def test_categories_match_biolink() -> None:
-    """Categories is exactly the set of Biolink entity category names."""
-    assert {c.value for c in Categories} == _biolink_category_names()
+    """Categories is exactly the set of Biolink entity category names plus the overrides."""
+    assert {c.value for c in Categories} == _biolink_category_names() | CATEGORY_OVERRIDES
 
 
 def test_edge_categories_match_biolink() -> None:
@@ -601,3 +602,22 @@ def test_validate_kgx_separates_pending_extras_from_real_failures(tmp_path: Path
     assert report["ok_excluding_pending"] is False  # the real defect still fails
     assert "approval_ids: extra_forbidden" in report["edges"]["problems"]
     assert "effect_size: extra_forbidden" not in report["edges"]["problems"]
+
+
+def test_category_overrides_track_the_installed_model() -> None:
+    """Every override name must still be invisible to the Entity-subclass scan.
+
+    Tripwire: the moment a biolink-model release promotes an overridden mixin to a
+    real ``Entity`` subclass -- so ``_entity_category_names`` collects it natively --
+    this fails and the stale name is removed from ``CATEGORY_OVERRIDES`` (same
+    philosophy as ``test_class_field_overrides_track_the_installed_model``). Each
+    name must simultaneously remain nameable in the ``Categories`` enum, which is
+    the whole point of the grant.
+    """
+    assert frozenset({"GenomicEntity"}) == CATEGORY_OVERRIDES
+    known: set[str] = {category.value for category in Categories}
+    for name in CATEGORY_OVERRIDES:
+        mixin: Any = getattr(bm, name, None)
+        assert mixin is not None, name
+        assert not issubclass(mixin, bm.Entity), f"{name} is now an Entity subclass; drop the override"
+        assert name in known, name

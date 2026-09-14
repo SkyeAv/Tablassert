@@ -322,6 +322,15 @@ def deduplicate_result(result: pl.DataFrame, column_context: bool) -> pl.DataFra
     return result.sort([*ranking_columns, "CURIE"], descending=[*descending, False])
 
 
+#: Every category name the config vocabulary can spell, sorted. ``filter_and_rank``
+#: drops rows carrying any other ``CATEGORY_NAME`` when ``avoid`` is set: an ``avoid``
+#: list is an allow-list by complement, and a complement can only name categories the
+#: ``Categories`` enum knows -- a fullmap category outside the enum (a Biolink mixin
+#: the ``Entity`` scan misses; see ``biolink.CATEGORY_OVERRIDES``) could never appear
+#: in it, so without this guard it would sail through the hard filter.
+_KNOWN_CATEGORIES: tuple[str, ...] = tuple(sorted(category.value for category in Categories))
+
+
 def _category_values(categories: list[Any]) -> list[str]:
     """Normalize a ``prioritize``/``avoid`` list to plain category-name strings.
 
@@ -357,7 +366,9 @@ def filter_and_rank(
         terms: Distinct terms for the column being resolved (from ``distinct``).
         taxon: Optional taxon filter applied to taxon-bearing matches; rows with TAXON_ID 0 are retained.
         prioritize: Categories to boost in ranking.
-        avoid: Categories to drop entirely.
+        avoid: Categories to drop entirely. When set, rows whose ``CATEGORY_NAME`` is
+            not a ``Categories`` member are dropped as well -- an allow-list cannot
+            name what the enum does not know (see :data:`_KNOWN_CATEGORIES`).
         column_context: Whether to compute/use category frequency as a tiebreaker.
         exclude_prefixes: CURIE namespace prefixes (text before the first ':') to drop.
         exclude_regex: Regex patterns; any CURIE matching one is dropped.
@@ -375,6 +386,7 @@ def filter_and_rank(
     if avoid:
         avoid_values: list[str] = _category_values(avoid)
         result = result.filter(~pl.col("CATEGORY_NAME").is_in(avoid_values))
+        result = result.filter(pl.col("CATEGORY_NAME").is_in(_KNOWN_CATEGORIES))
     if taxon:
         taxon_id: int = int(taxon)
         result = result.filter((pl.col("TAXON_ID") == taxon_id) | (pl.col("TAXON_ID") == 0))
@@ -699,7 +711,8 @@ def resolve(
         db: Path to the fullmap redb file.
         taxon: Optional taxon filter applied to taxon-bearing matches; rows with TAXON_ID 0 are retained.
         prioritize: Categories to boost in ranking.
-        avoid: Categories to drop entirely.
+        avoid: Categories to drop entirely (delegates to ``filter_and_rank``, which
+            also drops categories the ``Categories`` enum cannot name).
         exclude_prefixes: CURIE namespace prefixes (text before the first ':') to drop.
         exclude_regex: Regex patterns; any resolved CURIE matching one is dropped.
         log: When ``True``, log unmatched level-one terms.

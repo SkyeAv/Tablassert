@@ -54,7 +54,9 @@ Example: `[Categories.GENE, Categories.PROTEIN]` prefers gene/protein mappings.
 
 **`avoid: Optional[list[Categories]]`**
 
-Optional list of Biolink categories to exclude from results.
+Optional list of Biolink categories to exclude from results. When set, the column is an
+allow-list by complement: fullmap categories the `Categories` enum cannot name are
+dropped as well.
 
 Example: `[Categories.GENE]` prevents gene mappings.
 
@@ -120,7 +122,7 @@ The function:
 
 3. **Filters by:**
    - Taxon ID (if `taxon` specified)
-   - Category avoidance (if `avoid` specified)
+   - Category avoidance (if `avoid` specified; unnameable categories are dropped with it)
    - Excluded CURIE prefixes (if `exclude_prefixes` specified)
    - Excluded CURIE regex patterns (if `exclude_regex` specified)
 

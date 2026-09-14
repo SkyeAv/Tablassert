@@ -385,7 +385,7 @@ def test_format_violations(tmp_path: Path) -> None:
 def test_study_final_ndjson_exits_on_violations(monkeypatch: Any, tmp_path: Path, capsys: Any) -> None:
     """The --qc build stage fails the build (SystemExit 1) when assertions are violated."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(study, "study_kgx", lambda *args: [study.StudyViolation("isolated-nodes", "nodes", 1, ["HGNC:7"])])
+    monkeypatch.setattr(study, "study_kgx", lambda *args, **kwargs: [study.StudyViolation("isolated-nodes", "nodes", 1, ["HGNC:7"])])
     with pytest.raises(SystemExit) as excinfo:
         cli.study_final_ndjson("g", "1", tmp_path)
     assert excinfo.value.code == 1
@@ -395,8 +395,17 @@ def test_study_final_ndjson_exits_on_violations(monkeypatch: Any, tmp_path: Path
 def test_study_final_ndjson_passes_clean(monkeypatch: Any, tmp_path: Path) -> None:
     """The --qc build stage returns normally when every assertion passes."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(study, "study_kgx", lambda *args: [])
+    monkeypatch.setattr(study, "study_kgx", lambda *args, **kwargs: [])
     cli.study_final_ndjson("g", "1", tmp_path)
+
+
+def test_study_final_ndjson_forwards_category_override_flag(monkeypatch: Any, tmp_path: Path) -> None:
+    """The --qc stage forwards the category_override declaration to study_kgx."""
+    captured: dict[str, Any] = {}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(study, "study_kgx", lambda *args, **kwargs: captured.update(kwargs) or [])
+    cli.study_final_ndjson("g", "1", tmp_path, category_override_declared=True)
+    assert captured == {"category_override_declared": True}
 
 
 def test_duplicate_edge_ids(tmp_path: Path) -> None:
@@ -430,3 +439,29 @@ def test_distinct_edge_ids_pass(tmp_path: Path) -> None:
         ),
     )
     assert "duplicate-edge-ids" not in _checks(study.study_kgx(nodes, edges))
+
+
+def test_demoted_edges_violate_only_when_category_override_declared(tmp_path: Path) -> None:
+    """Bare biolink:Association edges violate the study only under a declared pin.
+
+    A section that pins the association class per object category promises every row
+    lands on a pinned class; a demotion means a row escaped the pin (the DAKP
+    GenomicEntity-object leak) and shipped without its class-specific evidence slots.
+    Without a pin, bare Association is the author's accepted default, not a defect.
+    """
+    nodes: Path = _write_ndjson(tmp_path / "g_1.nodes.ndjson", _records({"id": "HGNC:5", "name": "insulin"}, {"id": "MONDO:1", "name": "cancer"}))
+    edges: Path = _write_ndjson(
+        tmp_path / "g_1.edges.ndjson",
+        _records(
+            {"id": "e1", "subject": "HGNC:5", "object": "MONDO:1", "predicate": "biolink:treats", "category": ["biolink:Association"]},
+            {"id": "e2", "subject": "HGNC:5", "object": "MONDO:1", "predicate": "biolink:treats", "category": ["biolink:EntityToDiseaseAssociation"]},
+        ),
+    )
+
+    flagged: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges, category_override_declared=True))
+    assert flagged["demoted-edges"].label == "edges"
+    assert flagged["demoted-edges"].count == 1
+    assert flagged["demoted-edges"].examples == ["biolink:treats (1)"]
+
+    unpinned: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
+    assert "demoted-edges" not in unpinned

@@ -324,12 +324,17 @@ def build_graph_pipeline(
     # Stage 7/7 (only with --qc): assert over the final NDJSON files.
     if qc:
         progress.stage("Studying Graph")
-        study_final_ndjson(g.name, g.version, Path(g.rig.artifact_base_path))
+        # A section that pins the association class per object category promises every
+        # row lands on a pinned class, so the study may fail on demotions; without any
+        # pin, bare biolink:Association is the author's accepted default.
+        study_final_ndjson(
+            g.name, g.version, Path(g.rig.artifact_base_path), category_override_declared=any(x.statement.category_override for x in tcode)
+        )
 
     logger.info("Built graph {name} v{version}: {n} sections", name=g.name, version=g.version, n=n)
 
 
-def study_final_ndjson(name: str, version: str, out_dir: Path) -> None:
+def study_final_ndjson(name: str, version: str, out_dir: Path, *, category_override_declared: bool = False) -> None:
     """Run study assertions over a build's final NDJSON files (the ``--qc`` stage 7).
 
     Args:
@@ -337,13 +342,18 @@ def study_final_ndjson(name: str, version: str, out_dir: Path) -> None:
         version: Graph version, used to locate ``<name>_<version>.edges.ndjson``.
         out_dir: Artifact directory the build wrote into
             (``rig.artifact_base_path``).
+        category_override_declared: Whether any built section declared a
+            ``statement.category_override``; when set, edges demoted to bare
+            ``biolink:Association`` violate the study (a row escaped its pin).
 
     Raises:
         SystemExit: With status 1 when any study assertion is violated.
     """
     from tablassert.study import format_violations, study_kgx
 
-    violations = study_kgx(out_dir / f"{name}_{version}.nodes.ndjson", out_dir / f"{name}_{version}.edges.ndjson")
+    violations = study_kgx(
+        out_dir / f"{name}_{version}.nodes.ndjson", out_dir / f"{name}_{version}.edges.ndjson", category_override_declared=category_override_declared
+    )
     if violations:
         summary: str = format_violations(violations)
         print(summary, file=sys.stderr)
@@ -734,8 +744,10 @@ def build_kg(
     has finished. It also runs a final study stage that asserts over the emitted NDJSON
     -- no duplicate node ids, every node has a non-empty id and name, every edge has a
     non-empty subject, predicate, and object, no undeclared or isolated nodes, no
-    malformed lines, no null or empty values in any field, and no stray whitespace --
-    and fails the build (non-zero exit) when any assertion is violated.
+    malformed lines, no null or empty values in any field, no stray whitespace, and (when
+    any section declares a ``category_override``) no edge demoted to bare
+    ``biolink:Association`` -- and fails the build (non-zero exit) when any assertion is
+    violated.
     """
     if qc:
         extras.require("qc", required_by="--qc")
