@@ -56,8 +56,9 @@ fn xxh64_file(path: PathBuf) -> PyResult<String> {
 // build/read path.  The `fullmap` module itself stays private; only these
 // intended entry points are surfaced at the crate root.
 pub use fullmap::{
-    build_fullmap_db, extract_prebuilt_fullmap, fullmap_source_version, hydrate_categories,
-    hydrate_curies, hydrate_prefixes, hydrate_sources, lookup_fullmap_terms,
+    build_fullmap_db, extract_prebuilt_fullmap, fullmap_source_version,
+    fullmap_taxon_allowlist_identity, hydrate_categories, hydrate_curies, hydrate_prefixes,
+    hydrate_sources, lookup_fullmap_terms, taxon_allowlist_identity,
 };
 
 #[pymodule]
@@ -65,11 +66,16 @@ fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fullmap::build_fullmap_db, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::extract_prebuilt_fullmap, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::fullmap_source_version, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        fullmap::fullmap_taxon_allowlist_identity,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(fullmap::hydrate_categories, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::hydrate_curies, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::hydrate_prefixes, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::hydrate_sources, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::lookup_fullmap_terms, module)?)?;
+    module.add_function(wrap_pyfunction!(fullmap::taxon_allowlist_identity, module)?)?;
     module.add_function(wrap_pyfunction!(ndjson::dedup_ndjson, module)?)?;
     module.add_function(wrap_pyfunction!(uuid::namespace_uuid, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64, module)?)?;

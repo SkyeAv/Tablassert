@@ -394,10 +394,11 @@ def test_build_kg_without_qc_never_probes_the_extra(tmp_path: Path, monkeypatch:
 
 
 def test_build_fullmap_command_force_build_passes_aria2c_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``build-fullmap --force --aria2c`` delegates both flags to the from-scratch build.
+    """``build-fullmap --force --aria2c`` delegates both flags, plus the always-on allowlist.
 
     With the download-first default, only ``--force`` reaches ``build_fullmap_pipeline``; the
     default path is covered by :func:`test_build_fullmap_command_defaults_to_prebuilt_download`.
+    The built-in taxon allowlist rides along on every source build — there is no flag for it.
     """
     output: Path = tmp_path / "fullmap.redb"
     cache: Path = tmp_path / "downloads"
@@ -409,7 +410,9 @@ def test_build_fullmap_command_force_build_passes_aria2c_flag(tmp_path: Path, mo
     monkeypatch.setattr(cli, "run", _fake_run)
     monkeypatch.setattr(extras, "missing", lambda extra: ())
     cli.build_fullmap(output=output, cache=cache, version="v", aria2c=True, force=True)
-    assert calls == [(3, cli.build_fullmap_pipeline, output, {"cache": cache, "version": "v", "aria2c": True})]
+    assert calls == [
+        (3, cli.build_fullmap_pipeline, output, {"cache": cache, "version": "v", "aria2c": True, "taxon_allowlist": cli.load_taxon_allowlist()})
+    ]
 
 
 def test_build_fullmap_aria2c_without_the_extra_stops_before_downloading(
@@ -443,6 +446,9 @@ def test_build_fullmap_aria2c_is_not_checked_when_the_db_already_exists(
     output.write_bytes(b"existing-db")
     monkeypatch.setattr(cli, "run", lambda *args, **kwargs: pytest.fail("an existing DB must short-circuit"))
     monkeypatch.setattr(extras, "missing", lambda extra: ("aria2",))
+    # The reuse short-circuit now requires the recorded allowlist identity to match; this
+    # test is about the aria2c preflight ORDER, not the probe (covered separately).
+    monkeypatch.setattr(cli, "fullmap_matches_allowlist", lambda existing, ids: True)
 
     cli.build_fullmap(output=output, aria2c=True)  # must not raise
     assert "already present" in capsys.readouterr().err
@@ -547,7 +553,7 @@ def test_build_fullmap_pipeline_reports_download_progress(tmp_path: Path, monkey
 
     built: list[tuple[Any, ...]] = []
 
-    def _fake_build(output: Path, class_files: list[Path], synonym_files: list[Path], progress: Any = None) -> None:
+    def _fake_build(output: Path, class_files: list[Path], synonym_files: list[Path], progress: Any = None, taxon_allowlist: Any = None) -> None:
         built.append((output, class_files, synonym_files))
 
     monkeypatch.setattr(rs, "build_fullmap_db", _fake_build)
@@ -591,7 +597,7 @@ def test_build_fullmap_pipeline_uses_aria2c_when_opted_in(tmp_path: Path, monkey
     monkeypatch.setattr(cli, "download_babel_file_aria2c", _fake_aria2c)
     built: list[tuple[Any, ...]] = []
 
-    def _fake_build(output: Path, class_files: list[Path], synonym_files: list[Path], progress: Any = None) -> None:
+    def _fake_build(output: Path, class_files: list[Path], synonym_files: list[Path], progress: Any = None, taxon_allowlist: Any = None) -> None:
         built.append((output, class_files, synonym_files))
 
     monkeypatch.setattr(rs, "build_fullmap_db", _fake_build)
@@ -745,10 +751,10 @@ def test_fetch_prebuilt_fullmap_downloads_verifies_and_extracts(tmp_path: Path, 
     monkeypatch.setattr(cli, "download_babel_file", _fake_download)
     monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: digest)
 
-    calls: list[tuple[Path, Path]] = []
+    calls: list[tuple[Path, Path, object]] = []
 
-    def _fake_extract(archive: Path, output: Path, on_phase: object) -> None:
-        calls.append((archive, output))
+    def _fake_extract(archive: Path, output: Path, on_phase: object, taxon_allowlist: object = None) -> None:
+        calls.append((archive, output, taxon_allowlist))
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"PRIMARY")
         (output.parent / f"{output.stem}.s0.redb").write_bytes(b"SHARD0")
@@ -757,9 +763,11 @@ def test_fetch_prebuilt_fullmap_downloads_verifies_and_extracts(tmp_path: Path, 
     monkeypatch.setattr(cli, "_extract_prebuilt_fullmap", _fake_extract)
 
     output: Path = tmp_path / "data" / "fullmap.redb"
-    cli.fetch_prebuilt_fullmap(output, PipelineProgress(total_stages=2), version="2026jul22")
+    cli.fetch_prebuilt_fullmap(output, PipelineProgress(total_stages=2), version="2026jul22", taxon_allowlist=[9606])
 
-    assert calls == [(output.parent / "fullmap.tar.zst", output)]
+    # The required filter reaches the Rust extractor, which validates the archive's
+    # recorded identity before installing anything.
+    assert calls == [(output.parent / "fullmap.tar.zst", output, [9606])]
     assert output.read_bytes() == b"PRIMARY"
     assert (output.parent / "fullmap.s0.redb").read_bytes() == b"SHARD0"
     assert (output.parent / "fullmap.s1.redb").read_bytes() == b"SHARD1"
@@ -789,7 +797,7 @@ def test_fetch_prebuilt_fullmap_missing_checksum_proceeds(tmp_path: Path, monkey
     monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: None)
     extracted: dict[str, bool] = {"ran": False}
 
-    def _fake_extract(archive: Path, output: Path, on_phase: object) -> None:
+    def _fake_extract(archive: Path, output: Path, on_phase: object, taxon_allowlist: object = None) -> None:
         extracted["ran"] = True
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"PRIMARY")
@@ -838,7 +846,7 @@ def test_fetch_prebuilt_fullmap_aria2c_uses_shared_helper(tmp_path: Path, monkey
     monkeypatch.setattr(cli, "download_babel_file_aria2c", _fake_aria2c)
     monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: None)
 
-    def _fake_extract(archive: Path, output: Path, on_phase: object) -> None:
+    def _fake_extract(archive: Path, output: Path, on_phase: object, taxon_allowlist: object = None) -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"PRIMARY")
 
@@ -864,7 +872,7 @@ def test_fetch_prebuilt_fullmap_custom_output_name_renames_shards(tmp_path: Path
     monkeypatch.setattr(cli, "download_babel_file", _write_archive)
     monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: None)
 
-    def _fake_extract(archive: Path, output: Path, on_phase: object) -> None:
+    def _fake_extract(archive: Path, output: Path, on_phase: object, taxon_allowlist: object = None) -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b"PRIMARY")
         (output.parent / f"{output.stem}.s0.redb").write_bytes(b"SHARD0")
@@ -888,7 +896,7 @@ def test_extract_prebuilt_fullmap_seam_wraps_rust_errors(tmp_path: Path, monkeyp
     """
     original: RuntimeError = RuntimeError("build_id mismatch: expected abc, got def")
 
-    def _raiser(archive: Path, output: Path, progress: object = None) -> None:
+    def _raiser(archive: Path, output: Path, progress: object = None, taxon_allowlist: object = None) -> None:
         raise original
 
     # The seam imports ``from tablassert import rs`` INSIDE the function, so patch the
@@ -906,7 +914,7 @@ def test_extract_prebuilt_fullmap_seam_does_not_wrap_keyboard_interrupt(tmp_path
     a bad archive and trigger the from-scratch build fallback instead of stopping.
     """
 
-    def _interrupt(archive: Path, output: Path, progress: object = None) -> None:
+    def _interrupt(archive: Path, output: Path, progress: object = None, taxon_allowlist: object = None) -> None:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(rs, "extract_prebuilt_fullmap", _interrupt)
@@ -939,47 +947,81 @@ def test_build_fullmap_command_defaults_to_prebuilt_download(tmp_path: Path, mon
     monkeypatch.setattr(extras, "missing", lambda extra: ())  # --aria2c preflight: report [aria2] as installed
     output: Path = tmp_path / "fullmap.redb"  # does not exist
     cli.build_fullmap(output=output, version="v", aria2c=True)
-    assert calls == [(2, cli.fetch_prebuilt_fullmap, output, {"version": "v", "aria2c": True})]
+    assert calls == [(2, cli.fetch_prebuilt_fullmap, output, {"version": "v", "aria2c": True, "taxon_allowlist": cli.load_taxon_allowlist()})]
 
 
-def test_build_fullmap_allowlist_skips_prebuilt_and_passes_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Allowlist mode always selects the source build and passes the built-in IDs."""
-    calls: list[tuple[Any, ...]] = []
+def test_fullmap_matches_allowlist_reads_the_recorded_identity(tmp_path: Path) -> None:
+    """The reuse probe accepts ONLY a database built with exactly the current allowlist.
 
-    def _fake_run(stages: int, fn: Any, arg: Path, **kwargs: Any) -> None:
-        calls.append((stages, fn, arg, kwargs))
+    WHY: ``build-fullmap`` reuses whatever database already sits at ``--output``, and every
+    database it installs is filtered by the built-in top-100 taxa. An unfiltered leftover
+    (or one filtered by a different list) resolves a DIFFERENT term set, so it must report
+    not-reusable -- as must an absent, foreign, or unreadable file, which is a rebuild
+    trigger rather than an error.
+    """
+    ids: list[int] = cli.load_taxon_allowlist()
+    filtered: Path = _build_tiny_fullmap(tmp_path / "filtered", ids)
+    assert cli.fullmap_matches_allowlist(filtered, ids) is True
+    # The identity is set-derived: order and duplicates cannot change it.
+    assert cli.fullmap_matches_allowlist(filtered, [*reversed(ids), ids[0]]) is True
+    # A different allowlist means a different database.
+    assert cli.fullmap_matches_allowlist(filtered, [9606]) is False
+    # Unfiltered -- the shape an older Tablassert left behind -- is not reusable.
+    unfiltered: Path = _build_tiny_fullmap(tmp_path / "unfiltered", None)
+    assert cli.fullmap_matches_allowlist(unfiltered, ids) is False
+    # Absent and foreign files report False instead of raising.
+    assert cli.fullmap_matches_allowlist(tmp_path / "absent.redb", ids) is False
+    foreign: Path = tmp_path / "foreign.redb"
+    foreign.write_bytes(b"this is definitely not a redb database")
+    assert cli.fullmap_matches_allowlist(foreign, ids) is False
 
-    monkeypatch.setattr(cli, "run", _fake_run)
-    output: Path = tmp_path / "filtered.redb"
-    cli.build_fullmap(output=output, taxon_allowlist=True)
-    assert len(calls) == 1
-    assert calls[0][0] == 3
-    assert calls[0][1] is cli.build_fullmap_pipeline
-    assert calls[0][3]["taxon_allowlist"] == cli.load_taxon_allowlist()
 
-    calls.clear()
-    output.write_bytes(b"unfiltered-existing")
-    cli.build_fullmap(output=output, taxon_allowlist=True)
-    assert len(calls) == 1
-    assert calls[0][1] is cli.build_fullmap_pipeline
+def test_build_fullmap_reuses_only_a_database_built_with_the_current_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A matching filtered DB short-circuits; an unfiltered leftover is rebuilt instead.
 
-    monkeypatch.setattr(cli, "fetch_prebuilt_fullmap", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("prebuilt must not run")))
-    calls.clear()
-    cli.build_fullmap(output=tmp_path / "forced-filtered.redb", taxon_allowlist=True, force=True)
-    assert calls[0][1] is cli.build_fullmap_pipeline
-
-
-def test_build_fullmap_command_skips_when_output_exists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    """A complete existing DB short-circuits everything (no ``run`` call) unless ``--force``."""
-    output: Path = tmp_path / "fullmap.redb"
-    output.write_bytes(b"existing-db")
+    WHY: the skip-if-exists short-circuit used to trust ANY non-empty file at ``--output``.
+    With the allowlist always on, a database an older Tablassert left there is not the
+    database this command promises, so it must fall through to a rebuild rather than be
+    silently reused.
+    """
+    ids: list[int] = cli.load_taxon_allowlist()
+    filtered: Path = _build_tiny_fullmap(tmp_path / "filtered", ids)
 
     def _run_must_not_run(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("run must not be called when output already exists")
+        raise AssertionError("a database matching the current allowlist must short-circuit")
 
     monkeypatch.setattr(cli, "run", _run_must_not_run)
-    cli.build_fullmap(output=output, version="v")
+    cli.build_fullmap(output=filtered, version="v")
     assert "already present" in capsys.readouterr().err
+
+    # --force rebuilds even the matching database.
+    forced: list[tuple[int, Any]] = []
+    monkeypatch.setattr(cli, "run", lambda stages, fn, arg, **kwargs: forced.append((stages, fn)))
+    cli.build_fullmap(output=filtered, version="v", force=True)
+    assert forced == [(3, cli.build_fullmap_pipeline)]
+
+    # An unfiltered leftover is NOT reused: the command proceeds to the prebuilt attempt.
+    unfiltered: Path = _build_tiny_fullmap(tmp_path / "unfiltered", None)
+    attempted: list[tuple[int, Any]] = []
+    monkeypatch.setattr(cli, "run", lambda stages, fn, arg, **kwargs: attempted.append((stages, fn)))
+    cli.build_fullmap(output=unfiltered, version="v")
+    assert attempted == [(2, cli.fetch_prebuilt_fullmap)]
+
+
+def test_build_fullmap_taxon_allowlist_flag_is_gone() -> None:
+    """The filter is unconditional, so ``--taxon-allowlist`` no longer parses (locks removal)."""
+
+    def parse(argv: list[str]) -> dict[str, Any]:
+        fn, bound, _ = cli.APP.parse_args(argv, exit_on_error=False)
+        assert fn is cli.build_fullmap
+        return dict(bound.arguments)
+
+    assert parse(["build-fullmap"]) == {}
+    for removed in ("--taxon-allowlist", "--no-taxon-allowlist"):
+        with pytest.raises(UnknownOptionError):
+            parse(["build-fullmap", removed])
 
 
 def test_build_fullmap_command_falls_back_to_build_on_prebuilt_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1005,7 +1047,12 @@ def test_build_fullmap_command_falls_back_to_build_on_prebuilt_unavailable(tmp_p
     assert len(calls) == 2
     assert calls[0][0] == 2
     assert calls[0][1] is cli.fetch_prebuilt_fullmap
-    assert calls[1] == (3, cli.build_fullmap_pipeline, output, {"cache": cache, "version": "v", "aria2c": True})
+    assert calls[1] == (
+        3,
+        cli.build_fullmap_pipeline,
+        output,
+        {"cache": cache, "version": "v", "aria2c": True, "taxon_allowlist": cli.load_taxon_allowlist()},
+    )
 
 
 def test_build_fullmap_force_flag_parses() -> None:
@@ -1054,11 +1101,13 @@ def _write_gzip_ndjson(path: Path, lines: tuple[str, ...]) -> Path:
     return path
 
 
-def _build_real_force_fullmap(directory: Path) -> Path:
+def _build_real_force_fullmap(directory: Path, taxon_allowlist: list[int] | None = None) -> Path:
     """Build a REAL fullmap with ``rs.build_fullmap_db`` and return the primary path.
 
     Two gzip class files + two gzip synonym files exercise the multi-file, gzip-aware
-    build path exactly as ``build_fullmap_pipeline`` Stage 3 does.
+    build path exactly as ``build_fullmap_pipeline`` Stage 3 does. ``taxon_allowlist=None``
+    builds unfiltered -- the shape an archive published before the allowlist became the
+    default has.
     """
     classes: list[Path] = [
         _write_gzip_ndjson(directory / "classes" / "HGNC.ndjson.gz", _REAL_CLASS_LINES_HGNC),
@@ -1069,7 +1118,24 @@ def _build_real_force_fullmap(directory: Path) -> Path:
         _write_gzip_ndjson(directory / "synonyms" / "MONDO.ndjson.gz", _REAL_SYNONYM_LINES_MONDO),
     ]
     output: Path = directory / "force" / "fullmap.redb"
-    rs.build_fullmap_db(output, classes, synonyms)
+    rs.build_fullmap_db(output, classes, synonyms, taxon_allowlist=taxon_allowlist)
+    return output
+
+
+def _build_tiny_fullmap(directory: Path, taxon_allowlist: list[int] | None) -> Path:
+    """Build a minimal REAL fullmap (one synonym row) and return the primary path.
+
+    The cheap fixture for allowlist-identity tests: only ``META.taxon_allowlist`` matters
+    there, so a full 17-file bundle would be wasted work. ``taxon_allowlist=None`` builds
+    unfiltered.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    synonyms: Path = directory / "SRC.ndjson"
+    synonyms.write_text(
+        '{"curie":"HGNC:1","preferred_name":"Alpha Gene","names":["alpha"],"types":["Gene"],"taxa":["NCBITaxon:9606"]}\n', encoding="utf-8"
+    )
+    output: Path = directory / "fullmap.redb"
+    rs.build_fullmap_db(output, [], [synonyms], taxon_allowlist=taxon_allowlist)
     return output
 
 
@@ -1220,3 +1286,55 @@ def test_fetch_prebuilt_fullmap_real_archive_missing_one_shard_rejected(tmp_path
     assert not output.exists()
     assert [path for path in output.parent.iterdir() if path.suffix == ".redb"] == []
     assert (output.parent / "fullmap.tar.zst").exists()  # kept on extraction failure
+
+
+def test_fetch_prebuilt_fullmap_real_unfiltered_archive_rejected_when_an_allowlist_is_required(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A prebuilt published WITHOUT the required filter never lands (real Rust seam).
+
+    WHY: every database ``build-fullmap`` installs is filtered by the built-in top-100 taxa,
+    so an archive built unfiltered is not that database. Rust compares the archive's recorded
+    ``META.taxon_allowlist`` identity BEFORE any rename, so the failure is
+    ``PrebuiltFullmapUnavailable`` (-> a filtered source build) and nothing lands beside the
+    output.
+    """
+    force_db: Path = _build_real_force_fullmap(tmp_path / "build")  # unfiltered
+    staging: Path = tmp_path / "staging"
+    staging.mkdir()
+    archive: Path = staging / "fullmap.tar.zst"
+    _pack_fullmap_bundle(archive, [force_db, *_force_shards(force_db)])
+    _stage_prebuilt_download(monkeypatch, archive)
+
+    output: Path = tmp_path / "extracted" / "mymap.redb"
+    with pytest.raises(cli.PrebuiltFullmapUnavailable, match="not filtered by the required taxon allowlist"):
+        cli.fetch_prebuilt_fullmap(output, PipelineProgress(total_stages=2), version="v", taxon_allowlist=[9606])
+
+    assert not output.exists()
+    assert [path for path in output.parent.iterdir() if path.suffix == ".redb"] == []
+    assert not (output.parent / ".mymap.prebuilt-extract.d").exists()
+
+
+def test_fetch_prebuilt_fullmap_real_filtered_archive_matching_the_allowlist_is_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The archive this version publishes for itself passes its own identity requirement.
+
+    WHY: the identity gate must never reject a correctly filtered prebuilt — that is the fast
+    path ``build-fullmap`` exists to keep. The requirement is passed out of order with a
+    duplicate, pinning that it is matched as the same normalized set the build recorded.
+    """
+    force_db: Path = _build_real_force_fullmap(tmp_path / "build", taxon_allowlist=[9606])
+    staging: Path = tmp_path / "staging"
+    staging.mkdir()
+    archive: Path = staging / "fullmap.tar.zst"
+    _pack_fullmap_bundle(archive, [force_db, *_force_shards(force_db)])
+    _stage_prebuilt_download(monkeypatch, archive)
+
+    output: Path = tmp_path / "extracted" / "mymap.redb"
+    cli.fetch_prebuilt_fullmap(output, PipelineProgress(total_stages=2), version="v", taxon_allowlist=[9606, 9606])
+
+    expected: list[str] = sorted(["mymap.redb", *(f"mymap.s{index}.redb" for index in range(16))])
+    landed: list[str] = sorted(path.name for path in output.parent.iterdir() if path.suffix == ".redb")
+    assert landed == expected
+    extracted_rows: list[dict[str, Any]] = _sorted_lookup_rows(output, _REAL_RESOLVING_TERMS)
+    assert extracted_rows == _sorted_lookup_rows(force_db, _REAL_RESOLVING_TERMS)
+    assert extracted_rows  # sanity: the filtered fixture really does resolve terms

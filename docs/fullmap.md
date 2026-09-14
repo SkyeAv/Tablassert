@@ -23,18 +23,22 @@ tablassert build-fullmap --force
 
 # Optional: after `pip install "tablassert[aria2]"`, use bundled aria2c for resumable segmented downloads (the multi-GB prebuilt is the ideal aria2 use case)
 tablassert build-fullmap --aria2c
-
-# Optional: source-build a smaller DB retaining the built-in top-100 taxa
-# (OrganismTaxon and taxonless rows are not filtered)
-tablassert build-fullmap --taxon-allowlist
 ```
 
-`--taxon-allowlist` is opt-in. It uses the checked-in `src/tablassert/data/experimental_taxa.yaml`
-list, filters non-`OrganismTaxon` synonym rows with valid taxon metadata before interning, and always
-builds from the downloaded BABEL sources. It never reuses the unfiltered prebuilt archive. Rows with
-no valid taxon metadata and every `OrganismTaxon` row are retained; a row with multiple taxa is kept
-when any taxon is allowlisted. The first taxon continues to be stored for existing hydration and
-lookup behavior. The built database records its allowlist identity in `META.taxon_allowlist`.
+The taxon allowlist is always on; there is no flag. Every database `build-fullmap` installs uses the
+checked-in `src/tablassert/data/experimental_taxa.yaml` list and filters non-`OrganismTaxon` synonym
+rows with valid taxon metadata before interning. Rows with no valid taxon metadata and every
+`OrganismTaxon` row are retained; a row with multiple taxa is kept when any taxon is allowlisted. The
+first taxon continues to be stored for existing hydration and lookup behavior. The built database
+records its allowlist identity in `META.taxon_allowlist`, and that identity gates both reuse paths:
+
+- A prebuilt archive whose recorded identity does not match the current allowlist fails validation
+  during extraction, so it is never installed; the command falls back to a filtered source build.
+  Note the operational consequence: until a filtered archive is published for a Tablassert version,
+  the default invocation downloads that version's unfiltered archive once, fails the identity check,
+  and then performs the full BABEL download + build.
+- A database already present at `--output` is reused only when its recorded identity matches;
+  otherwise it is rebuilt.
 
 See the [CLI Reference → build-fullmap](cli.md#build-fullmap) for the complete flag table (output path,
 cache directory, BABEL snapshot version, the optional `--aria2c` / `-a` downloader,
@@ -48,7 +52,8 @@ extracted beside `--output` entirely in the Rust extension: it streams the archi
 temp directory on the output's filesystem, and, before renaming anything into place, validates the
 bundle against the same contract a `--force` build must satisfy: the `meta` schema tag is exactly
 `tablassert.fullmap.v5`, a `build_id` is recorded, the shard files are exactly the set the primary
-advertises (no gaps, no extras), and every shard's `build_id` equals the primary's. Only a bundle that
+advertises (no gaps, no extras), every shard's `build_id` equals the primary's, and the primary's
+`META.taxon_allowlist` identity equals the one the built-in allowlist would record. Only a bundle that
 passes is atomically renamed into place (primary → `--output`, shards beside it); any failure raises
 and the command falls back to the from-scratch build below. If no prebuilt is published for this
 version it falls back the same way; `--force` / `-f` skips the prebuilt attempt and always builds. The
@@ -151,7 +156,7 @@ they hold six tables (see `rust/src/fullmap.rs`):
 | `categories` | Compact `u16` id → Biolink category string (primary file) |
 | `sources` | Compact `u8` id → source metadata (name/version) (primary file) |
 | `curies` | Compact `u32` id → CURIE record (CURIE, preferred name, category, taxon, source) (primary file) |
-| `meta` | Schema version tag (`tablassert.fullmap.v5`), the shard count (`shards`), the BABEL `source_version` used to build the file, and optional allowlist identity (`taxon_allowlist`) (primary file) |
+| `meta` | Schema version tag (`tablassert.fullmap.v5`), the shard count (`shards`), the BABEL `source_version` used to build the file, and the allowlist identity (`taxon_allowlist`) recorded for every `build-fullmap` output; absent only in databases built unfiltered through the lower-level surfaces (the Rust API, or `build_fullmap_pipeline`'s `taxon_allowlist=None` default) (primary file) |
 
 The shard files must remain alongside the primary file: lookups discover them as siblings of the
 resolved primary path.

@@ -1178,18 +1178,23 @@ def _fetch_prebuilt_sha256(url: str) -> str | None:
     return None
 
 
-def _extract_prebuilt_fullmap(archive: Path, output: Path, on_phase: Callable[[str], None]) -> None:
+def _extract_prebuilt_fullmap(archive: Path, output: Path, on_phase: Callable[[str], None], taxon_allowlist: list[int] | None = None) -> None:
     """Extract + validate the prebuilt archive via the Rust extension (GIL-free).
 
     Rust streams the ``.tar.zst``, validates it (schema version, build id, exact shard
-    set), and atomically installs the primary + shards beside ``output`` named after its
-    stem. Any failure surfaces as ``PrebuiltFullmapUnavailable`` so ``build-fullmap`` can
-    fall back to a from-scratch BABEL build.
+    set, and the required taxon-allowlist identity), and atomically installs the primary +
+    shards beside ``output`` named after its stem. Any failure surfaces as
+    ``PrebuiltFullmapUnavailable`` so ``build-fullmap`` can fall back to a from-scratch
+    BABEL build.
 
     Args:
         archive: Path to the downloaded ``fullmap.tar.zst``.
         output: Target primary redb path; shards land beside it as ``<stem>.s<N>.redb``.
         on_phase: Progress callback fired with the active step label.
+        taxon_allowlist: NCBI taxon IDs the archive MUST have been filtered by; an archive
+            whose recorded ``META.taxon_allowlist`` identity differs (or is absent) fails
+            validation instead of installing a database this build would not produce.
+            ``None`` accepts any bundle.
 
     Raises:
         PrebuiltFullmapUnavailable: If decompression, validation, or extraction fails.
@@ -1197,18 +1202,21 @@ def _extract_prebuilt_fullmap(archive: Path, output: Path, on_phase: Callable[[s
     from tablassert import rs
 
     try:
-        rs.extract_prebuilt_fullmap(archive, output, progress=on_phase)
+        rs.extract_prebuilt_fullmap(archive, output, progress=on_phase, taxon_allowlist=taxon_allowlist)
     except Exception as exc:
         raise PrebuiltFullmapUnavailable(f"failed to extract prebuilt archive: {exc}") from exc
 
 
-def fetch_prebuilt_fullmap(output: Path, progress: PipelineProgress, version: str = BABEL_VERSION, aria2c: bool = False) -> None:
+def fetch_prebuilt_fullmap(
+    output: Path, progress: PipelineProgress, version: str = BABEL_VERSION, aria2c: bool = False, taxon_allowlist: list[int] | None = None
+) -> None:
     """Download and extract a prebuilt fullmap database from RENCI (instead of building).
 
     Two stages: download ``fullmap.tar.zst`` for THIS Tablassert version (cached +
     resumable, optionally via ``aria2c``) beside ``output``, then extract it in Rust so
     the primary redb and its shards land beside ``output`` named after its stem. The
-    checksum published alongside the archive is verified when present.
+    checksum published alongside the archive is verified when present, and the extracted
+    bundle must have been filtered by ``taxon_allowlist``.
 
     Args:
         output: Target primary redb path; the archive is downloaded + extracted beside it.
@@ -1216,6 +1224,9 @@ def fetch_prebuilt_fullmap(output: Path, progress: PipelineProgress, version: st
         version: BABEL snapshot label selecting the RENCI release directory (NOT the
             Tablassert package version, which the URL derives from installed-package metadata).
         aria2c: Use the optional aria2c executable for the archive download when true.
+        taxon_allowlist: NCBI taxon IDs the published archive must have been filtered by;
+            a bundle built without that exact filter is rejected as unavailable so the
+            caller falls back to a filtered source build.
 
     Raises:
         PrebuiltFullmapUnavailable: If the prebuilt is absent for this version, the download
@@ -1269,7 +1280,7 @@ def fetch_prebuilt_fullmap(output: Path, progress: PipelineProgress, version: st
     start, advance, sub_step = progress.section_loop(1, "Extract")
     start("fullmap.tar.zst")
     sub_step("extracting")
-    _extract_prebuilt_fullmap(archive, output, on_phase=sub_step)
+    _extract_prebuilt_fullmap(archive, output, on_phase=sub_step, taxon_allowlist=taxon_allowlist)
 
     # The extracted redb files are the cache; drop the multi-GB archive to free the space.
     archive.unlink(missing_ok=True)
@@ -1277,7 +1288,7 @@ def fetch_prebuilt_fullmap(output: Path, progress: PipelineProgress, version: st
 
 
 def load_taxon_allowlist() -> list[int]:
-    """Load the checked-in experimental-taxon YAML list for an opt-in build."""
+    """Load the checked-in experimental-taxon YAML list every fullmap build filters by."""
     import yaml
 
     raw: object = yaml.safe_load(TAXON_ALLOWLIST_PATH.read_text(encoding="utf-8"))
@@ -1325,7 +1336,8 @@ def build_fullmap_pipeline(
         cache: Directory for downloaded BABEL files.
         version: BABEL version label.
         aria2c: Use the bundled aria2c binary from the optional ``[aria2]`` extra for downloads when true.
-        taxon_allowlist: Optional NCBI taxon IDs passed to Rust before interning.
+        taxon_allowlist: NCBI taxon IDs passed to Rust before interning; ``None`` builds
+            an unfiltered database (``build-fullmap`` always passes the built-in list).
     """
     from tablassert import rs
 
@@ -1368,10 +1380,7 @@ def build_fullmap_pipeline(
     # Rust drives per-phase progress (equivalents -> synonyms -> writing) via the
     # callback; the GIL is released during the build so the bar repaints live.
     on_progress = progress.dynamic_loop("Build")
-    if taxon_allowlist is None:
-        rs.build_fullmap_db(output, class_files, synonym_files, progress=on_progress)
-    else:
-        rs.build_fullmap_db(output, class_files, synonym_files, progress=on_progress, taxon_allowlist=taxon_allowlist)
+    rs.build_fullmap_db(output, class_files, synonym_files, progress=on_progress, taxon_allowlist=taxon_allowlist)
     progress.end_section_task()
 
     logger.info(
@@ -1383,6 +1392,26 @@ def build_fullmap_pipeline(
     )
 
 
+def fullmap_matches_allowlist(output: Path, taxon_allowlist: list[int]) -> bool:
+    """Whether the fullmap already at ``output`` was built with exactly this allowlist.
+
+    Compares the database's recorded ``META.taxon_allowlist`` identity against the
+    identity ``taxon_allowlist`` would record. A database that is absent, unreadable, of
+    an outdated schema, or built unfiltered reports ``False`` — it is not the database
+    this build produces, so reusing it would silently resolve a different term set.
+
+    Args:
+        output: Primary redb path a previous build may have left behind.
+        taxon_allowlist: NCBI taxon IDs the current build filters by.
+
+    Returns:
+        True only when the existing database carries the matching allowlist identity.
+    """
+    from tablassert import rs
+
+    return rs.fullmap_taxon_allowlist_identity(output) == rs.taxon_allowlist_identity(taxon_allowlist)
+
+
 @APP.command(name="build-fullmap")
 def build_fullmap(
     output: Annotated[Path, cyclopts.Parameter(name=["--output", "-o"])] = Path("./fullmap/data/fullmap.redb"),
@@ -1390,17 +1419,21 @@ def build_fullmap(
     version: Annotated[str, cyclopts.Parameter(name=["--version", "-v"])] = BABEL_VERSION,
     aria2c: Annotated[bool, cyclopts.Parameter(name=["--aria2c", "-a"], negative="")] = False,
     force: Annotated[bool, cyclopts.Parameter(name=["--force", "-f"], negative="")] = False,
-    taxon_allowlist: Annotated[bool, cyclopts.Parameter(name="--taxon-allowlist", negative="")] = False,
 ) -> None:
     """Build an embedded fullmap redb database, or download a prebuilt one from RENCI.
 
+    Every database this command installs is filtered by the built-in top-100
+    experimental-taxon allowlist (``src/tablassert/data/experimental_taxa.yaml``): there is
+    no flag, and no unfiltered database is ever installed. The filter is recorded in the
+    database as a ``META.taxon_allowlist`` identity, which gates both reuse paths below.
+
     By default, first try to download a prebuilt ``fullmap.tar.zst`` published for THIS
     Tablassert version under ``{BABEL_BASE}/{version}/fullmap/<tablassert-version>/`` and
-    extract it — far faster than building from BABEL. If no prebuilt exists for this
-    version (or the download/extract fails), fall back to a from-scratch build.
-    ``--force`` / ``-f`` skips the prebuilt attempt and always builds from BABEL outputs.
-    ``--taxon-allowlist`` enables the built-in top-100 experimental-taxon filter and always
-    builds from source BABEL files; it never reuses the unfiltered prebuilt archive.
+    extract it — far faster than building from BABEL. An archive whose recorded identity
+    does not match the built-in allowlist is rejected during extraction (nothing is
+    installed). If no prebuilt exists for this version (or the download/extract/identity
+    check fails), fall back to a from-scratch filtered build. ``--force`` / ``-f`` skips
+    the prebuilt attempt and always builds from BABEL outputs.
 
     ``--aria2c`` requires the ``[aria2]`` extra, checked before the first download rather
     than on it, so an unusable flag costs nothing.
@@ -1412,26 +1445,27 @@ def build_fullmap(
         aria2c: Use the bundled aria2c binary from the ``[aria2]`` extra for downloads
             (prebuilt or BABEL).
         force: Skip the prebuilt download and always rebuild from BABEL outputs.
-        taxon_allowlist: Enable the built-in top-100 experimental-taxon filter.
     """
-    allowlist_ids: list[int] | None = load_taxon_allowlist() if taxon_allowlist else None
-    # Allowlisted outputs must not reuse an unfiltered database already at the path.
-    # The caller explicitly requested a filtered source build.
-    if not taxon_allowlist and not force and output.is_file() and output.stat().st_size > 0:
-        print(f"tablassert build-fullmap: fullmap already present at {output}; skipping (use --force to rebuild).", file=sys.stderr)
-        return
+    allowlist_ids: list[int] = load_taxon_allowlist()
+    # Reuse the database already at --output ONLY when it carries the current allowlist
+    # identity. An unfiltered (or differently filtered) leftover from an older Tablassert
+    # resolves a different term set, so it is rebuilt rather than silently reused.
+    if not force and output.is_file() and output.stat().st_size > 0:
+        if fullmap_matches_allowlist(output, allowlist_ids):
+            print(f"tablassert build-fullmap: fullmap already present at {output}; skipping (use --force to rebuild).", file=sys.stderr)
+            return
+        # The probe also returns False for an unreadable/foreign file, so this warns and
+        # rebuilds rather than trusting whatever sits at the path.
+        logger.warning("Fullmap at {output} was not built with the current taxon allowlist (or is unreadable); rebuilding it.", output=output)
     # Checked here rather than earlier: the reuse path above downloads nothing, so a
     # missing [aria2] extra is irrelevant to it and must not fail a no-op command.
     if aria2c and not extras.is_installed("aria2"):
         print(f"tablassert build-fullmap: --aria2c is unavailable — {aria2_unavailable_detail()}", file=sys.stderr)
         raise SystemExit(2)
-    if not force and not taxon_allowlist:
+    if not force:
         try:
-            run(2, fetch_prebuilt_fullmap, output, version=version, aria2c=aria2c)
+            run(2, fetch_prebuilt_fullmap, output, version=version, aria2c=aria2c, taxon_allowlist=allowlist_ids)
             return
         except PrebuiltFullmapUnavailable as exc:
             logger.warning("Prebuilt fullmap unavailable ({reason}); building from BABEL outputs.", reason=exc)
-    if allowlist_ids is None:
-        run(3, build_fullmap_pipeline, output, cache=cache, version=version, aria2c=aria2c)
-    else:
-        run(3, build_fullmap_pipeline, output, cache=cache, version=version, aria2c=aria2c, taxon_allowlist=allowlist_ids)
+    run(3, build_fullmap_pipeline, output, cache=cache, version=version, aria2c=aria2c, taxon_allowlist=allowlist_ids)

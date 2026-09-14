@@ -110,9 +110,11 @@ tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dat
 
 ## build-fullmap
 
-Use this to obtain the embedded `fullmap.redb` entity-resolution database. By default it first tries
-to **download a prebuilt database** published for this Tablassert version; `--force` skips that and
-builds from RENCI BABEL exports instead (download class + synonym files, then build a single redb).
+Use this to obtain the embedded `fullmap.redb` entity-resolution database. Every database this
+command installs is filtered by the built-in **top-100 experimental-taxon allowlist** — there is no
+flag for it. By default it first tries to **download a prebuilt database** published for this
+Tablassert version; `--force` skips that and builds from RENCI BABEL exports instead (download class
++ synonym files, then build a single redb).
 
 ```bash
 tablassert build-fullmap [ARGS]
@@ -125,7 +127,6 @@ tablassert build-fullmap [ARGS]
 | `--version`, `-v` | str | No | `2026jul22` | BABEL snapshot date to fetch (a RENCI stamp, **not** Tablassert's version) |
 | `--aria2c`, `-a` | Flag | No | `False` | Opt into the bundled `aria2c` binary from the `[aria2]` extra for resumable segmented downloads (the prebuilt archive **or** BABEL files); fails loud (exit 2, before any download starts) if the extra is missing or unsupported on the current platform, and on a non-zero aria2c exit |
 | `--force`, `-f` | Flag | No | `False` | Skip the prebuilt download and always rebuild from BABEL outputs |
-| `--taxon-allowlist` | Flag | No | `False` | Use the built-in top-100 experimental-taxon allowlist; always build from source BABEL files and never use the unfiltered prebuilt |
 
 ```bash
 # Default: download the prebuilt fullmap.tar.zst for this version and extract it (fast)
@@ -134,9 +135,11 @@ tablassert build-fullmap --output /data/fullmap/fullmap.redb
 tablassert build-fullmap --force --output /data/fullmap/fullmap.redb
 # Accelerate either download with bundled aria2c (`pip install "tablassert[aria2]"`; the multi-GB prebuilt is the ideal aria2 use case)
 tablassert build-fullmap --aria2c --output /data/fullmap/fullmap.redb
-# Build a smaller source-derived database for the top 100 taxa (does not use the prebuilt archive)
-tablassert build-fullmap --taxon-allowlist --output /data/fullmap/experimental.redb
 ```
+
+Every one of those invocations produces a database filtered by the checked-in
+`src/tablassert/data/experimental_taxa.yaml` allowlist and records that filter as a
+`META.taxon_allowlist` identity.
 
 By default `build-fullmap` looks for a prebuilt `fullmap.tar.zst` at
 `https://stars.renci.org/var/babel_outputs/<babel-version>/fullmap/<tablassert-version>/` (the version
@@ -144,10 +147,14 @@ directory is the **installed Tablassert package version**, never hardcoded), ver
 published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming zstd →
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
 primary + shards against the force-build contract (exact `v5` schema, a recorded `build_id`, the exact
-shard set, and per-shard `build_id` equality) before atomically renaming them into place. If no
-prebuilt exists for this version (or the download or extraction fails), it falls back to a
-from-scratch BABEL build and logs a warning. A database already present at `--output` is reused as-is;
-pass `--force` to rebuild.
+shard set, per-shard `build_id` equality, and a `META.taxon_allowlist` identity matching the built-in
+allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
+download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
+warning — an archive published without the current filter is never installed.
+
+A database already present at `--output` is reused only when it carries that same allowlist identity;
+an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
+Pass `--force` to rebuild unconditionally.
 
 A from-scratch build parallelizes automatically across all available CPU threads — on Linux the
 worker count is capped by available memory (~2 GB per thread, read from `/proc/meminfo`) to avoid

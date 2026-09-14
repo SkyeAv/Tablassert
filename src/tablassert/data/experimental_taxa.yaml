@@ -1,4 +1,5 @@
-# Top 100 experimental taxa for the optional fullmap build allowlist.
+# Top 100 experimental taxa for the fullmap build allowlist, applied by every
+# `tablassert build-fullmap` invocation (there is no flag to disable it).
 #
 # Generated from non-biolink:OrganismTaxon node in_taxon frequencies in the
 # checked-in/generated node corpora of:
