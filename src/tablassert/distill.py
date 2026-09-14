@@ -22,6 +22,13 @@ training row is distinguishable from an outcome row without looking at the filen
 re-parsing ``messages``). Metadata columns ride alongside for filtering (e.g. keeping only
 MAPPED runs) and are ignored by TRL's trainer.
 
+A run's KG-build OUTCOME is written to a SIBLING :data:`OUTCOMES_FILENAME` by
+:meth:`DistillRecorder.record_outcome`, never interleaved into ``records.ndjson`` — that file is a
+pure ChatML training corpus which Unsloth Studio ingests directly and ``distill-export`` globs, so a
+non-ChatML row would corrupt both consumers. The two files are joined later, at weigh time, on
+``run_id``; outcome lines are schema-uniform over :data:`OUTCOME_KEYS` for the same ``CastError``
+reason, and they never advance ``call_index`` (which counts training records only).
+
 This module is ZERO-dependency by design — recording must work in any install that can run the
 agent, and must NEVER break a batch: every write is guarded and failures only log.
 """
@@ -30,6 +37,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
@@ -76,6 +84,69 @@ RECORD_KEYS: Final[tuple[str, ...]] = (
     "model_id",
 )
 
+#: The canonical, ordered outcome key set — one line per supervisor run, in :data:`OUTCOMES_FILENAME`.
+#: EVERY key appears on EVERY outcome line (explicit ``null`` when a figure was unmeasurable) for the
+#: same reason as :data:`RECORD_KEYS`: ``datasets`` infers features from the first block of the first
+#: file and raises ``CastError`` on a column that first appears later in an append-only corpus. Only
+#: figures ALREADY computed at the run's status-decision point belong here — capture performs no new
+#: build, audit, coverage or KGX read. Weights are deliberately absent: they are derived at weigh
+#: time, so retuning a coefficient never requires re-recording the corpus.
+OUTCOME_KEYS: Final[tuple[str, ...]] = (
+    "record_type",
+    "schema_version",
+    "run_id",
+    "timestamp",
+    "pmc_id",
+    "model_id",
+    "run_status",
+    "ok",
+    "measured",
+    "head",
+    "coverage_pct",
+    "best_coverage",
+    "coverage_history_len",
+    "section_coverages_len",
+    "biolink_valid_pct",
+    "biolink_valid_pct_strict",
+    "demoted_edge_pct",
+    "node_count",
+    "edge_count",
+    "unresolved_count",
+    "predicate_advice_count",
+    "multivalued_suspect_count",
+    "error_codes",
+    "attempts",
+    "config_chars",
+    "config_yaml_sha256",
+    "provenance_ok",
+    "qc_pass_rate",
+    "tool_calls",
+    "tokens_total",
+    "steps",
+    "judge_score",
+    "judge_dimensions",
+    "gate",
+    "versions",
+)
+
+#: Fixed sub-key set of the ``tool_calls`` struct — the step-callback reliability tallies. A struct
+#: column is schema-inferred like any other, so its fields are pinned as well.
+TOOL_CALL_KEYS: Final[tuple[str, ...]] = ("total", "failed", "wrong", "redundant")
+
+#: Fixed sub-key set of the ``gate`` struct — the run's own thresholds, without which a reward is not
+#: comparable across runs that gated differently.
+GATE_KEYS: Final[tuple[str, ...]] = ("map_threshold", "biolink_threshold", "judge_threshold")
+
+#: Fixed sub-key set of the ``versions`` struct. Rewards are not comparable across ``biolink-model``
+#: releases (v4.4.4 relocated the ``supporting_study_*`` slots), so an append-only corpus pooled over
+#: time must stay splittable by version.
+VERSION_KEYS: Final[tuple[str, ...]] = ("tablassert", "biolink_model")
+
+#: The :data:`OUTCOME_KEYS` entries that hold a FIXED struct, mapped to their pinned sub-key tuple.
+#: ``judge_dimensions`` is absent on purpose: its keys are the judge's own dimension names, declared
+#: beside the judge, so this module cannot pin them without importing the agent layer.
+_OUTCOME_STRUCT_KEYS: Final[dict[str, tuple[str, ...]]] = {"tool_calls": TOOL_CALL_KEYS, "gate": GATE_KEYS, "versions": VERSION_KEYS}
+
 
 def _role_name(role: object) -> str:
     """Coerce a message role (``MessageRole`` enum or plain string) to its plain name."""
@@ -120,6 +191,21 @@ def serialize_token_usage(response: object) -> dict[str, int] | None:
     }
 
 
+def canonical_struct(value: object, keys: tuple[str, ...]) -> dict[str, object]:
+    """Project ``value`` onto a fixed sub-key tuple, filling absent fields with explicit ``null``.
+
+    Why: a struct column is schema-inferred exactly like a top-level one, so a sub-field that first
+    appears in a later line of an append-only corpus raises ``CastError``, and a bare ``null`` struct
+    alternating with a populated one risks ``on_mixed_types = "use_json"`` silently JSON-encoding the
+    whole column into a string. Emitting the full sub-tuple always — never ``null`` — keeps the
+    column's type stable for the corpus's lifetime. A non-mapping ``value`` degrades to all-``null``
+    instead of raising, because capture is fail-soft.
+    """
+    if not isinstance(value, Mapping):
+        return {key: None for key in keys}  # noqa: C420
+    return {key: value.get(key) for key in keys}
+
+
 class DistillRecorder:
     """Append-only NDJSON sink for distillation records; never raises into the run.
 
@@ -132,6 +218,9 @@ class DistillRecorder:
     ``invocation_id`` identifies this recorder instance (injectable for deterministic tests);
     :meth:`begin_run` combines it with a PMC id into the ``run_id`` stamped on every subsequent
     record, which is the granularity at which a run outcome exists.
+
+    :meth:`record_outcome` writes that run's outcome to the sibling :attr:`outcome_path`, leaving
+    ``records.ndjson`` a pure ChatML training file.
     """
 
     def __init__(self, path: Path, *, invocation_id: str | None = None) -> None:
@@ -139,6 +228,15 @@ class DistillRecorder:
         self.call_index: int = 0
         self.invocation_id: str = invocation_id if invocation_id is not None else uuid.uuid4().hex[:12]
         self.run_id: str | None = None
+
+    @property
+    def outcome_path(self) -> Path:
+        """The sibling ``outcomes.ndjson`` this recorder's outcome lines are appended to.
+
+        Derived from :attr:`path` rather than cached in ``__init__`` so it cannot drift from the
+        record sink it must sit beside — the join in the weigh step globs one directory.
+        """
+        return self.path.parent / OUTCOMES_FILENAME
 
     def begin_run(self, pmc_id: str) -> str:
         """Open a run scope for ``pmc_id``: set and return ``"<invocation_id>:<pmc_id>"``.
@@ -152,39 +250,94 @@ class DistillRecorder:
 
     def record(self, purpose: str, messages: object, response: object = None, **meta: Any) -> None:
         """Append one schema-uniform v2 record; any serialization or I/O failure is logged and swallowed."""
+        conversation: list[dict[str, str]] = serialize_messages(messages)
+        if response is not None:
+            conversation.append(serialize_message(response))
+        usage: dict[str, int] | None = serialize_token_usage(response)
+        # Seeded in RECORD_KEYS order with explicit ``None`` defaults; ``meta`` fills the known
+        # slots IN PLACE (dict update never reorders an existing key), so key order is stable.
+        # Comprehension, not ``dict.fromkeys``: fromkeys infers a Literal key type that pyright
+        # strict rejects as invariant-incompatible with ``dict[str, object]``.
+        record: dict[str, object] = {key: None for key in RECORD_KEYS}  # noqa: C420
+        record.update(
+            {
+                "record_type": RECORD_TYPE_RECORD,
+                "schema_version": SCHEMA_VERSION,
+                "run_id": self.run_id,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "purpose": purpose,
+                "call_index": self.call_index,
+                "messages": conversation,
+                "token_usage": usage,
+                "input_tokens": usage["input_tokens"] if usage is not None else None,
+                "output_tokens": usage["output_tokens"] if usage is not None else None,
+                "n_messages": len(conversation),
+            }
+        )
+        for key, value in meta.items():
+            if key not in record:  # extensibility, but a schema-drift canary: warn, never raise
+                logger.warning(f"distill: meta key {key!r} is outside RECORD_KEYS; it will not appear on every line of {self.path}")
+            record[key] = value
+        if self._append_json_line(self.path, record, f"{purpose} call"):
+            self.call_index += 1  # counts RECORDS actually written; outcome lines never advance it
+
+    def record_outcome(self, outcome: Mapping[str, Any]) -> None:
+        """Append one schema-uniform outcome line to the sibling ``outcomes.ndjson``; never raises.
+
+        Why a sibling file: ``distill-export`` globs ``*.ndjson`` and Unsloth Studio ingests
+        ``records.ndjson`` directly as ChatML, so an outcome row interleaved there would put a
+        non-training row in front of both consumers and change the meaning of a file existing corpora
+        already depend on. Kept separate, ``records.ndjson`` stays a pure training file and the join
+        back onto it (on ``run_id``) is an explicit, testable step — which is also why ``call_index``,
+        a record counter, is NOT advanced here.
+
+        The caller supplies the measured figures; this sink owns the on-disk invariants: the full
+        :data:`OUTCOME_KEYS` set in canonical order with explicit ``null`` for anything unmeasured,
+        each fixed nested struct projected onto its own sub-tuple (:func:`canonical_struct`), and
+        ``record_type``/``schema_version`` forced rather than trusted, so the content discriminator a
+        consumer reads can never be misstamped. ``run_id`` falls back to the open :meth:`begin_run`
+        scope and ``timestamp`` to the write time, keeping both columns non-null and stably typed.
+        Fail-soft like every write in this module: an unwritable sink warns and returns.
+        """
+        line: dict[str, object] = {key: None for key in OUTCOME_KEYS}  # noqa: C420
+        for key, value in outcome.items():
+            if key in _OUTCOME_STRUCT_KEYS:
+                continue  # normalized onto the pinned sub-tuple below
+            if key not in line:  # extensibility, but a schema-drift canary: warn, never raise
+                logger.warning(f"distill: outcome key {key!r} is outside OUTCOME_KEYS; it will not appear on every line of {self.outcome_path}")
+            line[key] = value
+        supplied_run_id: object = outcome.get("run_id")
+        supplied_timestamp: object = outcome.get("timestamp")
+        line.update(
+            {
+                "record_type": RECORD_TYPE_OUTCOME,
+                "schema_version": SCHEMA_VERSION,
+                "run_id": self.run_id if supplied_run_id is None else supplied_run_id,
+                "timestamp": datetime.now(UTC).isoformat() if not isinstance(supplied_timestamp, str) else supplied_timestamp,
+            }
+        )
+        for key, sub_keys in _OUTCOME_STRUCT_KEYS.items():
+            raw: object = outcome.get(key)
+            if raw is not None and not isinstance(raw, Mapping):
+                logger.warning(f"distill: outcome key {key!r} must be a mapping over {sub_keys}; got {type(raw).__name__}, writing nulls")
+            line[key] = canonical_struct(raw, sub_keys)
+        self._append_json_line(self.outcome_path, line, "outcome")
+
+    def _append_json_line(self, path: Path, payload: Mapping[str, object], label: str) -> bool:
+        """Serialize ``payload`` and append it as ONE NDJSON line to ``path``; ``True`` if it landed.
+
+        The single guarded write path shared by :meth:`record` and :meth:`record_outcome`: capture is
+        observability, never pipeline logic, so a serialization or I/O failure is logged and swallowed
+        instead of propagating into a supervisor run. Returning ``False`` rather than raising lets the
+        caller skip post-write bookkeeping — a line that never reached disk must not advance
+        ``call_index``.
+        """
         try:
-            conversation: list[dict[str, str]] = serialize_messages(messages)
-            if response is not None:
-                conversation.append(serialize_message(response))
-            usage: dict[str, int] | None = serialize_token_usage(response)
-            # Seeded in RECORD_KEYS order with explicit ``None`` defaults; ``meta`` fills the known
-            # slots IN PLACE (dict update never reorders an existing key), so key order is stable.
-            # Comprehension, not ``dict.fromkeys``: fromkeys infers a Literal key type that pyright
-            # strict rejects as invariant-incompatible with ``dict[str, object]``.
-            record: dict[str, object] = {key: None for key in RECORD_KEYS}  # noqa: C420
-            record.update(
-                {
-                    "record_type": RECORD_TYPE_RECORD,
-                    "schema_version": SCHEMA_VERSION,
-                    "run_id": self.run_id,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "purpose": purpose,
-                    "call_index": self.call_index,
-                    "messages": conversation,
-                    "token_usage": usage,
-                    "input_tokens": usage["input_tokens"] if usage is not None else None,
-                    "output_tokens": usage["output_tokens"] if usage is not None else None,
-                    "n_messages": len(conversation),
-                }
-            )
-            for key, value in meta.items():
-                if key not in record:  # extensibility, but a schema-drift canary: warn, never raise
-                    logger.warning(f"distill: meta key {key!r} is outside RECORD_KEYS; it will not appear on every line of {self.path}")
-                record[key] = value
-            line: str = json.dumps(record, ensure_ascii=False, default=str)
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as handle:
+            line: str = json.dumps(payload, ensure_ascii=False, default=str)
+            path.parent.mkdir(parents=True, exist_ok=True)  # parent created lazily on first write
+            with path.open("a", encoding="utf-8") as handle:  # append-only: never truncate or reorder
                 handle.write(line + "\n")
-            self.call_index += 1
         except Exception as exc:  # recording must never break a batch
-            logger.warning(f"distill: failed to record {purpose} call to {self.path}: {exc}")
+            logger.warning(f"distill: failed to record {label} to {path}: {exc}")
+            return False
+        return True
