@@ -2160,7 +2160,7 @@
 <td><code>avoid</code></td>
 <td>List[String]</td>
 <td>No</td>
-<td>Excluded Biolink categories (must be valid <code>Categories</code> enum values)</td>
+<td>Excluded Biolink categories (must be valid <code>Categories</code> enum values). Setting <code>avoid</code> makes the column an allow-list by complement: categories the <code>Categories</code> enum cannot name (fullmap-emitted Biolink mixins; see <code>biolink.CATEGORY_OVERRIDES</code>) are dropped as well, so the guard has no silent hole</td>
 </tr>
 <tr>
 <td><code>exclude_prefixes</code></td>
@@ -2291,7 +2291,7 @@
 <a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">OrganismTaxon</span><span class="p p-Indicator">]</span>
 <a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">avoid</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Gene</span><span class="p p-Indicator">]</span>
 </code></pre></div>
-<p>Prevents misclassifying organism names as genes.</p>
+<p>Prevents misclassifying organism names as genes. Because <code>avoid</code> is an allow-list by complement, it also drops any fullmap category the <code>Categories</code> enum cannot name, keeping the guard hard against vocabulary drift.</p>
 <h4 id="resolution-filters">Resolution Filters<a class="headerlink" href="#resolution-filters" title="Permanent link">&para;</a></h4>
 <p><strong><code>exclude_prefixes</code> / <code>exclude_regex</code></strong> - Drop resolved CURIEs after lookup</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nt">subject</span><span class="p">:</span>
