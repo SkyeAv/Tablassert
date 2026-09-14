@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import math
+import os
 import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import asdict
 from importlib import import_module
 from importlib.metadata import version as get_version
 from itertools import chain, pairwise
 from multiprocessing import Pool
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, Literal
+from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, Literal, NoReturn
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -1086,6 +1090,265 @@ def agent(
         f"tablassert agent: processed {len(records)} article(s) ({mapped} mapped, {skipped} skipped); "
         f"mean best coverage {mean_best:.3f}; {total_tokens} tokens over {total_steps} steps."
     )
+
+
+@APP.command(name="distill-weigh")
+def distill_weigh(
+    *,
+    distill_dir: Annotated[Path, cyclopts.Parameter(name=["--distill-dir", "-dd"])],
+    out: Annotated[Path, cyclopts.Parameter(name=["--out", "-o"])],
+    policy: Annotated[str, cyclopts.Parameter(name=["--policy", "-p"])] = "threshold",
+    threshold: Annotated[float, cyclopts.Parameter(name=["--threshold", "-t"])] = 0.75,
+    top_n: Annotated[int, cyclopts.Parameter(name=["--top-n", "-tn"])] = 2,
+    replication_k: Annotated[int, cyclopts.Parameter(name=["--replication-k", "-rk"])] = 2,
+    reward_config: Annotated[Path | None, cyclopts.Parameter(name=["--reward-config", "-rc"])] = None,
+    edge_ref: Annotated[float | None, cyclopts.Parameter(name="--edge-ref")] = None,
+    purpose: Annotated[str, cyclopts.Parameter(name="--purpose")] = "agent",
+    final_call_only: Annotated[bool, cyclopts.Parameter(name="--final-call-only", negative="")] = False,
+    manifest: Annotated[Path | None, cyclopts.Parameter(name="--manifest")] = None,
+) -> None:
+    """Join distillation records to outcomes and write deterministic training rows."""
+    from tablassert.distill_reward import (
+        OUTCOME_COLUMN_PREFIX,
+        POLICIES,
+        RECORD_TYPE_OUTCOME,
+        SELECTION_KEYS,
+        RewardConfig,
+        RewardConfigError,
+        is_outcome_file,
+        iter_record_files,
+        join_records_outcomes,
+        load_reward_config,
+        median_edge_ref,
+        read_ndjson,
+        reward,
+        select,
+        write_ndjson,
+    )
+
+    def fail(message: str) -> NoReturn:
+        """Print one actionable user error and use the CLI's documented exit status."""
+        print(f"tablassert distill-weigh: {message}", file=sys.stderr)
+        raise SystemExit(2)
+
+    if not distill_dir.exists() or not distill_dir.is_dir():
+        fail(f"--distill-dir must be an existing directory: {distill_dir}")
+    if not out.name or out.is_dir():
+        fail(f"--out must name a file, not a directory: {out}")
+    if manifest is not None and (not manifest.name or manifest.is_dir()):
+        fail(f"--manifest must name a file, not a directory: {manifest}")
+    input_dir: Path = distill_dir.resolve()
+    output_path: Path = out.resolve()
+    try:
+        output_path.relative_to(input_dir)
+    except ValueError:
+        pass
+    else:
+        fail(
+            f"--out {out} is inside --distill-dir {distill_dir}; distill-export loads every *.ndjson there, "
+            "so this would duplicate raw records and mix schemas"
+        )
+    manifest_path: Path = manifest.resolve() if manifest is not None else output_path.with_name(f"{output_path.name}.manifest.json")
+    if manifest_path == output_path:
+        fail("--manifest and --out must be different paths")
+    try:
+        manifest_path.relative_to(input_dir)
+    except ValueError:
+        pass
+    else:
+        fail(f"--manifest {manifest} is inside --distill-dir {distill_dir}; keep derived artifacts outside the input corpus")
+
+    files: list[Path] = iter_record_files(input_dir)
+    if not files:
+        fail(f"no .ndjson files under {distill_dir}; provide a distillation corpus with records and outcomes")
+
+    try:
+        rows_by_file: dict[Path, list[dict[str, Any]]] = {path: read_ndjson(path) for path in files}
+    except (OSError, ValueError) as exc:
+        fail(str(exc))
+
+    # Content inspection BEFORE the join. Every derived training row carries the selection keys and
+    # ``outcome_matched``; a raw capture line carries neither, so this separates a previous weigh
+    # output (or any foreign derived corpus) from raw input without a filename heuristic.
+    derived_markers: frozenset[str] = frozenset(SELECTION_KEYS) | {"outcome_matched"}
+    for path, file_rows in rows_by_file.items():
+        marker: str | None = next((key for row in file_rows for key in sorted(derived_markers) if key in row), None)
+        if marker is not None:
+            fail(
+                f"derived training output detected in {path} (it carries {marker!r}); --distill-dir must contain "
+                "the raw records.ndjson/outcomes.ndjson written by agent --distill, not derived training output"
+            )
+
+    outcome_files: list[Path] = [path for path in files if is_outcome_file(path)]
+    record_files: list[Path] = [path for path in files if path not in outcome_files]
+    # is_outcome_file reads only the FIRST non-blank line, so a concatenated sink is classified as
+    # records and would otherwise be joined as if every line were a record.
+    for path in record_files:
+        if any(row.get("record_type") == RECORD_TYPE_OUTCOME for row in rows_by_file[path]):
+            fail(
+                f"mixed record/outcome content detected in {path}; --distill-dir must contain raw "
+                "records.ndjson/outcomes.ndjson in separate files, not one concatenated file"
+            )
+    if not record_files:
+        fail(f"no record files under {distill_dir}; this directory contains only outcome files")
+    if not outcome_files:
+        fail(f"no outcomes file under {distill_dir}; outcomes may never have been written because a run crashed")
+
+    records: list[dict[str, Any]] = [record for path in record_files for record in rows_by_file[path]]
+    outcomes: list[dict[str, Any]] = [outcome for path in outcome_files for outcome in rows_by_file[path]]
+    # A record-classified file may be empty; an outcome-classified file cannot be, because
+    # is_outcome_file only classifies a file after successfully parsing one non-blank outcome line.
+    if not records:
+        fail(f"record files under {distill_dir} contain no records")
+
+    if policy not in POLICIES:
+        fail(f"unknown --policy {policy!r}; expected one of {', '.join(POLICIES)}")
+    if not 0.0 <= threshold <= 1.0:
+        fail(f"--threshold must be in [0, 1], got {threshold!r}")
+    if top_n < 1:
+        fail(f"--top-n must be at least 1, got {top_n!r}")
+    if not 0 <= replication_k <= 3:
+        fail(f"--replication-k must be in [0, 3], got {replication_k!r}")
+
+    live_purposes: list[str] = sorted({value for value in (record.get("purpose") for record in records) if isinstance(value, str)})
+    if purpose != "all" and purpose not in live_purposes:
+        present: str = ", ".join(live_purposes) if live_purposes else "none"
+        fail(f"unrecognized --purpose {purpose!r}; live purposes are {present}; also accepted: all")
+
+    config: RewardConfig
+    try:
+        config = RewardConfig() if reward_config is None else load_reward_config(reward_config)
+    except (OSError, RewardConfigError, TypeError, ValueError) as exc:
+        fail(str(exc))
+
+    try:
+        rows, join_stats = join_records_outcomes(records, outcomes)
+    except (TypeError, ValueError) as exc:
+        fail(str(exc))
+    if join_stats["matched"] == 0 and join_stats["records"] > 0:
+        fail("no records joined an outcome; likely a pre-v2 corpus with no run_id, or outcomes were never written because the run crashed")
+
+    # Rebuild the same append-order index used by join_records_outcomes. The last line wins for
+    # both reward and flattening, and non-string run ids are unjoinable by definition.
+    outcome_by_run: dict[str, Mapping[str, Any]] = {}
+    for outcome in outcomes:
+        run_id: object = outcome.get("run_id")
+        if isinstance(run_id, str):
+            outcome_by_run[run_id] = outcome
+    comparable_outcomes: list[Mapping[str, Any]] = list(outcome_by_run.values())
+    if edge_ref is not None and (
+        isinstance(edge_ref, bool) or not isinstance(edge_ref, (int, float)) or not math.isfinite(edge_ref) or edge_ref <= 0
+    ):
+        fail(f"--edge-ref must be a finite positive number, got {edge_ref!r}")
+    resolved_edge_ref: float | None
+    edge_ref_source: str
+    if edge_ref is not None:
+        resolved_edge_ref, edge_ref_source = float(edge_ref), "overridden"
+    elif config.edge_ref is not None:
+        resolved_edge_ref, edge_ref_source = config.edge_ref, "overridden"
+    else:
+        resolved_edge_ref = median_edge_ref(comparable_outcomes)
+        edge_ref_source = "derived" if resolved_edge_ref is not None else "null"
+    if resolved_edge_ref is None:
+        print("tablassert distill-weigh: warning: edge_ref is null; breadth contributes 0.0 for every row", file=sys.stderr)
+
+    def final_call_rankable(record: Mapping[str, Any]) -> bool:
+        """True when a record can be ranked for --final-call-only: a string run id plus an int call index."""
+        rank_run_id: object = record.get("run_id")
+        rank_call_index: object = record.get("call_index")
+        return isinstance(rank_run_id, str) and isinstance(rank_call_index, int) and not isinstance(rank_call_index, bool)
+
+    unrankable_final_call: int = 0
+    filtered_indices: list[int] = list(range(len(rows)))
+    if purpose != "all":
+        filtered_indices = [index for index in filtered_indices if records[index].get("purpose") == purpose]
+    if final_call_only:
+        final_by_run: dict[str, tuple[int, int]] = {}
+        rankable: set[int] = set()
+        for index in filtered_indices:
+            record: Mapping[str, Any] = records[index]
+            if not final_call_rankable(record):
+                continue  # an unrankable record cannot be proven non-final, so it is retained, never dropped
+            rankable.add(index)
+            rank_run_id: str = record["run_id"]
+            rank_call_index: int = record["call_index"]
+            previous = final_by_run.get(rank_run_id)
+            if previous is None or (rank_call_index, index) > previous:
+                final_by_run[rank_run_id] = (rank_call_index, index)
+        retained: set[int] = {value[1] for value in final_by_run.values()}
+        unrankable_final_call = len(filtered_indices) - len(rankable)
+        if unrankable_final_call:
+            print(
+                f"tablassert distill-weigh: warning: --final-call-only retained {unrankable_final_call} record(s) "
+                "with no rankable run_id/call_index pair; they cannot be proven non-final",
+                file=sys.stderr,
+            )
+        filtered_indices = [index for index in filtered_indices if index not in rankable or index in retained]
+    filtered_rows: list[dict[str, Any]] = [rows[index] for index in filtered_indices]
+    if not filtered_rows:
+        # Defensive: --purpose is validated against the live purposes above and an unrankable record
+        # is retained rather than dropped, so only a future narrowing filter can empty the selection.
+        narrowing: str = "--final-call-only" if final_call_only else f"purpose filter {purpose!r}"
+        fail(f"{narrowing} matched no records; live purposes are {', '.join(live_purposes) or 'none'}")
+    try:
+        for row in filtered_rows:
+            run_id = row.get("run_id")
+            nested = outcome_by_run.get(run_id) if isinstance(run_id, str) else None
+            row["weight"] = 0.0 if nested is None else reward(nested, config, edge_ref=resolved_edge_ref)
+    except (TypeError, ValueError) as exc:
+        fail(str(exc))
+    try:
+        selected_rows = select(filtered_rows, policy=policy, threshold=threshold, top_n=top_n, replication_k=replication_k)
+    except (TypeError, ValueError) as exc:
+        fail(str(exc))
+
+    try:
+        rows_written: int = write_ndjson(output_path, selected_rows)
+        # The record schema carries no config hash of its own: the config identity rides on the
+        # flattened ``outcome_config_yaml_sha256`` column, so the diversity counter must read that.
+        config_column: str = f"{OUTCOME_COLUMN_PREFIX}config_yaml_sha256"
+        before_pmc = {row.get("pmc_id") for row in selected_rows if row.get("pmc_id") is not None}
+        before_config = {row.get(config_column) for row in selected_rows if row.get(config_column) is not None}
+        chosen = [row for row in selected_rows if row.get("selected") is True]
+        after_pmc = {row.get("pmc_id") for row in chosen if row.get("pmc_id") is not None}
+        after_config = {row.get(config_column) for row in chosen if row.get(config_column) is not None}
+        resolved_config: dict[str, Any] = asdict(config)
+        resolved_config["edge_ref"] = resolved_edge_ref
+        manifest_data: dict[str, Any] = {
+            "schema_version": 2,
+            "tablassert_version": get_version("tablassert"),
+            "reward_config": resolved_config,
+            "edge_ref": resolved_edge_ref,
+            "edge_ref_source": edge_ref_source,
+            "policy": policy,
+            "threshold": threshold,
+            "top_n": top_n,
+            "replication_k": replication_k,
+            "purpose": purpose,
+            "final_call_only": final_call_only,
+            "unrankable_final_call": unrankable_final_call,
+            "join_stats": join_stats,
+            "rows_written": rows_written,
+            "selected_count": len(chosen),
+            "selected_zero_weight": sum(1 for row in chosen if row.get("weight") == 0.0),
+            "unmatched_count": join_stats["unmatched"],
+            "distinct": {
+                "pmc_id": {"before_selection": len(before_pmc), "after_selection": len(after_pmc)},
+                "config_yaml_sha256": {"before_selection": len(before_config), "after_selection": len(after_config)},
+            },
+            "source_files": [str(path) for path in files],
+            "source_files_by_kind": {"records": [str(path) for path in record_files], "outcomes": [str(path) for path in outcome_files]},
+        }
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = manifest_path.with_name(f".{manifest_path.name}.tmp")
+        try:
+            temporary.write_text(json.dumps(manifest_data, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            os.replace(temporary, manifest_path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    except (OSError, TypeError, ValueError) as exc:
+        fail(f"could not write output or manifest: {exc}")
+    print(f"tablassert distill-weigh: {rows_written} row(s), {len(chosen)} selected, policy {policy}, edge_ref {resolved_edge_ref}, output {out}")
 
 
 @APP.command(name="distill-export")
