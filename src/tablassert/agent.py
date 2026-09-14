@@ -25,6 +25,8 @@ import time
 import xml.etree.ElementTree as ET
 from collections import Counter
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import lru_cache
@@ -440,19 +442,108 @@ def candidate_tables(files: list[Path], *, min_rows: int = MIN_TABLE_ROWS) -> li
     return qualifying
 
 
-def fetch_pmc_article(pmc_id: str, outdir: Path, *, timeout: int = 120) -> list[Path]:
+def _download_one(key: str, outdir: Path, *, timeout: int) -> Path:
+    """Download one S3 object to ``outdir / key``, idempotently and atomically.
+
+    Args:
+        key: Object key under :data:`PMC_HTTPS_BASE` (e.g. ``PMC11708054.1/table1.xlsx``).
+        outdir: Article download root.
+        timeout: Per-request socket timeout, forwarded to the seam.
+
+    Returns:
+        The destination path, whether it was freshly downloaded or already complete.
+
+    Notes:
+        WHY the skip: a rerun after a killed worker used to re-fetch EVERY file, multiplying the
+        DNS-lookup volume per article by N and re-exposing the article to N more chances of a
+        transient blip. A non-empty destination is a completed ``os.replace`` (see below), so it
+        is skipped with no HTTP request at all. A ZERO-length destination is a torn write from a
+        killed process -- not a valid empty file -- and is re-downloaded. Deliberately NO Range
+        resume: the atomic ``.part`` + :func:`os.replace` already makes a torn file invisible,
+        and PMC files are small, so the extra machinery would only add failure modes.
+    """
+    dest: Path = outdir / key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_file() and dest.stat().st_size > 0:
+        logger.debug("Skipping {key}; already complete", key=key)
+        return dest
+    part: Path = dest.with_name(f"{dest.name}.part")
+    try:
+        body: bytes = _http_get_bytes(f"{PMC_HTTPS_BASE}/{key}", timeout=timeout)
+        part.write_bytes(body)
+        os.replace(part, dest)
+    except BaseException:
+        # No reader may ever see a torn write, and the next run must not inherit one: drop the
+        # .part sibling before the error propagates. An unlink failure must not mask the real one.
+        with suppress(OSError):
+            part.unlink()
+        raise
+    logger.debug("Downloaded {key} ({n} bytes)", key=key, n=len(body))
+    return dest
+
+
+def _download_files(keys: Sequence[str], outdir: Path, *, timeout: int, concurrency: int) -> list[Path]:
+    """Download ``keys`` through a bounded worker pool, in exactly ``keys`` order.
+
+    Args:
+        keys: S3 object keys to fetch, in S3 listing order.
+        outdir: Article download root.
+        timeout: Per-request socket timeout.
+        concurrency: Maximum in-flight downloads; must be >= 1.
+
+    Returns:
+        One path per key, in the same order as ``keys`` (completion order never leaks out).
+
+    Raises:
+        ValueError: If ``concurrency`` is less than 1.
+        Exception: The failure of the FIRST key (in submission order) whose download failed; other
+            workers' completed files stay on disk, so the next attempt only re-fetches the rest.
+
+    Notes:
+        WHY a pool: the serial loop cost 10-15 sequential round trips per article; with the seam's
+        per-request retry now absorbing transient blips, parallelism is the remaining throughput
+        lever. ``ThreadPoolExecutor`` is stdlib (zero new dependencies) and I/O-bound downloads
+        release the GIL, so threads are sufficient. Results are collected in SUBMISSION order so
+        downstream code (``candidate_tables`` -> the agent's table binding) sees the exact
+        ordering the old serial loop produced. The ``with`` block guarantees the pool is shut
+        down even when a future raises, so no thread leaks across a 42,981-job fleet run.
+    """
+    if concurrency < 1:
+        raise ValueError(f"concurrency must be >= 1, got {concurrency}")
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures: list[Future[Path]] = [pool.submit(_download_one, key, outdir, timeout=timeout) for key in keys]
+        return [future.result() for future in futures]
+
+
+def fetch_pmc_article(pmc_id: str, outdir: Path, *, timeout: int = 120, concurrency: int = net.DEFAULT_FETCH_CONCURRENCY) -> list[Path]:
     """Download the useful latest-version payload for a PMC article from ``s3://pmc-oa-opendata``.
 
     Lists the version prefixes, selects the LATEST version, confirms open access via the ``.json``
     metadata (FAIL-FAST, before any large download), enumerates the version's objects, confirms a data
     table is present (FAIL-FAST, before any large download), then downloads only the useful files (main
     text ``.xml/.nxml``, ``.json`` metadata, and data tables) to ``outdir/<key>`` — binary
-    media (images/``.docx``/``.pdf``) and redundant ``.txt`` main-text copies are skipped. Raises
+    media (images/``.docx``/``.pdf``) and redundant ``.txt`` main-text copies are skipped. Files are
+    fetched with a bounded worker pool (``concurrency`` in flight), skipped when a non-empty
+    destination already exists, and written atomically (``.part`` then :func:`os.replace`), so a rerun
+    of a killed attempt costs only the missing files. Raises
     ``ValueError`` (bad id), ``FileNotFoundError`` (no OA
     versions / no files / no tables) or ``PermissionError`` (metadata readable but not CC-licensed). S3
     only; never scrapes the PMC website.
+
+    Notes:
+        Worst-case ADDED wall-clock under a sustained total outage is bounded arithmetic, not a guess:
+        the 3 sequential dependency-chained calls (version listing -> metadata -> object listing) each
+        pay at most ``net.DEFAULT_MAX_TOTAL_BACKOFF`` (60 s) of sleeps, and the file phase pays
+        ``ceil(N / concurrency)`` waves of the same 60 s. For the observed N~=15 at the default
+        ``concurrency=8`` that is 3 x 60 + 2 x 60 <= 300 s -- about 6% of the harness's 90-minute
+        per-article timeout, reached only when EVERY request fails for minutes. A healthy run pays
+        zero added time.
     """
     pmc: str = normalize_pmc_id(pmc_id)
+    if concurrency < 1:
+        # Fail BEFORE the first network call: an invalid pool size is a caller bug, and discovering
+        # it only after three listing round trips would waste them.
+        raise ValueError(f"concurrency must be >= 1, got {concurrency}")
     outdir.mkdir(parents=True, exist_ok=True)
 
     listing: str = _http_get_text(f"{PMC_S3API_BASE}?list-type=2&prefix={pmc}.&delimiter=/", timeout=timeout)
@@ -478,12 +569,8 @@ def fetch_pmc_article(pmc_id: str, outdir: Path, *, timeout: int = 120) -> list[
     if not any(is_table_file(key) for key in keys):
         raise FileNotFoundError(f"No supplementary tables found for {pmc}.")
 
-    downloaded: list[Path] = []
-    for key in (candidate for candidate in keys if is_useful_file(candidate)):
-        dest: Path = outdir / key
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(_http_get_bytes(f"{PMC_HTTPS_BASE}/{key}", timeout=timeout))
-        downloaded.append(dest)
+    candidates: list[str] = [key for key in keys if is_useful_file(key)]
+    downloaded: list[Path] = _download_files(candidates, outdir, timeout=timeout, concurrency=concurrency)
 
     logger.info(
         "Fetched {n} files for {pmc} from s3://{bucket} (latest {stem}; CC-BY, cite the article DOI)",
