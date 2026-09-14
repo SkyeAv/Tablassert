@@ -1649,9 +1649,11 @@ only needed for <code>datasets</code>-native workflows.</p>
 </table>
 <hr />
 <h2 id="build-fullmap">build-fullmap<a class="headerlink" href="#build-fullmap" title="Permanent link">&para;</a></h2>
-<p>Use this to obtain the embedded <code>fullmap.redb</code> entity-resolution database. By default it first tries
-to <strong>download a prebuilt database</strong> published for this Tablassert version; <code>--force</code> skips that and
-builds from RENCI BABEL exports instead (download class + synonym files, then build a single redb).</p>
+<p>Use this to obtain the embedded <code>fullmap.redb</code> entity-resolution database. Every database this
+command installs is filtered by the built-in <strong>top-100 experimental-taxon allowlist</strong> — there is no
+flag for it. By default it first tries to <strong>download a prebuilt database</strong> published for this
+Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL exports instead (download class
++ synonym files, then build a single redb).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
 </code></pre></div>
 <table>
@@ -1700,13 +1702,6 @@ builds from RENCI BABEL exports instead (download class + synonym files, then bu
 <td><code>False</code></td>
 <td>Skip the prebuilt download and always rebuild from BABEL outputs</td>
 </tr>
-<tr>
-<td><code>--taxon-allowlist</code></td>
-<td>Flag</td>
-<td>No</td>
-<td><code>False</code></td>
-<td>Use the built-in top-100 experimental-taxon allowlist; always build from source BABEL files and never use the unfiltered prebuilt</td>
-</tr>
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Default: download the prebuilt fullmap.tar.zst for this version and extract it (fast)</span>
@@ -1715,19 +1710,23 @@ builds from RENCI BABEL exports instead (download class + synonym files, then bu
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--force<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Accelerate either download with bundled aria2c (`pip install &quot;tablassert[aria2]&quot;`; the multi-GB prebuilt is the ideal aria2 use case)</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--aria2c<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Build a smaller source-derived database for the top 100 taxa (does not use the prebuilt archive)</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--taxon-allowlist<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/experimental.redb
 </code></pre></div>
+<p>Every one of those invocations produces a database filtered by the checked-in
+<code>src/tablassert/data/experimental_taxa.yaml</code> allowlist and records that filter as a
+<code>META.taxon_allowlist</code> identity.</p>
 <p>By default <code>build-fullmap</code> looks for a prebuilt <code>fullmap.tar.zst</code> at
 <code>https://stars.renci.org/var/babel_outputs/&lt;babel-version&gt;/fullmap/&lt;tablassert-version&gt;/</code> (the version
 directory is the <strong>installed Tablassert package version</strong>, never hardcoded), verifies it against the
 published <code>sha256sum.txt</code>, and extracts it beside <code>--output</code> in the Rust extension, streaming zstd →
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
 primary + shards against the force-build contract (exact <code>v5</code> schema, a recorded <code>build_id</code>, the exact
-shard set, and per-shard <code>build_id</code> equality) before atomically renaming them into place. If no
-prebuilt exists for this version (or the download or extraction fails), it falls back to a
-from-scratch BABEL build and logs a warning. A database already present at <code>--output</code> is reused as-is;
-pass <code>--force</code> to rebuild.</p>
+shard set, per-shard <code>build_id</code> equality, and a <code>META.taxon_allowlist</code> identity matching the built-in
+allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
+download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
+warning — an archive published without the current filter is never installed.</p>
+<p>A database already present at <code>--output</code> is reused only when it carries that same allowlist identity;
+an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
+Pass <code>--force</code> to rebuild unconditionally.</p>
 <p>A from-scratch build parallelizes automatically across all available CPU threads — on Linux the
 worker count is capped by available memory (~2 GB per thread, read from <code>/proc/meminfo</code>) to avoid
 OOMs. There is no flag to tune.</p>

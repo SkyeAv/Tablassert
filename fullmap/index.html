@@ -1290,17 +1290,22 @@ by default) holding the term→postings index.</p>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Optional: after `pip install &quot;tablassert[aria2]&quot;`, use bundled aria2c for resumable segmented downloads (the multi-GB prebuilt is the ideal aria2 use case)</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--aria2c
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Optional: source-build a smaller DB retaining the built-in top-100 taxa</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># (OrganismTaxon and taxonless rows are not filtered)</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--taxon-allowlist
 </code></pre></div>
-<p><code>--taxon-allowlist</code> is opt-in. It uses the checked-in <code>src/tablassert/data/experimental_taxa.yaml</code>
-list, filters non-<code>OrganismTaxon</code> synonym rows with valid taxon metadata before interning, and always
-builds from the downloaded BABEL sources. It never reuses the unfiltered prebuilt archive. Rows with
-no valid taxon metadata and every <code>OrganismTaxon</code> row are retained; a row with multiple taxa is kept
-when any taxon is allowlisted. The first taxon continues to be stored for existing hydration and
-lookup behavior. The built database records its allowlist identity in <code>META.taxon_allowlist</code>.</p>
+<p>The taxon allowlist is always on; there is no flag. Every database <code>build-fullmap</code> installs uses the
+checked-in <code>src/tablassert/data/experimental_taxa.yaml</code> list and filters non-<code>OrganismTaxon</code> synonym
+rows with valid taxon metadata before interning. Rows with no valid taxon metadata and every
+<code>OrganismTaxon</code> row are retained; a row with multiple taxa is kept when any taxon is allowlisted. The
+first taxon continues to be stored for existing hydration and lookup behavior. The built database
+records its allowlist identity in <code>META.taxon_allowlist</code>, and that identity gates both reuse paths:</p>
+<ul>
+<li>A prebuilt archive whose recorded identity does not match the current allowlist fails validation
+  during extraction, so it is never installed; the command falls back to a filtered source build.
+  Note the operational consequence: until a filtered archive is published for a Tablassert version,
+  the default invocation downloads that version's unfiltered archive once, fails the identity check,
+  and then performs the full BABEL download + build.</li>
+<li>A database already present at <code>--output</code> is reused only when its recorded identity matches;
+  otherwise it is rebuilt.</li>
+</ul>
 <p>See the <a href="../cli/#build-fullmap">CLI Reference → build-fullmap</a> for the complete flag table (output path,
 cache directory, BABEL snapshot version, the optional <code>--aria2c</code> / <code>-a</code> downloader,
 and the <code>--force</code> / <code>-f</code> rebuild flag), their defaults, and more examples.</p>
@@ -1312,7 +1317,8 @@ extracted beside <code>--output</code> entirely in the Rust extension: it stream
 temp directory on the output's filesystem, and, before renaming anything into place, validates the
 bundle against the same contract a <code>--force</code> build must satisfy: the <code>meta</code> schema tag is exactly
 <code>tablassert.fullmap.v5</code>, a <code>build_id</code> is recorded, the shard files are exactly the set the primary
-advertises (no gaps, no extras), and every shard's <code>build_id</code> equals the primary's. Only a bundle that
+advertises (no gaps, no extras), every shard's <code>build_id</code> equals the primary's, and the primary's
+<code>META.taxon_allowlist</code> identity equals the one the built-in allowlist would record. Only a bundle that
 passes is atomically renamed into place (primary → <code>--output</code>, shards beside it); any failure raises
 and the command falls back to the from-scratch build below. If no prebuilt is published for this
 version it falls back the same way; <code>--force</code> / <code>-f</code> skips the prebuilt attempt and always builds. The
@@ -1478,7 +1484,7 @@ they hold six tables (see <code>rust/src/fullmap.rs</code>):</p>
 </tr>
 <tr>
 <td><code>meta</code></td>
-<td>Schema version tag (<code>tablassert.fullmap.v5</code>), the shard count (<code>shards</code>), the BABEL <code>source_version</code> used to build the file, and optional allowlist identity (<code>taxon_allowlist</code>) (primary file)</td>
+<td>Schema version tag (<code>tablassert.fullmap.v5</code>), the shard count (<code>shards</code>), the BABEL <code>source_version</code> used to build the file, and the allowlist identity (<code>taxon_allowlist</code>) recorded for every <code>build-fullmap</code> output; absent only in databases built unfiltered through the lower-level surfaces (the Rust API, or <code>build_fullmap_pipeline</code>'s <code>taxon_allowlist=None</code> default) (primary file)</td>
 </tr>
 </tbody>
 </table>
