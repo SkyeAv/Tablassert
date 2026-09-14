@@ -40,7 +40,7 @@ from tablassert import distill_reward, net
 from tablassert._lazy import LazyModule
 from tablassert.biolink import ENUM_RANGED_QUALIFIERS, Categories
 from tablassert.enums import EncodingMethods
-from tablassert.errors import GraphValidationError, QcRuntimeMissingError, SectionValidationError, TablassertValidationError
+from tablassert.errors import GraphValidationError, QcRuntimeMissingError, SectionValidationError, TablassertValidationError, error_code_of
 from tablassert.extras import install_command, require_module
 from tablassert.fullmap import distinct, fullmap_db_path, is_lock_contention, lookup_rows
 from tablassert.graph_target import append_successful_config
@@ -3972,6 +3972,13 @@ class ConfigRecord:
     #: what was actually written to ``configs/<pmc_id>.yaml``); ``None`` in pre-US-005 state
     #: files and for records that never persisted a best config.
     config_chars: int | None = None
+    #: Stable kebab-case ``code`` of the exception that caused a SKIPPED record, or ``None`` when the
+    #: skip was a deterministic gate (``validate_table_config``, or the coverage/Biolink/judge
+    #: threshold), no coded error was raised, or the state file predates this field.
+    #: ``"network-transient"`` / ``"llm-transient"`` mean the
+    #: article is worth REQUEUEING; every other value is terminal for this payload. Consumers must
+    #: read this instead of keyword-matching ``notes``.
+    error_code: str | None = None
 
 
 @dataclass
@@ -3995,6 +4002,7 @@ def _record_from_dict(key: str, value: dict[str, object]) -> ConfigRecord:
     raw_biolink: object = value.get("biolink_valid_pct")
     raw_demoted: object = value.get("demoted_edge_pct")
     raw_chars: object = value.get("config_chars")
+    raw_error_code: object = value.get("error_code")
     return ConfigRecord(
         pmc_id=str(value.get("pmc_id", key)),
         status=str(value.get("status", "PENDING")),
@@ -4011,6 +4019,8 @@ def _record_from_dict(key: str, value: dict[str, object]) -> ConfigRecord:
         demoted_edge_pct=float(raw_demoted) if isinstance(raw_demoted, (int, float)) else None,
         # Optional US-005 field: pre-US-005 state files simply lack the key -> None.
         config_chars=int(raw_chars) if isinstance(raw_chars, (int, float)) and not isinstance(raw_chars, bool) else None,
+        # Optional field: a state file written before it existed simply lacks the key -> None.
+        error_code=str(raw_error_code) if isinstance(raw_error_code, str) else None,
     )
 
 
@@ -4243,6 +4253,12 @@ def run_supervisor(
         try:
             rec.status = "RUNNING"
             rec.attempts += 1
+            # `error_code` describes the MOST RECENT attempt only. Without this reset a transient skip
+            # on attempt N survives an attempt N+1 that ends MAPPED (or hits a deterministic gate), and
+            # a consumer obeying the documented "requeue on network-transient" rule would requeue an
+            # already-finished article forever. The fleet harness's own `clear_article_attempt` resets
+            # status/notes/coverage but not this field, so the reset has to live here.
+            rec.error_code = None
             save_state(state_dir, state)
             if distill_recorder is not None:
                 # Open this article's run scope FIRST (REQ-OUT-17): every record written until the
@@ -4631,6 +4647,18 @@ def run_supervisor(
         except Exception as exc:  # one bad pmc never aborts the batch
             rec.status = "SKIPPED"
             rec.notes = f"SKIPPED: {exc}"
+            # Machine-readable skip reason: a fleet consumer requeues on "network-transient" instead of
+            # keyword-matching `notes`. The three deterministic gates above deliberately leave it None,
+            # so a non-None value always means "a coded exception was raised".
+            rec.error_code = error_code_of(exc)
+            # str(exc), never the exception OBJECT: log.py configures loguru with enqueue=True, which
+            # pickles every kwarg through a queue to the writer process. The fleet's actual failure
+            # shape -- an HTTPError whose `fp` is a live socket-backed HTTPResponse -- cannot be pickled
+            # ("cannot pickle 'BufferedReader' instances"), and loguru's default catch=True SWALLOWS that
+            # TypeError in the handler: the line is silently DROPPED, not raised. That would re-create
+            # the exact defect this log line exists to fix (6,008 failures with zero log lines), so the
+            # kwarg must be a plain string. `{error}` renders identically either way.
+            logger.error("Article {pmc} SKIPPED after attempt {attempt}: {error}", pmc=pmc_id, attempt=rec.attempts, error=str(exc))
             if distill_recorder is not None:
                 # REQ-OUT-19: a crashed/failed run is a NEGATIVE example — capture it with whatever
                 # was measured before the failure (possibly nothing) instead of letting it vanish.

@@ -104,6 +104,37 @@ class UnpairedEffectAnnotationWarning(UserWarning):
     """
 
 
+def error_code_of(exc: BaseException) -> str | None:
+    """Return the stable kebab-case ``code`` of a coded Tablassert error, else ``None``.
+
+    Args:
+        exc: Any caught exception.
+
+    Returns:
+        ``exc.code`` when ``exc`` mixes in :class:`_Coded` (``TablassertError``,
+        ``TablassertValidationError``, ``MissingExtraError``, ``NetworkTransientError``, and any coded
+        error added later); ``None`` for everything else.
+
+    Notes:
+        WHY a helper: ``_Coded`` is private by design, but a consumer (the agent supervisor) needs the
+        code without an ``isinstance`` ladder over every concrete class -- a ladder that would silently
+        stop covering new codes. Reading it through one function means a newly added coded error is
+        machine-readable in ``state.json`` with no further wiring.
+
+        This function NEVER raises for a bad ``code``: a non-string degrades to ``None``, and even a
+        subclass whose ``code`` descriptor raises a ``BaseException`` cannot take the caller's error
+        handler down with it. This deliberately treats hostile ``KeyboardInterrupt``/``SystemExit``
+        descriptors as malformed code attributes, because this helper runs inside a catch-all handler.
+    """
+    if not isinstance(exc, _Coded):
+        return None
+    try:
+        code: object = exc.code
+    except BaseException:  # a hostile `code` descriptor must not escape the caller's error handler
+        return None
+    return code if isinstance(code, str) else None
+
+
 def format_missing_extra(extra: str, problem: str) -> str:
     """Append the install instructions for ``extra`` to a one-sentence ``problem``.
 

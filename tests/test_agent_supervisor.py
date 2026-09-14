@@ -33,6 +33,7 @@ from tablassert.agent import (
     run_supervisor,
     save_state,
 )
+from tablassert.errors import NetworkTransientError, TablassertValidationError
 
 pytest.importorskip("smolagents")
 
@@ -1567,3 +1568,350 @@ def test_state_loading_is_backward_compatible_for_config_chars(tmp_path: Path) -
     bad_state: SupervisorState | None = load_state(state_dir)
     assert bad_state is not None
     assert bad_state.records["PMCOLD"].config_chars is None
+
+
+# --------------------------------------------------------------------------- #
+# US-004: machine-readable `error_code` + visible SKIPPED logging (REQ-SIG-5..8, 10)
+#
+# WHY these tests exist: a 16-worker fleet run over 42,981 articles recorded 2,507 failures as
+# `status=SKIPPED` with notes textually indistinguishable from the 7,002 legitimate skips, and 6,008
+# of worker-0's failures produced ZERO log lines. `error_code` + one ERROR line per catch-all skip is
+# the fix; these tests pin both, and pin that nothing ELSE about the record changed.
+# --------------------------------------------------------------------------- #
+
+#: Every status the supervisor may write (docs/agent.md "What the supervisor does" + agent.py).
+DOCUMENTED_STATUSES: frozenset[str] = frozenset({"PENDING", "RUNNING", "DERIVED", "MAPPED", "DONE", "SKIPPED", "BUILT_UNMEASURED"})
+
+#: The legacy heuristic in the fleet harness (`MultiomicsHarness/mokg_queue.py`). Operators who have
+#: not upgraded their consumer still depend on it, so a transient skip must keep matching.
+RETRYABLE_NOTE_WORDS: tuple[str, ...] = ("error", "429", "quota", "gate", "timeout", "timed out", "connection", "5xx", "unavailable")
+
+
+class _RecordingLogger:
+    """A loguru-shaped recorder: ``logger.error(message, **fields)``, brace kwargs, never f-strings."""
+
+    def __init__(self) -> None:
+        self.records: list[tuple[str, str, dict[str, Any]]] = []
+
+    def _log(self, level: str, message: str, /, **fields: Any) -> None:
+        self.records.append((level, message, fields))
+
+    def debug(self, message: str, /, **fields: Any) -> None:
+        self._log("DEBUG", message, **fields)
+
+    def info(self, message: str, /, **fields: Any) -> None:
+        self._log("INFO", message, **fields)
+
+    def warning(self, message: str, /, **fields: Any) -> None:
+        self._log("WARNING", message, **fields)
+
+    def error(self, message: str, /, **fields: Any) -> None:
+        self._log("ERROR", message, **fields)
+
+    def at(self, level: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(message, fields) for (lvl, message, fields) in self.records if lvl == level]
+
+
+def _install_recording_logger(monkeypatch: pytest.MonkeyPatch) -> _RecordingLogger:
+    """Swap ``agent.logger`` for a recorder (the convention at tests/test_fullmap.py:84)."""
+    import tablassert.agent as agent_mod
+
+    recorder: _RecordingLogger = _RecordingLogger()
+    monkeypatch.setattr(agent_mod, "logger", recorder)
+    return recorder
+
+
+def _dns_transient(target: str = "https://pmc-oa-opendata.s3.amazonaws.com/PMC11708054.1/table1.xlsx") -> NetworkTransientError:
+    """The fleet's actual failure shape: a DNS ``EAI_NONAME`` behind ``urlopen``, retries exhausted."""
+    import socket
+    from urllib.error import URLError
+
+    return NetworkTransientError(target, 4, URLError(socket.gaierror(-2, "Name or service not known")))
+
+
+def test_supervisor_records_network_transient_error_code_and_logs(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient network skip populates ``error_code``, is PERSISTED, and writes exactly one ERROR line.
+
+    WHY: this is the whole point of the story. Before it, a DNS outage produced a `SKIPPED` record whose
+    notes looked like a legitimate not-open-access skip and NO log line at all -- so the fleet's 2,194
+    requeueable articles were invisible in the worker log and indistinguishable in state.json.
+    """
+    import tablassert.agent as agent_mod
+
+    recorder: _RecordingLogger = _install_recording_logger(monkeypatch)
+    exc: NetworkTransientError = _dns_transient()
+
+    def fake_fetch(pmc_id: str, outdir: Path, **kwargs: Any) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        raise exc
+
+    monkeypatch.setattr(agent_mod, "fetch_pmc_article", fake_fetch)
+
+    result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(),
+        map_threshold=0.8,
+        state_dir=tmp_path / "state",
+        workdir=tmp_path / "w",
+        min_rows=0,
+    )
+
+    rec: ConfigRecord = result["records"]["PMC1"]  # pyright: ignore[reportIndexIssue]
+    assert rec.error_code == "network-transient", "a fleet consumer requeues on THIS, not on notes text"
+    assert rec.status == "SKIPPED"
+
+    # Persisted, not merely in-memory: the harness reads state.json, never the returned dict.
+    loaded: SupervisorState | None = load_state(tmp_path / "state")
+    assert loaded is not None
+    assert loaded.records["PMC1"].error_code == "network-transient"
+
+    # Exactly one ERROR line per catch-all skip, with the documented format string and fields.
+    errors: list[tuple[str, dict[str, Any]]] = recorder.at("ERROR")
+    assert len(errors) == 1, f"expected one ERROR line, got {errors}"
+    message, fields = errors[0]
+    assert message == "Article {pmc} SKIPPED after attempt {attempt}: {error}", "the format string is a contract"
+    assert fields["pmc"] == "PMC1"
+    assert fields["attempt"] == rec.attempts == 1
+    assert isinstance(fields["error"], str), (
+        "str(exc), never the exception OBJECT: log.py runs loguru with enqueue=True, which pickles every "
+        "kwarg. The fleet's real HTTPError carries a socket-backed `fp` that cannot be pickled, and "
+        "loguru's default catch=True then SWALLOWS the TypeError and drops the line -- see "
+        "test_supervisor_skip_log_survives_loguru_enqueue_pickling."
+    )
+    assert "Name or service not known" in fields["error"], "the rendered line must name the real cause"
+    assert message.format(**fields).startswith("Article PMC1 SKIPPED after attempt 1:")
+
+    # A transient skip still counts as a skip in the aggregate metrics (no new status, no metric shift).
+    metrics: dict[str, object] = result["metrics"]  # pyright: ignore[reportAssignmentType]
+    assert metrics["skipped"] == 1
+
+
+def test_supervisor_leaves_error_code_none_for_deterministic_gate(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deterministic gates leave ``error_code`` as ``None``, so a non-``None`` value always means "a coded exception was raised".
+
+    WHY both paths are covered: the min-rows gate reaches the catch-all as a NON-coded
+    ``FileNotFoundError`` (so ``error_code_of`` must return ``None``), while the
+    ``validate_table_config`` gate assigns ``SKIPPED`` at its own site and must never touch the field.
+    If either leaked a code, `error_code == "network-transient"` would stop meaning "requeue me".
+    """
+    import tablassert.agent as agent_mod
+
+    # (a) The min-rows gate: deterministic, non-coded -> None.
+    small: Path = _write_table(tmp_path, "small.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+    _patch_fetch(monkeypatch, small)
+    small_result = run_supervisor(
+        ["PMC1"], fullmap=fullmap_db, build_model_factory=lambda: make_fake_model(), state_dir=tmp_path / "state_small", workdir=tmp_path / "w_small"
+    )
+    small_rec: ConfigRecord = small_result["records"]["PMC1"]  # pyright: ignore[reportIndexIssue]
+    assert small_rec.status == "SKIPPED"
+    assert "data rows" in small_rec.notes, "the deterministic gate reason is unchanged"
+    assert small_rec.error_code is None, "a non-coded deterministic skip must not carry a code"
+
+    # (b) The validate_table_config gate: SKIPPED assigned at its own site -> None.
+    good: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\n")
+    _patch_fetch(monkeypatch, good)
+
+    def stub_build_agent(*args: object, **kwargs: object) -> object:  # pyright: ignore[reportUnusedParameter]
+        class _Stub:
+            def run(self, task: str) -> object:  # pyright: ignore[reportUnusedParameter]
+                return "definitely not a config"
+
+        return _Stub()
+
+    monkeypatch.setattr(agent_mod, "build_agent", stub_build_agent)
+    gate_result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(),
+        map_threshold=0.8,
+        state_dir=tmp_path / "state_gate",
+        workdir=tmp_path / "w_gate",
+        min_rows=0,
+    )
+    gate_rec: ConfigRecord = gate_result["records"]["PMC1"]  # pyright: ignore[reportIndexIssue]
+    assert gate_rec.status == "SKIPPED"
+    assert "validate_table_config gate" in gate_rec.notes
+    assert gate_rec.error_code is None, "the explicit gate site must leave the field untouched"
+
+    # (c) A coded VALIDATION error inside the article body is machine-readable too -- the documented
+    #     side effect that makes non-network terminal skips readable without changing status/notes.
+    def raising_fetch(pmc_id: str, outdir: Path, **kwargs: Any) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        raise TablassertValidationError("section is invalid", code="section-validation-failed")
+
+    monkeypatch.setattr(agent_mod, "fetch_pmc_article", raising_fetch)
+    coded_result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(),
+        state_dir=tmp_path / "state_coded",
+        workdir=tmp_path / "w_coded",
+        min_rows=0,
+    )
+    coded_rec: ConfigRecord = coded_result["records"]["PMC1"]  # pyright: ignore[reportIndexIssue]
+    assert coded_rec.status == "SKIPPED"
+    assert coded_rec.error_code == "section-validation-failed"
+
+
+def test_supervisor_keeps_skipped_status_and_notes_prefix(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``status`` and the verbatim ``SKIPPED: <exc>`` notes prefix are UNCHANGED by the new field.
+
+    WHY: `state.metrics["skipped"]`, the documented status set, and the harness's legacy
+    `RETRYABLE_NOTE_WORDS` keyword matcher all key on exactly these. `error_code` must be strictly
+    additive -- a fleet mid-upgrade has consumers on both sides of this change.
+    """
+    import tablassert.agent as agent_mod
+
+    exc: NetworkTransientError = _dns_transient()
+
+    def fake_fetch(pmc_id: str, outdir: Path, **kwargs: Any) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        raise exc
+
+    monkeypatch.setattr(agent_mod, "fetch_pmc_article", fake_fetch)
+
+    result = run_supervisor(
+        ["PMC1", "PMC2"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(),
+        map_threshold=0.8,
+        state_dir=tmp_path / "state",
+        workdir=tmp_path / "w",
+        min_rows=0,
+    )
+
+    records: dict[str, ConfigRecord] = result["records"]  # pyright: ignore[reportAssignmentType]
+    for pmc_id in ("PMC1", "PMC2"):
+        rec: ConfigRecord = records[pmc_id]
+        assert rec.status == "SKIPPED"
+        assert rec.status in DOCUMENTED_STATUSES, "no new status value may be introduced"
+        assert rec.notes == f"SKIPPED: {exc}", "the notes prefix is verbatim, not a reformatted variant"
+        assert rec.error_code == "network-transient"
+        # The legacy heuristic keeps firing for an operator who has not upgraded their consumer.
+        assert any(word in rec.notes.lower() for word in RETRYABLE_NOTE_WORDS), "legacy notes matching must still work"
+    metrics: dict[str, object] = result["metrics"]  # pyright: ignore[reportAssignmentType]
+    assert metrics["skipped"] == 2
+    assert set(records) == {"PMC1", "PMC2"}, "one bad pmc never aborts the batch"
+
+
+def test_error_code_describes_only_the_most_recent_attempt(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stale ``error_code`` must NOT outlive the attempt that produced it — across a real persisted rerun.
+
+    WHY this is a Blocker-grade contract: the fleet harness requeues by reading ``error_code`` out of a
+    PERSISTENT per-worker ``state.json``, and its own ``clear_article_attempt``
+    (``MultiomicsHarness/scripts/mokg_queue.py:260-276``) resets ``status``/``notes``/``coverage`` but
+    NOT this field. A transient code left behind by attempt 1 would therefore make a consumer requeue
+    an article that attempt 2 already ``MAPPED`` -- forever, and worse than the legacy notes matcher it
+    replaces. The single-attempt tests above cannot see this: they each use a fresh ``state_dir``.
+    """
+    import tablassert.agent as agent_mod
+
+    state_dir: Path = tmp_path / "state"
+    table: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+    good_yaml: str = yaml.safe_dump(_column_cfg(table), sort_keys=False)
+
+    def run() -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            run_supervisor(
+                ["PMC1"],
+                fullmap=fullmap_db,
+                build_model_factory=lambda: make_fake_model(final_yaml=good_yaml),
+                map_threshold=0.8,
+                state_dir=state_dir,
+                workdir=tmp_path / "w",
+                min_rows=0,
+            ),
+        )
+
+    # Attempt 1: the network is down -> a coded transient skip, persisted to disk.
+    def failing_fetch(pmc_id: str, outdir: Path, **kwargs: Any) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        raise _dns_transient()
+
+    monkeypatch.setattr(agent_mod, "fetch_pmc_article", failing_fetch)
+    first: ConfigRecord = run()["records"]["PMC1"]
+    assert first.status == "SKIPPED"
+    assert first.error_code == "network-transient"
+    assert first.attempts == 1
+    persisted: SupervisorState | None = load_state(state_dir)
+    assert persisted is not None
+    assert persisted.records["PMC1"].error_code == "network-transient", "the stale code IS on disk now"
+
+    # Attempt 2 (same state_dir, network recovered): MAPPED, and the stale code is cleared.
+    _patch_fetch(monkeypatch, table)
+    second: ConfigRecord = run()["records"]["PMC1"]
+    assert second.status == "MAPPED"
+    assert second.attempts == 2
+    assert second.error_code is None, "a successful rerun must not inherit attempt 1's transient code"
+    persisted = load_state(state_dir)
+    assert persisted is not None
+    assert persisted.records["PMC1"].error_code is None
+
+    # Attempt 3: a DETERMINISTIC gate must not resurrect the code either.
+    def stub_build_agent(*args: object, **kwargs: object) -> object:  # pyright: ignore[reportUnusedParameter]
+        class _Stub:
+            def run(self, task: str) -> object:  # pyright: ignore[reportUnusedParameter]
+                return "definitely not a config"
+
+        return _Stub()
+
+    monkeypatch.setattr(agent_mod, "build_agent", stub_build_agent)
+    third: ConfigRecord = run()["records"]["PMC1"]
+    assert third.status == "SKIPPED"
+    assert third.attempts == 3
+    assert "validate_table_config gate" in third.notes
+    assert third.error_code is None, "a deterministic gate is not a coded error"
+
+
+def test_supervisor_skip_log_survives_loguru_enqueue_pickling(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The skip line must actually ARRIVE at a real loguru sink configured like production (``enqueue=True``).
+
+    WHY a recording stub is not enough: ``_RecordingLogger`` records whatever it is handed, so a
+    regression to ``error=exc`` would pass CI while production silently DROPS the line -- loguru's
+    default ``catch=True`` swallows the pickling ``TypeError`` inside the enqueued writer, printing it
+    to stderr instead of the log. That is the exact invisibility this story exists to remove, so it is
+    pinned against the real logger, a ``StringIO`` sink, and ``enqueue=True`` as ``log.py:122`` does.
+    """
+    pytest.importorskip("loguru")
+    import io
+    import threading
+
+    from loguru import logger as loguru_logger
+
+    import tablassert.agent as agent_mod
+
+    # add/remove BY ID: a global ``logger.remove()`` would delete an unrelated real file sink.
+    buffer: io.StringIO = io.StringIO()
+    sink_id: int = loguru_logger.add(buffer, format="{message}", enqueue=True)
+    monkeypatch.setattr(agent_mod, "logger", loguru_logger)
+
+    def failing_fetch(pmc_id: str, outdir: Path, **kwargs: Any) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        raise _dns_transient()
+
+    monkeypatch.setattr(agent_mod, "fetch_pmc_article", failing_fetch)
+
+    try:
+        run_supervisor(
+            ["PMC1"],
+            fullmap=fullmap_db,
+            build_model_factory=lambda: make_fake_model(),
+            map_threshold=0.8,
+            state_dir=tmp_path / "state",
+            workdir=tmp_path / "w",
+            min_rows=0,
+        )
+    finally:
+        loguru_logger.remove(sink_id)  # joins the writer queue, i.e. flushes
+
+    text: str = buffer.getvalue()
+    assert "Article PMC1 SKIPPED after attempt 1:" in text, f"the skip line never reached the sink: {text!r}"
+    assert "Name or service not known" in text, "the rendered line must name the real cause"
+
+    # Negative control: the SAME sink drops a line whose kwarg cannot be pickled. This is the mechanism
+    # that makes ``str(exc)`` mandatory -- a socket-backed HTTPError (the fleet's real shape) behaves
+    # exactly like this Lock. If this assert ever fails, loguru changed and agent.py's comment lies.
+    control: io.StringIO = io.StringIO()
+    control_id: int = loguru_logger.add(control, format="{message}", enqueue=True)
+    try:
+        loguru_logger.error("control {error}", error=threading.Lock())
+    finally:
+        loguru_logger.remove(control_id)
+    assert control.getvalue() == "", "an unpicklable kwarg is silently dropped by loguru's default catch=True"

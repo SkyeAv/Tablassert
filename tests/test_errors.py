@@ -13,6 +13,8 @@ from tablassert.errors import (
     RewardConfigError,
     SectionValidationError,
     SourceFileError,
+    TablassertValidationError,
+    error_code_of,
 )
 
 
@@ -122,3 +124,49 @@ def test_source_file_error_without_build_context() -> None:
     assert err.code == "source-file-unreadable"
     assert "orphan.csv" in str(err)
     assert "permission denied" in str(err)
+
+
+def test_error_code_of_reads_coded_and_plain_exceptions() -> None:
+    """``error_code_of`` exposes the private ``_Coded`` slug publicly, and NEVER raises.
+
+    WHY a helper rather than an ``isinstance`` ladder in the supervisor: a ladder over concrete classes
+    silently stops covering every code added later, while this reads the mixin once -- so a newly coded
+    error becomes machine-readable in ``state.json`` with no further wiring. WHY never-raise: it runs
+    INSIDE the supervisor's catch-all, where a raising helper would turn "one bad pmc" into "the whole
+    16-worker batch aborts".
+    """
+    coded: NetworkTransientError = NetworkTransientError("https://pmc/x", 4, URLError(socket.gaierror(-2, "Name or service not known")))
+    assert error_code_of(coded) == "network-transient"
+    assert error_code_of(BabelDownloadError("https://babel/x.gz", 5, RuntimeError("down"))) == "babel-download-failed"
+    assert error_code_of(GraphValidationError(Path("g.yaml"), "bad")) == "graph-validation-failed"
+    assert error_code_of(SectionValidationError(Path("g.yaml"), "deadbeefcafe", "bad")) == "section-validation-failed"
+    assert error_code_of(QcRuntimeMissingError(["scikit-learn"])) == "qc-runtime-missing"
+    # A coded VALIDATION error is machine-readable too -- an intentional side effect that makes
+    # non-network terminal skips readable without touching `status` or `notes`.
+    assert error_code_of(TablassertValidationError("nope", code="field-disabled")) == "field-disabled"
+
+    # Non-coded exceptions -- including the deterministic gates' own errors -- yield None.
+    assert error_code_of(FileNotFoundError("No supplementary tables found for PMC1.")) is None
+    assert error_code_of(PermissionError("not open access")) is None
+    assert error_code_of(RuntimeError("coverage gate")) is None
+    assert error_code_of(ValueError("bad config")) is None
+    assert error_code_of(KeyboardInterrupt()) is None  # BaseException, not just Exception
+    # A plain object wearing a `code` attribute is NOT coded: the mixin, not duck typing, decides.
+    assert error_code_of(type("Fake", (Exception,), {"code": "not-a-real-code"})()) is None
+
+    # A non-string `code` degrades to None instead of poisoning state.json with a non-str value.
+    class IntCoded(NetworkTransientError):
+        def __init__(self) -> None:
+            super().__init__("t", 1, RuntimeError("x"))
+            object.__setattr__(self, "code", 42)  # shadow the documented str slug with junk
+
+    assert error_code_of(IntCoded()) is None
+
+    # The hostile descriptor must not escape: the supervisor's handler stays alive. Built via
+    # ``__new__`` because the base ``__init__`` assigns ``self.code``, which a read-only property rejects.
+    class HostileCoded(NetworkTransientError):
+        @property
+        def code(self) -> object:  # type: ignore[override]
+            raise KeyboardInterrupt("hostile descriptor")
+
+    assert error_code_of(HostileCoded.__new__(HostileCoded)) is None
