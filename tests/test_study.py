@@ -465,3 +465,26 @@ def test_demoted_edges_violate_only_when_category_override_declared(tmp_path: Pa
 
     unpinned: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
     assert "demoted-edges" not in unpinned
+
+
+def test_study_kgx_scan_tolerates_non_list_categories(tmp_path: Path) -> None:
+    """Malformed category shapes never crash the demotion scan.
+
+    A scalar-string category is still matched (``\"biolink:Association\"`` reads as a
+    demotion); an absent category or a non-string first entry (``[null]``) is not -- and
+    the shape checks count those rows separately.
+    """
+    nodes: list[str] = _records(
+        {"id": "CHEBI:1", "name": "drug", "category": ["biolink:Drug"]}, {"id": "MONDO:1", "name": "disease", "category": ["biolink:Disease"]}
+    )
+    edges: list[str] = _records(
+        {"id": "e1", "subject": "CHEBI:1", "predicate": "biolink:treats", "object": "MONDO:1", "category": "biolink:Association"},
+        {"id": "e2", "subject": "CHEBI:1", "predicate": "biolink:treats", "object": "MONDO:1"},
+        {"id": "e3", "subject": "CHEBI:1", "predicate": "biolink:treats", "object": "MONDO:1", "category": [None]},
+    )
+    violations: list[study.StudyViolation] = study.study_kgx(
+        _write_ndjson(tmp_path / "nodes.ndjson", nodes), _write_ndjson(tmp_path / "edges.ndjson", edges), category_override_declared=True
+    )
+    flagged: dict[str, study.StudyViolation] = {v.check: v for v in violations}
+    assert flagged["demoted-edges"].count == 1  # only the scalar-string edge counts
+    assert flagged["demoted-edges"].examples == ["biolink:treats (1)"]

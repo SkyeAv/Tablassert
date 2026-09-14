@@ -167,12 +167,21 @@ def _dimension_maps(db: Path, cache_key: tuple[Path, float]) -> tuple[list[str],
     if cached is not None:
         return cached
     source_version: str = rs.fullmap_source_version()
-    value: tuple[list[str], list[str], list[str], str] = (
-        list(_call_with_lock_retry(rs.hydrate_prefixes, db)),
-        list(_call_with_lock_retry(rs.hydrate_categories, db)),
-        list(_call_with_lock_retry(rs.hydrate_sources, db)),
-        source_version,
-    )
+    prefixes: list[str] = list(_call_with_lock_retry(rs.hydrate_prefixes, db))
+    categories: list[str] = list(_call_with_lock_retry(rs.hydrate_categories, db))
+    # A fullmap category the ``Categories`` enum cannot name is a silent hole in every
+    # category-keyed guard (see ``biolink.CATEGORY_OVERRIDES``): ``filter_and_rank`` drops
+    # those rows when a column sets ``avoid``, and they fall through to pair-derived classes
+    # otherwise. Fail loudly ONCE per db (the cache above makes this fire per process) so a
+    # vocabulary drift surfaces as an actionable warning instead of quietly degrading.
+    unnameable: list[str] = sorted(set(categories) - set(_KNOWN_CATEGORIES))
+    if unnameable:
+        logger.warning(
+            "fullmap {db} emits categories the config vocabulary cannot name: {cats} -- rows carrying them are dropped when a column sets `avoid` and fall through to pair-derived classes otherwise; widen biolink.CATEGORY_OVERRIDES to make them first-class",
+            db=db,
+            cats=unnameable,
+        )
+    value: tuple[list[str], list[str], list[str], str] = (prefixes, categories, list(_call_with_lock_retry(rs.hydrate_sources, db)), source_version)
     _SOURCE_CACHE.clear()
     _SOURCE_CACHE[cache_key] = value
     return value

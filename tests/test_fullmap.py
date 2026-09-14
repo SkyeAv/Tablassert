@@ -1091,3 +1091,27 @@ def test_filter_and_rank_avoids_overridden_mixin_category() -> None:
 
     matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=[Categories.GENOMIC_ENTITY], column_context=False)
     assert matches["CURIE"].to_list() == ["MONDO:1"]
+
+
+def test_dimension_maps_warns_on_unnameable_fullmap_categories(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A fullmap category outside the config vocabulary surfaces as a loud once-per-db warning.
+
+    ``filter_and_rank`` drops those rows when a column sets ``avoid`` and they fall through
+    to pair-derived classes otherwise, so vocabulary drift must not stay silent.
+    """
+
+    def fake_retry(fn: Callable[..., Any], db: Path, *args: object) -> list[str]:
+        if fn is fullmap.rs.hydrate_categories:
+            return ["ChemicalEntity", "NotANameableCategory"]
+        return []
+
+    monkeypatch.setattr(fullmap, "_call_with_lock_retry", fake_retry)
+    fullmap._SOURCE_CACHE.clear()
+    captured: list[str] = []
+    sink_id: int = fullmap.logger.add(lambda message: captured.append(message.record["message"]), level="WARNING")
+    try:
+        fullmap._dimension_maps(tmp_path / "fullmap.redb", (tmp_path / "fullmap.redb", 0.0))
+    finally:
+        fullmap.logger.remove(sink_id)
+        fullmap._SOURCE_CACHE.clear()
+    assert any("NotANameableCategory" in message for message in captured)

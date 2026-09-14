@@ -172,7 +172,9 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
                 # drawer, so a demoted edge ships without its evidence fields. Counted
                 # per predicate; :func:`study_kgx` decides whether it is a violation.
                 categories: object = record.get("category")
-                category: str = categories[0] if isinstance(categories, list) and categories else str(categories or "")
+                category: str = (
+                    categories[0] if isinstance(categories, list) and categories and isinstance(categories[0], str) else str(categories or "")
+                )
                 if category == "biolink:Association":
                     predicate: object = record.get("predicate")
                     scan.demoted[predicate if isinstance(predicate, str) and predicate else "<no predicate>"] += 1

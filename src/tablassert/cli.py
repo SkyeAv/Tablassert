@@ -324,9 +324,12 @@ def build_graph_pipeline(
     # Stage 7/7 (only with --qc): assert over the final NDJSON files.
     if qc:
         progress.stage("Studying Graph")
-        # A section that pins the association class per object category promises every
-        # row lands on a pinned class, so the study may fail on demotions; without any
-        # pin, bare biolink:Association is the author's accepted default.
+        # The demotion assertion is graph-wide: the study runs on the merged NDJSON with no
+        # section attribution, so one pinned section makes every bare biolink:Association edge
+        # in the graph a failure -- including edges from unpinned sections, for which bare
+        # Association is the author's accepted default. Graphs where every section is pinned
+        # are unaffected; a mixed graph should split or accept the stricter gate. An empty
+        # ``category_override: {}`` pins nothing and counts as undeclared.
         study_final_ndjson(
             g.name, g.version, Path(g.rig.artifact_base_path), category_override_declared=any(x.statement.category_override for x in tcode)
         )
@@ -746,8 +749,11 @@ def build_kg(
     non-empty subject, predicate, and object, no undeclared or isolated nodes, no
     malformed lines, no null or empty values in any field, no stray whitespace, and (when
     any section declares a ``category_override``) no edge demoted to bare
-    ``biolink:Association`` -- and fails the build (non-zero exit) when any assertion is
-    violated.
+    ``biolink:Association``. The demotion assertion is GRAPH-WIDE: the study reads the
+    merged NDJSON with no section attribution, so a single pinned section also fails
+    demoted edges from unpinned sections (a row escaped its pin and shipped without the
+    class-specific slots ``prune_to_class`` nulled into ``has_supporting_studies``) --
+    and fails the build (non-zero exit) when any assertion is violated.
     """
     if qc:
         extras.require("qc", required_by="--qc")
