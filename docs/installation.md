@@ -131,9 +131,10 @@ The `rt` extra is the exception: it installs `polars[rtcompat]`, which imports a
 it cannot be detected by inspection. It is suggested when polars itself fails to import; the usual
 cause is a CPU that lacks the instructions the default polars wheel requires.
 
-The `log` extra is the other exception: it never fails at all. Without loguru, Tablassert logs
-through a stdlib-based fallback to the same `log/tablassert.log` file and warns once at startup;
-install `pip install "tablassert[log]"` for the full loguru setup (rotation, enqueue).
+The `log` extra is the other exception: it never fails at all. Without loguru, Tablassert produces
+no logs: it does not create `.tablassert/log/`, write `tablassert.log`, forward messages to the
+progress display, honor `build-kg --log`, or warn about the missing extra. Install
+`pip install "tablassert[log]"` for loguru-backed file and progress logging (rotation, enqueue).
 
 ### Method 3: Install from GitHub main
 

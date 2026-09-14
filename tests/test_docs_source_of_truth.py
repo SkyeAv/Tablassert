@@ -47,6 +47,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Annotated, Any, Literal, get_args, get_origin, get_type_hints
 
@@ -1456,15 +1457,17 @@ def test_api_utils_paths_distinguish_log_directory_from_log_file() -> None:
     """``docs/api/utils.md`` must not conflate ``log.LOGASSERT`` (the log DIRECTORY) with the log FILE inside it.
 
     Live: ``log.LOGASSERT`` is ``utils.BASE / "log"`` -- the ``.tablassert/log`` directory,
-    created with ``mkdir`` at import -- while the loguru sink file is the private
-    ``log._LOG_FILE`` at ``.tablassert/log/tablassert.log``. The reference once presented the
-    file path AS ``log.LOGASSERT``, sending a reader who wanted the directory to a file.
+    created with ``mkdir`` at import when the ``log`` extra is installed -- while the loguru
+    sink file is the private ``log._LOG_FILE`` at ``.tablassert/log/tablassert.log``. The
+    reference once presented the file path AS ``log.LOGASSERT``, sending a reader who wanted
+    the directory to a file.
     """
     # Live facts first, so a path change fails HERE rather than in the prose pins below.
     assert log_module.LOGASSERT == utils_module.BASE / "log", (
         f"live log.LOGASSERT is {log_module.LOGASSERT!r}, not utils.BASE / 'log'; re-derive this guard"
     )
-    assert log_module.LOGASSERT.is_dir(), f"live log.LOGASSERT ({log_module.LOGASSERT}) is no longer a directory; re-derive this guard"
+    if find_spec("loguru") is not None:
+        assert log_module.LOGASSERT.is_dir(), f"live log.LOGASSERT ({log_module.LOGASSERT}) is no longer a directory; re-derive this guard"
     assert log_module._LOG_FILE == log_module.LOGASSERT / "tablassert.log", (
         f"live log file is {log_module._LOG_FILE!r}, not LOGASSERT / 'tablassert.log'; re-derive this guard"
     )
@@ -1688,8 +1691,8 @@ def test_installation_preflight_docs_cover_source_preflight_calls() -> None:
     call sites under ``src/tablassert`` (AST, not a copied list), so a new preflighted command
     fails here until the "When an extra is missing" section names its extra. The two documented
     exceptions are pinned from the same section: ``rt`` installs ``polars[rtcompat]``, which
-    imports as plain ``polars`` and so cannot be detected by inspection, and ``log`` degrades to
-    a stdlib fallback instead of failing.
+    imports as plain ``polars`` and so cannot be detected by inspection, and ``log`` is never
+    preflighted because a base install simply produces no logs.
     """
     sites: dict[str, list[str]] = _preflight_call_sites()
     assert sites, "no extras.require/extras.is_installed call sites found under src/tablassert; this guard went vacuous"
@@ -1706,9 +1709,7 @@ def test_installation_preflight_docs_cover_source_preflight_calls() -> None:
     assert "polars[rtcompat]" in section, (
         f"{INSTALLATION.relative_to(ROOT)} must keep the `rt` exception: polars[rtcompat] imports as plain polars and cannot be detected"
     )
-    assert "stdlib" in section, (
-        f"{INSTALLATION.relative_to(ROOT)} must keep the `log` fallback: without loguru, Tablassert logs through a stdlib fallback"
-    )
+    assert "no logs" in section, f"{INSTALLATION.relative_to(ROOT)} must keep the `log` exception: without loguru, Tablassert produces no logs at all"
     if "distill" in sites:
         # Live: the agent command's `--distill` flag records ChatML NDJSON with zero extra
         # dependencies (cli.py), so the section must not imply RECORDING needs the extra --

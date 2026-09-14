@@ -134,7 +134,7 @@ config lives elsewhere). The `rig:` section is required; see the
 tablassert build-kg tutorial-graph.yaml
 ```
 
-To also run the quality-control audit stage, add `--qc` (and `--log` for verbose per-section logging):
+To also run the quality-control audit stage, add `--qc`; add `--log` for verbose per-section logging when the `[log]` extra is installed:
 
 ```bash
 tablassert build-kg tutorial-graph.yaml --qc --log

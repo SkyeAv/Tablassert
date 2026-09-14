@@ -49,7 +49,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Graph Target](src/tablassert/graph_target.py): graph output target preparation and locking.
 - [YAML Ingestion](src/tablassert/ingests.py): YAML loading, section expansion, and merging.
 - [Core Pipeline](src/tablassert/lib.py): extraction transforms, statement assembly, and graph compilation.
-- [Logging](src/tablassert/log.py): stdlib/loguru logging abstraction.
+- [Logging](src/tablassert/log.py): optional loguru logging abstraction.
 - [Pydantic Models](src/tablassert/models.py): table, graph, and RIG configuration models.
 - [NLP Helpers](src/tablassert/nlp.py): text normalization levels and preprocessing helpers.
 - [Progress](src/tablassert/progress.py): pipeline progress reporting and validation formatting.

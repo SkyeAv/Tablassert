@@ -1,7 +1,6 @@
 # Tablassert
 
 [![PyPI](https://img.shields.io/pypi/v/tablassert.svg)](https://pypi.org/project/tablassert/)
-[![Downloads](https://img.shields.io/pypi/dm/tablassert.svg)](https://pypi.org/project/tablassert/)
 [![Python](https://img.shields.io/pypi/pyversions/tablassert.svg)](https://pypi.org/project/tablassert/)
 [![CI](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml/badge.svg)](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml)
 [![License](https://img.shields.io/pypi/l/tablassert.svg)](https://github.com/SkyeAv/Tablassert/blob/main/LICENSE)
@@ -127,7 +126,7 @@ CSV/TSV/Excel sources; optional extras add runtime and pipeline capabilities:
 QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never
 produces a bare `ModuleNotFoundError`: the failure names the missing package and the exact install
 command, and for `build-kg --qc` and `tablassert agent` it arrives before the run starts rather than
-partway through. Logging is the exception: without the `log` extra it degrades to a stdlib fallback
+partway through. Logging is the exception: without the `log` extra Tablassert produces no logs
 instead of failing. See the
 [Installation guide](https://skyeav.github.io/Tablassert/installation/) for the full matrix and the
 [CLI Reference](https://skyeav.github.io/Tablassert/cli/) for every flag.
