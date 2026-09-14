@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tablassert.errors import DOCS_URL, BabelDownloadError, GraphValidationError, QcRuntimeMissingError, SectionValidationError, SourceFileError
+from tablassert.errors import (
+    DOCS_URL,
+    BabelDownloadError,
+    GraphValidationError,
+    QcRuntimeMissingError,
+    RewardConfigError,
+    SectionValidationError,
+    SourceFileError,
+)
 
 
 def test_qc_runtime_missing_error_code_and_docs_url() -> None:
@@ -63,6 +71,20 @@ def test_source_file_error_carries_config_section_and_path() -> None:
     assert "table.yaml" in str(err)
     assert "table · 0123abcd" in str(err)
     assert "/data/missing.csv" in str(err)
+
+
+def test_reward_config_error_code_and_docs_url() -> None:
+    """Guard: a rejected reward config carries a stable slug and a docs link.
+
+    Why: the reward config decides which examples train the LoRA, so a typo'd knob must surface as
+    the greppable, docs-linked `reward-config-invalid` failure — never as a silently-defaulted
+    weighting policy. The message is built by the loader (it names the file, the key, and the
+    valid set); this class only pins the slug and the URL.
+    """
+    err: RewardConfigError = RewardConfigError("Reward config invalid: reward.yaml — unknown key 'w_covrage' (valid: w_coverage, ...)")
+    assert err.code == "reward-config-invalid"
+    assert str(err).endswith(DOCS_URL + "reward-config-invalid")
+    assert "w_covrage" in str(err)
 
 
 def test_source_file_error_without_build_context() -> None:

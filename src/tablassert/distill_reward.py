@@ -15,23 +15,39 @@ the opposite error contract: it FAILS LOUD on programmer error (a violated call 
 ``TypeError`` immediately) but NEVER on data — a missing, partial or legacy report defaults each
 figure to its declared neutral value instead of raising, because a crashed run's outcome (a
 negative example) is exactly the row the corpus cannot afford to lose. It is pure stdlib + ``yaml``
-(a core dependency) so it imports in the base environment: no smolagents, no datasets. The reward,
-the weight, the selection policies and the records/outcomes join are layered on top of this module
-elsewhere; they are deliberately NOT here.
+(a core dependency) so it imports in the base environment: no smolagents, no datasets.
+
+The module also carries the DETERMINISTIC REWARD layer — :class:`RewardConfig`,
+:func:`load_reward_config`, :func:`reward` and :func:`median_edge_ref` — the weight that decides
+which recorded examples train the LoRA. The reward is pure (no I/O, no randomness, no clock: same
+outcome in, same weight out, so two exports of one append-only corpus stay comparable), reads ONLY
+deterministic outcome fields, and applies its hard gates MULTIPLICATIVELY, never additively. It
+deliberately never reads ``judge_score``/``judge_dimensions`` (a second hackable LLM proxy),
+``provenance_ok`` or ``qc_pass_rate`` (both structurally constant for any schema-valid config — the
+same degeneracy documented for ``quality_score``), or any F1 term (no gold KGX exists in
+production), and it never imports or calls ``quality_score``, the GEPA path's composite. The
+selection policies and the records/outcomes join are layered on top elsewhere; they are deliberately
+NOT here.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+import json
+import math
+import statistics
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
+from pathlib import Path
 from typing import Any, Final
 
 import yaml
 
 from tablassert.distill import GATE_KEYS, OUTCOME_KEYS, RECORD_TYPE_OUTCOME, SCHEMA_VERSION, TOOL_CALL_KEYS, VERSION_KEYS
+from tablassert.errors import RewardConfigError
 
 #: The Biolink ``KnowledgeLevelEnum``/``AgentTypeEnum`` sentinel meaning "no assertion made" (both
 #: spellings tolerated: the enum VALUE is ``"not provided"``, but a hand-authored config may use the
@@ -328,3 +344,352 @@ def build_outcome(
         }
     )
     return outcome
+
+
+# ───────────────────────────── deterministic reward ─────────────────────────────
+# The weight that decides which recorded examples train the LoRA. Everything below is pure: no
+# I/O, no environment, no clock, no randomness — determinism is a HARD requirement because the
+# corpus is append-only and long-lived, so a weight that drifted between runs would make two
+# exports of the same corpus incomparable.
+
+#: Tolerance for the five-coefficient sum check in :func:`load_reward_config`. Coefficients are
+#: documented to sum to exactly 1.00; 1e-9 absorbs binary-float representation noise (e.g.
+#: 0.40 + 0.28 + 0.17 + 0.07 + 0.08) without ever admitting a policy that is genuinely off —
+#: a mis-summed policy silently rescales every weight the corpus produces.
+COEFFICIENT_SUM_TOLERANCE: Final[float] = 1e-9
+
+#: The eleven knobs a reward-config file may set — exactly :class:`RewardConfig`'s fields. The
+#: tuple (not the dataclass) is the source of truth for the unknown-key check so the error message
+#: can name the valid set without introspection, and so an unknown key is rejected rather than
+#: silently ignored into the default policy (a typo'd coefficient must never train a LoRA).
+REWARD_CONFIG_FIELDS: Final[tuple[str, ...]] = (
+    "w_coverage",
+    "w_biolink",
+    "w_specificity",
+    "w_cleanliness",
+    "w_breadth",
+    "demoted_gate",
+    "demoted_penalty",
+    "redundant_gate",
+    "redundant_penalty",
+    "unmeasured_weight",
+    "edge_ref",
+)
+
+#: The five additive-term coefficients, whose resolved values must sum to 1.0 within
+#: :data:`COEFFICIENT_SUM_TOLERANCE` — the raw score is a convex combination, so the weight stays
+#: interpretable (a fraction of a perfect build) across retunes.
+_COEFFICIENT_FIELDS: Final[tuple[str, ...]] = ("w_coverage", "w_biolink", "w_specificity", "w_cleanliness", "w_breadth")
+
+#: The two multiplicative-penalty knobs, bounded to (0, 1]: 0 would zero the row outright (that is
+#: what the hard gates are for) and > 1 would REWARD the failure mode the penalty exists to punish.
+_PENALTY_FIELDS: Final[tuple[str, ...]] = ("demoted_penalty", "redundant_penalty")
+
+#: The knobs that are fractions of something, bounded to [0, 1]: the two farming gates (compared
+#: against a demoted-edge fraction and a redundant-call ratio) and the unmeasured fallback weight.
+_UNIT_INTERVAL_FIELDS: Final[tuple[str, ...]] = ("demoted_gate", "redundant_gate", "unmeasured_weight")
+
+
+@dataclass(frozen=True, slots=True)
+class RewardConfig:
+    """The complete, immutable reward policy; ``RewardConfig()`` IS the documented default policy.
+
+    Frozen + slots because a policy that could be mutated between two rows of one export would
+    silently break cross-row comparability — the entire point of a deterministic reward. The five
+    ``w_*`` coefficients sum to exactly 1.00 so the raw score is a convex combination; the gates
+    and penalties are the multiplicative farming guards, and ``edge_ref`` is the optional
+    file-level override for the breadth normalizer (``None`` = derive the per-corpus median).
+
+    Why these defaults: they mirror the SHAPE of the existing ``quality_score`` while replacing its
+    two degenerate terms — ``qc_pass_rate`` (structurally constant) and ``mean_f1`` (needs a gold
+    KGX that does not exist in production) — with ``specificity`` (the anti generic-predicate
+    signal), ``breadth`` (non-degeneracy) and ``cleanliness`` (tool-call correctness, the varying
+    signal that took over brief §6's structurally-constant ``prov`` slot at the same 0.07).
+    """
+
+    w_coverage: float = 0.40  # completeness / entity-resolution success — the primary signal
+    w_biolink: float = 0.28  # semantic/ontological validity of the built edges
+    w_specificity: float = 0.17  # 1 - demoted_edge_pct: predicate specificity vs generic fallback
+    w_cleanliness: float = 0.07  # 1 - (failed + wrong) / total tool calls: correctness, not efficiency
+    w_breadth: float = 0.08  # log-scaled edge_count against the per-corpus reference
+    demoted_gate: float = 0.50  # demoted_edge_pct above this trips the generic-predicate penalty
+    demoted_penalty: float = 0.5  # multiplies the raw score when the demoted gate trips
+    redundant_gate: float = 0.30  # redundant/total tool-call ratio above this trips the spam penalty
+    redundant_penalty: float = 0.7  # multiplies the raw score when the redundant gate trips
+    unmeasured_weight: float = 0.0  # floor for BUILT_UNMEASURED / unmeasured rows — kept, not selectable
+    edge_ref: float | None = None  # breadth-reference override; None = the corpus median
+
+
+def _clamp01(value: float) -> float:
+    """Clamp to [0, 1] — the weight's documented range, guaranteed even for a hand-built config."""
+    return min(max(value, 0.0), 1.0)
+
+
+def _coerce_knob(path: Path, key: str, value: object) -> float | None:
+    """Validate one config-file value against its knob's declared range; wrong type/shape is LOUD.
+
+    No silent defaulting and no coercion of a wrong type: a typo'd or mis-scaled knob must stop the
+    weigh, because the resulting policy decides which examples train the LoRA. ``edge_ref: null``
+    is the one accepted non-number — it spells the documented default ("derive the corpus median").
+    """
+    if key == "edge_ref" and value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RewardConfigError(f"Reward config invalid: {path} — key {key!r} must be a number, got {value!r} ({type(value).__name__})")
+    number: float = float(value)
+    if not math.isfinite(number):
+        raise RewardConfigError(f"Reward config invalid: {path} — key {key!r} must be finite, got {number!r}")
+    if key in _PENALTY_FIELDS:
+        if number <= 0.0 or number > 1.0:
+            raise RewardConfigError(f"Reward config invalid: {path} — penalty {key!r} must be in (0, 1], got {number!r}")
+    elif key == "edge_ref":
+        if number <= 0.0:
+            raise RewardConfigError(f"Reward config invalid: {path} — key 'edge_ref' must be positive (it is the log1p denominator), got {number!r}")
+    elif number < 0.0:
+        raise RewardConfigError(f"Reward config invalid: {path} — key {key!r} must be non-negative, got {number!r}")
+    if key in _UNIT_INTERVAL_FIELDS and number > 1.0:
+        raise RewardConfigError(f"Reward config invalid: {path} — key {key!r} is a fraction and must be in [0, 1], got {number!r}")
+    return number
+
+
+def load_reward_config(path: Path) -> RewardConfig:
+    """Load a YAML (.yaml/.yml) or JSON (.json) reward policy, failing LOUD on anything invalid.
+
+    A file may set any subset of :data:`REWARD_CONFIG_FIELDS`; omitted knobs take the documented
+    :class:`RewardConfig` defaults, and the RESOLVED five coefficients must still sum to 1.0 within
+    :data:`COEFFICIENT_SUM_TOLERANCE` (so a file that moves one weight must move another to
+    compensate — an accidentally rescaled policy is rejected, not shipped).
+
+    Raises:
+        TypeError: ``path`` is not a ``Path`` (a call-contract violation, not bad data).
+        RewardConfigError: the file is missing/unreadable, has an unsupported suffix, is not a
+            mapping, names an unknown key (the message lists the valid set), carries a non-numeric
+            or non-finite value, a negative weight/gate/penalty, a penalty outside (0, 1], a
+            coefficient sum off 1.0 (the message reports the actual sum), or a non-positive
+            ``edge_ref``.
+    """
+    if not isinstance(path, Path):
+        raise TypeError(f"path must be a Path, got {type(path).__name__}")
+    try:
+        text: str = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RewardConfigError(f"Reward config unreadable: {path} — {exc}") from exc
+    document: Any
+    suffix: str = path.suffix.lower()
+    if suffix in (".yaml", ".yml"):
+        try:
+            document = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise RewardConfigError(f"Reward config invalid: {path} — not parseable YAML: {exc}") from exc
+    elif suffix == ".json":
+        try:
+            document = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise RewardConfigError(f"Reward config invalid: {path} — not parseable JSON: {exc}") from exc
+    else:
+        raise RewardConfigError(f"Reward config invalid: {path} — unsupported suffix {path.suffix!r}; expected one of .yaml, .yml, .json")
+    if not isinstance(document, Mapping):
+        raise RewardConfigError(
+            f"Reward config invalid: {path} — expected a mapping of knob -> value, got {type(document).__name__}; valid keys: {', '.join(REWARD_CONFIG_FIELDS)}"
+        )
+    provided: dict[str, float | None] = {}
+    for raw_key, raw_value in document.items():
+        key: object = raw_key
+        if not isinstance(key, str) or key not in REWARD_CONFIG_FIELDS:
+            raise RewardConfigError(f"Reward config invalid: {path} — unknown key {key!r}; valid keys: {', '.join(REWARD_CONFIG_FIELDS)}")
+        provided[key] = _coerce_knob(path, key, raw_value)
+
+    defaults: RewardConfig = RewardConfig()
+
+    def knob(field: str) -> float:
+        """Resolve a non-nullable knob: the file's value when given, else the documented default."""
+        value: float | None = provided.get(field)
+        if value is not None:
+            return value
+        default: float = getattr(defaults, field)  # one canonical default policy, not eleven repeated literals
+        return default
+
+    coefficient_sum: float = sum(knob(field) for field in _COEFFICIENT_FIELDS)
+    if abs(coefficient_sum - 1.0) > COEFFICIENT_SUM_TOLERANCE:
+        raise RewardConfigError(
+            f"Reward config invalid: {path} — the five coefficients must sum to 1.0 within {COEFFICIENT_SUM_TOLERANCE}, got {coefficient_sum!r}"
+        )
+    return RewardConfig(
+        w_coverage=knob("w_coverage"),
+        w_biolink=knob("w_biolink"),
+        w_specificity=knob("w_specificity"),
+        w_cleanliness=knob("w_cleanliness"),
+        w_breadth=knob("w_breadth"),
+        demoted_gate=knob("demoted_gate"),
+        demoted_penalty=knob("demoted_penalty"),
+        redundant_gate=knob("redundant_gate"),
+        redundant_penalty=knob("redundant_penalty"),
+        unmeasured_weight=knob("unmeasured_weight"),
+        edge_ref=provided.get("edge_ref"),
+    )
+
+
+def _required(outcome: Mapping[str, Any], key: str) -> object:
+    """Fetch a required outcome key; a MISSING key is a malformed outcome and fails loud.
+
+    Weighting is the fail-loud counterpart of the fail-soft recorder: a row missing a field the
+    reward reads is a schema violation (a pre-v2 or hand-built corpus), and silently defaulting it
+    would invent a weight for an example that was never measured.
+    """
+    if key not in outcome:
+        raise ValueError(f"malformed outcome: missing required key {key!r}")
+    return outcome[key]
+
+
+def _nullable_float(outcome: Mapping[str, Any], key: str) -> float | None:
+    """A measurement scalar: a real number or explicit ``null`` (unmeasured); anything else is loud."""
+    value: object = _required(outcome, key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"malformed outcome: {key!r} must be a number or null, got {type(value).__name__}")
+    return float(value)
+
+
+def _nullable_bool(outcome: Mapping[str, Any], key: str) -> bool | None:
+    """A flag: a bool or explicit ``null`` (unmeasured); a truthy string is never accepted as one."""
+    value: object = _required(outcome, key)
+    if value is not None and not isinstance(value, bool):
+        raise TypeError(f"malformed outcome: {key!r} must be a bool or null, got {type(value).__name__}")
+    return value
+
+
+def _tool_tally(tool_calls: Mapping[str, Any], key: str) -> float:
+    """One tool-call tally: a required, real (non-bool) number — the struct is pinned, so null is loud."""
+    if key not in tool_calls:
+        raise ValueError(f"malformed outcome: 'tool_calls' is missing required tally {key!r}")
+    value: object = tool_calls[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"malformed outcome: 'tool_calls' tally {key!r} must be a number, got {type(value).__name__}")
+    return float(value)
+
+
+def _resolve_edge_ref(config: RewardConfig, edge_ref: float | None) -> float | None:
+    """Resolve the breadth reference: the explicit argument wins, then the config's file override.
+
+    The CLI derives the per-corpus median and passes it explicitly; ``RewardConfig.edge_ref`` is the
+    file-level escape hatch for pinning a fixed reference (e.g. comparing against a frozen corpus).
+    A non-positive reference would make the log1p denominator zero or negative, so it fails loud
+    rather than silently zeroing the breadth term for every row.
+    """
+    reference: float | None
+    if edge_ref is not None:
+        if isinstance(edge_ref, bool) or not isinstance(edge_ref, (int, float)):
+            raise TypeError(f"edge_ref must be a number or None, got {type(edge_ref).__name__}")
+        reference = float(edge_ref)
+    else:
+        reference = config.edge_ref
+    if reference is not None and reference <= 0.0:
+        raise ValueError(f"edge_ref must be positive (it is the log1p denominator), got {reference!r}")
+    return reference
+
+
+def reward(outcome: Mapping[str, Any], config: RewardConfig, *, edge_ref: float | None) -> float:
+    """The deterministic weight of one captured outcome, clamped to [0, 1].
+
+    Five additive terms (defaults in parentheses, summing to 1.00) — ``coverage_pct`` (0.40),
+    ``biolink_valid_pct`` (0.28), ``specificity = 1 - demoted_edge_pct`` (0.17),
+    ``cleanliness = 1 - (failed + wrong) / total_tool_calls`` (0.07), and
+    ``breadth = clamp(log1p(edge_count) / log1p(edge_ref), 0, 1)`` (0.08) — then the hard gates,
+    MULTIPLICATIVELY, never additively: ``ok is not True``, ``head is True``, or a
+    ``SKIPPED``/``FAILED`` status zero the row outright; ``BUILT_UNMEASURED`` or ``measured is not
+    True`` floors it at ``config.unmeasured_weight`` (the record is KEPT, just not selectable);
+    ``demoted_edge_pct > demoted_gate`` multiplies by ``demoted_penalty`` (generic-predicate
+    farming — a forbidden predicate never raises, it silently demotes the edge, so coverage can be
+    farmed); ``redundant / total > redundant_gate`` multiplies by ``redundant_penalty``.
+
+    Unmeasurable is 0.0, never a free pass: a null ``biolink_valid_pct`` contributes 0.0 and a null
+    ``demoted_edge_pct`` makes specificity 0.0. The reward reads ONLY deterministic outcome fields —
+    never ``judge_score``/``judge_dimensions`` (a second hackable LLM proxy), ``provenance_ok`` or
+    ``qc_pass_rate`` (structurally constant for schema-valid configs), or any F1 term (no gold KGX
+    in production) — and uses no logprobs/perplexity, which the smolagents path never captures.
+
+    Raises:
+        ValueError: a required key is missing, or ``edge_ref`` resolves non-positive.
+        TypeError: a value is present but of the wrong type (the outcome is malformed; silently
+            defaulting it would invent a weight for an example that was never measured).
+    """
+    if not isinstance(outcome, Mapping):
+        raise TypeError(f"outcome must be a Mapping, got {type(outcome).__name__}")
+    ok: bool | None = _nullable_bool(outcome, "ok")
+    head: bool | None = _nullable_bool(outcome, "head")
+    measured: bool | None = _nullable_bool(outcome, "measured")
+    run_status: object = _required(outcome, "run_status")
+    if not isinstance(run_status, str):
+        raise TypeError(f"malformed outcome: 'run_status' must be a str, got {type(run_status).__name__}")
+    coverage_pct: float | None = _nullable_float(outcome, "coverage_pct")
+    biolink_valid_pct: float | None = _nullable_float(outcome, "biolink_valid_pct")
+    demoted_edge_pct: float | None = _nullable_float(outcome, "demoted_edge_pct")
+    edge_count: float | None = _nullable_float(outcome, "edge_count")
+    tool_calls_value: object = _required(outcome, "tool_calls")
+    if not isinstance(tool_calls_value, Mapping):
+        raise TypeError(f"malformed outcome: 'tool_calls' must be a mapping, got {type(tool_calls_value).__name__}")
+    total: float = _tool_tally(tool_calls_value, "total")
+    failed: float = _tool_tally(tool_calls_value, "failed")
+    wrong: float = _tool_tally(tool_calls_value, "wrong")
+    redundant: float = _tool_tally(tool_calls_value, "redundant")
+    reference: float | None = _resolve_edge_ref(config, edge_ref)
+
+    # Hard gates first — multiplicative, so a gated row is 0.0 no matter how good its figures are.
+    if ok is not True:
+        return 0.0
+    if head is True:
+        return 0.0
+    if run_status in ("SKIPPED", "FAILED"):  # FAILED is defensive: no live status emits it, but a hard gate that silently passed one would be worse
+        return 0.0
+    if run_status == "BUILT_UNMEASURED" or measured is not True:
+        return _clamp01(config.unmeasured_weight)  # coverage was never certified: kept, not selectable
+    if edge_count is not None and edge_count < 0.0:
+        raise ValueError(f"malformed outcome: 'edge_count' must be non-negative, got {edge_count!r}")
+
+    coverage: float = coverage_pct if coverage_pct is not None else 0.0
+    biolink: float = biolink_valid_pct if biolink_valid_pct is not None else 0.0
+    specificity: float = 1.0 - demoted_edge_pct if demoted_edge_pct is not None else 0.0
+    cleanliness: float = 1.0 - (failed + wrong) / total if total > 0.0 else 0.0
+    breadth: float = 0.0
+    if edge_count is not None and reference is not None:
+        breadth = _clamp01(math.log1p(edge_count) / math.log1p(reference))
+
+    r_raw: float = (
+        config.w_coverage * coverage
+        + config.w_biolink * biolink
+        + config.w_specificity * specificity
+        + config.w_cleanliness * cleanliness
+        + config.w_breadth * breadth
+    )
+    r: float = r_raw
+    if demoted_edge_pct is not None and demoted_edge_pct > config.demoted_gate:
+        r *= config.demoted_penalty
+    if total > 0.0 and redundant / total > config.redundant_gate:
+        r *= config.redundant_penalty
+    return _clamp01(r)
+
+
+def median_edge_ref(outcomes: Iterable[Mapping[str, Any]]) -> float | None:
+    """The per-corpus breadth reference ``E_ref``: the median edge_count over comparable builds.
+
+    Only COMPARABLE builds count: ``head is not True`` (a head build samples ~5 rows/section, so
+    its edge_count is structurally smaller), ``ok is True``, and a non-null ``edge_count > 0``.
+    ``None`` when no comparable outcome exists — the caller then warns that breadth contributes
+    0.0 for every row rather than inventing a reference. Pure filter semantics: rows that fail the
+    comparable-build criteria are excluded, never fatal.
+    """
+    edges: list[float] = []
+    for outcome in outcomes:
+        if not isinstance(outcome, Mapping):
+            continue  # a non-row in the iterable is not a comparable build; exclusion, never a crash
+        if outcome.get("head") is True or outcome.get("ok") is not True:
+            continue
+        edge_count: object = outcome.get("edge_count")
+        if isinstance(edge_count, bool) or not isinstance(edge_count, (int, float)):
+            continue
+        if edge_count > 0:
+            edges.append(float(edge_count))
+    if not edges:
+        return None
+    return float(statistics.median(edges))
