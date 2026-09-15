@@ -109,7 +109,9 @@ Missing optional dependencies 'scikit-learn', 'sentence-transformers', required 
 Install the [qc] extra: pip install "tablassert[qc]" (uv: uv tool install "tablassert[qc]")
 ```
 
-Where the gap is knowable up front, it is reported up front rather than mid-run:
+Where the gap is knowable up front, it is reported up front rather than mid-run (one row below is the
+exception: `build-fullmap`'s `[aria2]` check is a downloader probe that picks a downloader and never
+fails, not a failure report):
 
 | Command | Checked | When |
 |---|---|---|
@@ -117,7 +119,7 @@ Where the gap is knowable up front, it is reported up front rather than mid-run:
 | `tablassert agent` | `[agent]` | After flag validation, before any model is built or any article fetched |
 | `tablassert agent --optimize` | `[agent]` + `[optimize]` | Same point; both are reported at once |
 | `tablassert distill-export` | `[distill]` | After the recorded-NDJSON input check (an empty `--distill-dir` is reported first, since that typo is the faster loop to close) and before `datasets` is imported |
-| `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader — bundled aria2c when the extra is installed, Python downloader otherwise (logged either way; never a missing-extra failure) |
+| `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader — bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example

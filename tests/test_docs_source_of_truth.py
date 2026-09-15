@@ -1998,7 +1998,12 @@ def test_llms_contains_no_retired_config_labels() -> None:
 # CHANGELOG.md is excluded on purpose: history legitimately names retired flags when it
 # retires them.
 
-RETIRED_CLI_FLAGS: frozenset[str] = frozenset({"--aria2c"})
+# Entries are literal substrings no live doc may contain. `--aria2c` is the retired long flag
+# itself; its short twin `-a` is far too generic to grep raw (prose and unrelated flags match),
+# so it is guarded in the docs/cli.md option-table CELL shape instead -- `| `-a`` for a
+# short-flag-only cell and `, `-a`` for the `| `--long`, `-a` |` pairing -- which is how a stale
+# row for the removed flag would necessarily appear.
+RETIRED_CLI_FLAGS: frozenset[str] = frozenset({"--aria2c", "| `-a`", ", `-a`"})
 
 
 def _live_doc_surfaces() -> list[Path]:
@@ -2027,11 +2032,12 @@ def test_live_docs_mention_no_retired_cli_flags(page: Path, flag: str) -> None:
 
     Args:
         page: One live documentation surface.
-        flag: One retired CLI flag that must not appear on any of them.
+        flag: One retired-flag pattern -- a flag, or the option-table cell shape of the
+            too-generic short ``-a`` -- that must not appear on any live surface.
     """
     text: str = page.read_text(encoding="utf-8")
     assert flag not in text, (
-        f"{page.relative_to(ROOT)} still mentions the retired flag {flag}; live docs are the source of truth readers copy from, "
+        f"{page.relative_to(ROOT)} still mentions the retired flag pattern {flag}; live docs are the source of truth readers copy from, "
         "and a retired flag silently misleads them into an unknown-option parse error (only CHANGELOG.md history may name it)"
     )
 

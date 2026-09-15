@@ -261,7 +261,13 @@ def test_resolve_aria2_binary_missing_export_raises_importerror(monkeypatch: pyt
 
 
 def test_download_babel_file_aria2c_missing_extra_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Opting into aria2c fails loud when the ``[aria2]`` extra is unavailable."""
+    """The aria2c helper fails loud when the ``[aria2]`` extra is unavailable.
+
+    Why: downloader selection is automatic now, so there is no flag to opt in with — this
+    fires when the RESOLVED choice is aria2c but the extra cannot be imported. The error
+    must carry the install command (and must never name the removed ``--aria2c`` flag),
+    because nothing silently takes over: the Python downloader is not retried.
+    """
 
     def _missing_extra() -> str:
         raise ImportError("No module named 'aria2c'")
@@ -279,11 +285,15 @@ def test_download_babel_file_aria2c_missing_extra_raises(tmp_path: Path, monkeyp
 
 
 def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The unsupported macOS path explains that bundled aria2c wheels are unavailable.
+    """The unsupported macOS path names the broken install and the loud failure — no takeover.
 
-    Why: with downloader selection automatic, this fires only when the ``[aria2]`` extra
-    is somehow importable-but-broken on macOS; the message must point at the Python
-    downloader, never at a flag that no longer exists.
+    Why: with downloader selection automatic, this fires only when the ``[aria2]`` extra is
+    somehow importable-but-broken on macOS. Nothing takes over there: the ImportError becomes
+    a ``BabelDownloadError`` that propagates, and the prebuilt fallback re-enters this same
+    helper with ``aria2c=True`` and dies the same way. So the message must tell the user to
+    UNINSTALL the dead extra (the only thing that actually restores the Python downloader),
+    must not claim a downloader takeover that never happens, and must never name a flag that
+    no longer exists.
     """
 
     def _missing_extra() -> str:
@@ -299,7 +309,9 @@ def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(
         download_babel_file_aria2c("f.gz", "https://example.com/f.gz", tmp_path)
     message = str(excinfo.value)
     assert "no macOS wheels" in message
-    assert "Python downloader" in message
+    assert "uninstall" in message  # the actionable macOS fix: drop the extra that cannot work
+    assert "Python downloader" in message  # named as what uninstalling restores, not as a takeover
+    assert "takes over" not in message  # the error is loud; no downloader silently replaces it
     assert "--aria2c" not in message
 
 
@@ -455,14 +467,50 @@ class _RecordingDownloadLogger:
         return
 
 
-def test_build_fullmap_without_the_aria2_extra_selects_the_python_downloader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """An absent ``[aria2]`` extra automatically selects the Python downloader — no exit 2.
+@pytest.mark.parametrize(
+    ("absent", "expected_aria2c", "log_line", "stderr_line"),
+    [
+        (
+            (),
+            True,
+            "the [aria2] extra is installed; using the bundled aria2c for downloads",
+            "tablassert build-fullmap: using the bundled aria2c from the [aria2] extra for downloads",
+        ),
+        (
+            ("aria2",),
+            False,
+            "the [aria2] extra is not installed; using the Python downloader",
+            "tablassert build-fullmap: the [aria2] extra is not installed; using the Python downloader",
+        ),
+    ],
+    ids=["aria2-extra-installed", "aria2-extra-absent"],
+)
+def test_build_fullmap_logs_and_announces_the_resolved_downloader_choice_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    absent: tuple[str, ...],
+    expected_aria2c: bool,
+    log_line: str,
+    stderr_line: str,
+) -> None:
+    """BOTH resolved downloader choices are logged and announced exactly once, first — no exit 2.
 
-    Why: the removed ``--aria2c`` flag used to exit 2 when the extra was missing. With
-    auto-selection the command must simply proceed: the prebuilt attempt gets
-    ``aria2c=False`` and actually downloads through ``download_babel_file`` (the Python
-    downloader), with exactly ONE info line naming the choice so users can tell which
-    downloader ran without a flag to tell them.
+    Why: the removed ``--aria2c`` flag used to exit 2 when the extra was missing, and it was
+    also the user's only signal about which downloader would run. With auto-selection the
+    command must simply proceed, so the resolved choice is the ONLY such signal left and the
+    spec requires it either way:
+
+    - the download dispatch must follow the choice end-to-end (the rejected downloader must
+      not run at all), for the prebuilt archive as well as the ``aria2c`` keyword threading;
+    - exactly ONE ``download_logger.info`` line names the choice, and it fires FIRST — before
+      any download. The filter keys on ``"[aria2] extra"`` because the positive wording ends
+      "…for downloads" and contains no "downloader" substring, so a ``"downloader" in m``
+      filter would silently pass with zero matches on the installed-extra side;
+    - the same choice is ALSO printed to stderr. The log record alone is invisible in a
+      normal terminal run: loguru's console sink exists only inside ``run()``, which starts
+      after this line, and file logging needs the optional ``[log]`` extra. stderr follows
+      the reuse short-circuit's precedent in the same command.
     """
     output: Path = tmp_path / "data" / "fullmap.redb"
     calls: list[tuple[Any, ...]] = []
@@ -472,14 +520,18 @@ def test_build_fullmap_without_the_aria2_extra_selects_the_python_downloader(tmp
         calls.append((stages, fn, arg, kwargs))
         fn(arg, PipelineProgress(total_stages=stages), **kwargs)  # run the real fetch end-to-end
 
-    def _aria2c_must_not_run(*args: Any, **kwargs: Any) -> Path:
-        raise AssertionError("aria2c must not run when the [aria2] extra is absent")
+    def _rejected_downloader_must_not_run(*args: Any, **kwargs: Any) -> Path:
+        raise AssertionError(f"the downloader the resolved choice rejected must not run (aria2c={expected_aria2c})")
 
     monkeypatch.setattr(cli, "run", _fake_run)
     monkeypatch.setattr(cli, "download_logger", recorder)
-    monkeypatch.setattr(extras, "missing", lambda extra: ("aria2",))
-    monkeypatch.setattr(cli, "download_babel_file", _write_archive)
-    monkeypatch.setattr(cli, "download_babel_file_aria2c", _aria2c_must_not_run)
+    monkeypatch.setattr(extras, "missing", lambda extra: absent)
+    if expected_aria2c:
+        monkeypatch.setattr(cli, "download_babel_file_aria2c", _write_archive)
+        monkeypatch.setattr(cli, "download_babel_file", _rejected_downloader_must_not_run)
+    else:
+        monkeypatch.setattr(cli, "download_babel_file", _write_archive)
+        monkeypatch.setattr(cli, "download_babel_file_aria2c", _rejected_downloader_must_not_run)
     monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: None)
 
     def _fake_extract(archive: Path, out: Path, on_phase: object, taxon_allowlist: object = None) -> None:
@@ -492,24 +544,26 @@ def test_build_fullmap_without_the_aria2_extra_selects_the_python_downloader(tmp
 
     assert len(calls) == 1
     assert calls[0][1] is cli.fetch_prebuilt_fullmap
-    assert calls[0][3]["aria2c"] is False
-    assert output.read_bytes() == b"PRIMARY"  # the Python-downloader prebuilt path completed
-    # Exactly ONE line names the downloader choice (later infos are fetch bookkeeping), and
-    # it fires FIRST — the decision is logged before any download runs.
-    choice_lines: list[str] = [m for m in recorder.infos if "downloader" in m]
-    assert choice_lines == ["the [aria2] extra is not installed; using the Python downloader"]
+    assert calls[0][3]["aria2c"] is expected_aria2c
+    assert output.read_bytes() == b"PRIMARY"  # the chosen downloader's prebuilt path completed
+    choice_lines: list[str] = [m for m in recorder.infos if "[aria2] extra" in m]
+    assert choice_lines == [log_line]
     assert recorder.infos[0] == choice_lines[0]
+    err: str = capsys.readouterr().err
+    assert stderr_line in err  # visible in a plain terminal, without the [log] extra
+    assert [line for line in err.splitlines() if "[aria2] extra" in line] == [stderr_line]  # announced once
 
 
 def test_build_fullmap_existing_db_neither_probes_nor_logs_the_downloader_choice(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A matching existing DB short-circuits without probing ``[aria2]`` or logging a choice.
+    """A matching existing DB short-circuits without probing ``[aria2]``, logging, or announcing.
 
-    Why: the reuse path downloads nothing, so probing the extra or naming a downloader
-    would be noise on a no-op command. This also pins the ORDER — the probe sits AFTER the
-    short-circuit — preserving the removed flag's "a no-op run costs nothing" property
-    under auto-selection.
+    Why: the reuse path downloads nothing, so probing the extra or naming a downloader would
+    be noise on a no-op command — in the structured log AND on stderr, where the choice is
+    announced for interactive runs. This also pins the ORDER: both the probe and the
+    announcement sit AFTER the short-circuit, preserving the removed flag's "a no-op run costs
+    nothing" property under auto-selection.
     """
     output: Path = tmp_path / "fullmap.redb"
     output.write_bytes(b"existing-db")
@@ -527,7 +581,15 @@ def test_build_fullmap_existing_db_neither_probes_nor_logs_the_downloader_choice
 
     cli.build_fullmap(output=output)  # must not raise
     assert recorder.infos == []
-    assert "already present" in capsys.readouterr().err
+    err: str = capsys.readouterr().err
+    assert "already present" in err
+    # The stderr announcement lives in the same resolved-choice block as the log line, so a
+    # no-op run must not print it either: the reuse notice is the ONLY thing on stderr.
+    assert "[aria2]" not in err
+    assert "downloader" not in err
+    assert [line for line in err.splitlines() if line.startswith("tablassert build-fullmap:")] == [
+        f"tablassert build-fullmap: fullmap already present at {output}; skipping (use --force to rebuild)."
+    ]
 
 
 def test_build_fullmap_aria2c_flag_is_gone() -> None:
@@ -733,8 +795,15 @@ def test_build_fullmap_pipeline_reports_download_progress(tmp_path: Path, monkey
     assert built == [(output, [cache / "classes" / "c.gz"], [cache / "synonyms" / "s.gz"])]
 
 
-def test_build_fullmap_pipeline_uses_aria2c_when_opted_in(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The aria2c flag switches both class and synonym loops to the aria2 helper and simple progress text."""
+def test_build_fullmap_pipeline_uses_aria2c_when_the_resolved_choice_is_aria2c(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``aria2c=True`` switches BOTH class and synonym loops to the aria2 helper and simple progress text.
+
+    Why: that keyword carries the AUTO-RESOLVED ``[aria2]`` state — there is no flag to opt in
+    with any more — so it must reach every per-file download dispatch, not just the first loop.
+    The Python downloader must not run at all on this path (a silent rescue would hide a broken
+    aria2 install), and progress stays the file-level ``aria2c downloading`` detail with one
+    advance per discovered and per downloaded file.
+    """
 
     def _fake_babel_urls(version: str, endpoints: tuple[str, ...], pattern: object) -> list[tuple[str, str]]:
         if endpoints == cli.BABEL_CLASS_ENDPOINTS:

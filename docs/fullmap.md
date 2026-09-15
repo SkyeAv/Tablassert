@@ -10,7 +10,7 @@ built from NCATS Translator BABEL export files. It comprises a primary file hold
 CURIEs, and schema metadata, plus hash-sharded RECORDS files (`fullmap.s0.redb` … `fullmap.s15.redb`
 by default) holding the term→postings index.
 
-Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). When the optional `[aria2]` extra is installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), the download stage uses the bundled aria2c binary automatically; without it, Tablassert's Python downloader is used.
+Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). When the optional `[aria2]` extra is installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), both download stages — the prebuilt `fullmap.tar.zst` archive and, for a from-scratch build, the BABEL class and synonym files — use the bundled aria2c binary automatically; without it, Tablassert's Python downloader is used.
 
 ## Build Command
 
