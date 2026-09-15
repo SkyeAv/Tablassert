@@ -1,7 +1,8 @@
 """Optional-extra registry: which extra ships which package, and how to install it.
 
-Tablassert's base install builds knowledge graphs from CSV/TSV sources. QC, the
-autonomous agent, and GEPA prompt optimization are OPTIONAL extras, so a user can
+Tablassert's base install exposes the Python API for building knowledge graphs from
+CSV/TSV sources. The command-line interface, QC, the autonomous agent, and GEPA prompt
+optimization are OPTIONAL extras, so a user can
 reach a code path whose dependencies were never installed. When that happens the
 failure must name the extra and the exact install command — never a bare
 ``ModuleNotFoundError: No module named 'sklearn'`` raised hours into a build.
@@ -31,6 +32,7 @@ from tablassert.errors import MissingExtraError, QcRuntimeMissingError, describe
 # ``polars``, so no find_spec probe can tell it apart from the stock wheel; its hint is
 # emitted from the polars import-failure path instead (see :func:`actionable_import_error`).
 EXTRA_PACKAGES: Final[dict[str, dict[str, str]]] = {
+    "cli": {"cyclopts": "cyclopts", "rich": "rich"},
     "aria2": {"aria2c": "aria2"},
     "qc": {"sklearn": "scikit-learn", "sentence_transformers": "sentence-transformers"},
     "agent": {"smolagents": "smolagents", "litellm": "litellm"},
@@ -44,6 +46,7 @@ EXTRA_FOR_MODULE: Final[dict[str, str]] = {module: extra for extra, packages in 
 
 # What each extra unlocks, phrased to follow "required by ...".
 FEATURES: Final[dict[str, str]] = {
+    "cli": "the `tablassert` command-line interface",
     "rt": "the runtime-compatible polars build",
     "aria2": "the bundled aria2c downloader (used automatically by build-fullmap when installed)",
     "qc": "the QC audit",
@@ -74,7 +77,7 @@ def missing(extra: str) -> tuple[str, ...]:
     one costs nothing: safe to call on every invocation of a command.
 
     Args:
-        extra: A detectable extra (``qc``, ``agent``, ``optimize`` or ``log``).
+        extra: A detectable extra (``cli``, ``qc``, ``agent``, ``optimize``, ``distill`` or ``log``).
 
     Returns:
         Distribution names that could not be found, in declaration order; empty when
@@ -94,12 +97,12 @@ def is_installed(extra: str) -> bool:
 def require(extra: str, *, required_by: str | None = None) -> None:
     """Fail loudly unless ``extra`` is fully installed.
 
-    Preflight guard: call it at the point the user's intent is known (a ``--qc`` flag, the
-    ``agent`` command) rather than where the import happens, so the error arrives before
-    the work instead of after it.
+    Preflight guard: call it at the point the user's intent is known (the ``tablassert``
+    command, a ``--qc`` flag, the ``agent`` command) rather than where the import happens,
+    so the error arrives before the work instead of after it.
 
     Args:
-        extra: A detectable extra (``qc``, ``agent``, ``optimize`` or ``log``).
+        extra: A detectable extra (``cli``, ``qc``, ``agent``, ``optimize``, ``distill`` or ``log``).
         required_by: Feature name for the message, phrased to follow "required by".
             Defaults to the extra's entry in :data:`FEATURES`.
 

@@ -25,7 +25,7 @@ import cyclopts
 
 from tablassert import extras, net
 from tablassert._lazy import LazyModule
-from tablassert.errors import BabelDownloadError, GraphValidationError, SectionValidationError
+from tablassert.errors import BabelDownloadError, GraphValidationError, SectionValidationError, flatten_pydantic_error
 from tablassert.log import cat
 
 if TYPE_CHECKING:
@@ -177,7 +177,6 @@ def _load_graph(configuration_file: Path) -> Graph:
     """
     from tablassert.ingests import from_yaml
     from tablassert.models import Graph
-    from tablassert.progress import flatten_pydantic_error
 
     raw: object = from_yaml(configuration_file)
     try:
@@ -307,7 +306,7 @@ def build_graph_pipeline(
     """
     from tablassert.fullmap import fullmap_db_path
     from tablassert.lib import Tcode, compile_graph, compile_subgraph
-    from tablassert.progress import flatten_pydantic_error, format_section_compact
+    from tablassert.progress import format_section_compact
     from tablassert.runcache import RunCache, plan_run
 
     # Stage 1/6: load tables.
@@ -512,7 +511,6 @@ def validate_pipeline(table_configuration_file: Path, progress: PipelineProgress
     """
     from tablassert.ingests import from_yaml, to_sections
     from tablassert.lib import Tcode
-    from tablassert.progress import flatten_pydantic_error
     from tablassert.utils import STORE, mkhash
 
     # Stage 1/3: load tables.
@@ -557,7 +555,6 @@ def validate_graph_pipeline(configuration_file: Path, progress: PipelineProgress
     from tablassert.ingests import from_yaml, to_sections
     from tablassert.lib import Tcode
     from tablassert.models import Graph
-    from tablassert.progress import flatten_pydantic_error
     from tablassert.utils import STORE, mkhash
 
     # Stage 1/2: validate the graph config.

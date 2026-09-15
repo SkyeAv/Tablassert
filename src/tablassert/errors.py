@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from pydantic import ValidationError  # pyright: ignore[reportMissingImports]
 
 DOCS_URL: str = "https://tablassert.readthedocs.io/errors/"
 
@@ -252,6 +255,25 @@ class QcRuntimeMissingError(TablassertError):
     def __init__(self, missing: Sequence[str] = ()) -> None:
         super().__init__(format_missing_extra("qc", describe_missing(missing, "the QC audit")), code="qc-runtime-missing")
         self.missing: tuple[str, ...] = tuple(missing)
+
+
+def flatten_pydantic_error(e: ValidationError) -> str:
+    """Flatten a pydantic ``ValidationError`` into a single-line, ``;``-joined summary.
+
+    Each fragment is ``"<loc>: <msg> [<kind>]"``. ``<kind>`` is the stable
+    Tablassert error code when the error is coded (recovered from
+    ``ctx["error"].code``), else the pydantic ``type``. Coded messages already
+    embed their docs URL via ``_Coded.__str__``.
+    """
+    parts: list[str] = []
+    for err in e.errors():
+        loc: str = ".".join(str(p) for p in err.get("loc", ())) or "<root>"
+        msg: str = str(err.get("msg", "")).replace("\n", " ").replace("|", "/").strip()
+        ctx: object = err.get("ctx") or {}
+        code: str | None = getattr(ctx.get("error"), "code", None) if isinstance(ctx, dict) else None
+        kind: str = code if code is not None else str(err.get("type", ""))
+        parts.append(f"{loc}: {msg} [{kind}]")
+    return "; ".join(parts)
 
 
 class GraphValidationError(TablassertError):

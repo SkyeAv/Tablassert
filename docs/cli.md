@@ -1,6 +1,7 @@
 # CLI Reference
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
+requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
 exposes **seven subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.

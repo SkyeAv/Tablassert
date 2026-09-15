@@ -8,9 +8,9 @@ import pytest
 from pydantic import ValidationError
 
 from tablassert.enums import Comparisons, EncodingMethods, Repositories
-from tablassert.errors import DOCS_URL
+from tablassert.errors import DOCS_URL, flatten_pydantic_error
 from tablassert.models import Encoding, Provenance, Regex, Reindex, Text
-from tablassert.progress import PipelineProgress, flatten_pydantic_error
+from tablassert.progress import PipelineProgress
 
 
 def _section_task(p: PipelineProgress) -> Any:

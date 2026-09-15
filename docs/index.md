@@ -20,7 +20,7 @@ Use the [CLI](cli.md) or the autonomous [Agent](agent.md).
 ## Quick Start
 
 ```bash
-pip install tablassert          # or: uv tool install tablassert
+pip install "tablassert[cli]"   # or: uv tool install "tablassert[cli]"
 tablassert build-kg config.yaml
 ```
 

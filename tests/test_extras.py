@@ -41,7 +41,7 @@ def test_registry_covers_every_declared_extra() -> None:
     assert set(extras.EXTRA_PACKAGES) == declared - {"rt"}
 
 
-@pytest.mark.parametrize("extra", ["qc", "agent", "optimize"])
+@pytest.mark.parametrize("extra", ["cli", "qc", "agent", "optimize"])
 def test_registered_packages_are_actually_shipped_by_their_extra(extra: str) -> None:
     """Each import name maps to a distribution that its extra really installs.
 
@@ -60,10 +60,52 @@ def test_module_lookup_is_derived_and_unambiguous() -> None:
     Why: the two tables must never disagree about which extra owns a package — pointing a user
     at ``[agent]`` for dspy sends someone who already installed it in a circle.
     """
+    assert extras.EXTRA_FOR_MODULE["cyclopts"] == "cli"
+    assert extras.EXTRA_FOR_MODULE["rich"] == "cli"
     assert extras.EXTRA_FOR_MODULE["dspy"] == "optimize"
     assert extras.EXTRA_FOR_MODULE["smolagents"] == "agent"
     assert extras.EXTRA_FOR_MODULE["sklearn"] == "qc"
     assert len(extras.EXTRA_FOR_MODULE) == sum(len(packages) for packages in extras.EXTRA_PACKAGES.values())
+
+
+def test_cli_entrypoint_preflights_the_extra_before_importing_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The installed console script explains how to enable the otherwise-optional CLI runtime."""
+    import sys
+
+    from tablassert import cli_entry
+
+    calls: list[str] = []
+
+    def reject(extra: str, *, required_by: str | None = None) -> None:
+        calls.append(extra)
+        raise MissingExtraError(extra, "CLI runtime is missing.")
+
+    monkeypatch.delitem(sys.modules, "tablassert.cli", raising=False)
+    monkeypatch.setattr(cli_entry.extras, "require", reject)
+    with pytest.raises(MissingExtraError, match="tablassert\\[cli\\]"):
+        cli_entry.main()
+    assert calls == ["cli"]
+    assert "tablassert.cli" not in sys.modules
+
+
+def test_cli_entrypoint_runs_the_app_once_the_extra_is_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A satisfied preflight hands control to the live Cyclopts application."""
+    import sys
+
+    from tablassert import cli_entry
+
+    calls: list[str] = []
+
+    def fake_app() -> None:
+        calls.append("app")
+
+    cli_module = type(sys)("tablassert.cli")
+    cli_module.APP = fake_app
+    monkeypatch.delitem(sys.modules, "tablassert.cli", raising=False)
+    monkeypatch.setitem(sys.modules, "tablassert.cli", cli_module)
+    monkeypatch.setattr(cli_entry.extras, "require", lambda extra, *, required_by=None: None)
+    cli_entry.main()
+    assert calls == ["app"]
 
 
 def test_missing_reports_distribution_names_not_import_names(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,7 +8,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 
 ## Quickstart
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
-- [Installation Guide](docs/installation.md): local/dev/tool installation paths. Optional extras: `rt` (runtime-compatible Polars), `aria2` (bundled aria2c downloader), `qc` (quality-control runtime), `agent` (autonomous agent), `optimize` (GEPA prompt optimization), `distill` (distillation dataset export), and `log` (loguru-backed logging).
+- [Installation Guide](docs/installation.md): local/dev/tool installation paths. Optional extras: `cli` (Cyclopts and Rich command-line runtime), `rt` (runtime-compatible Polars), `aria2` (bundled aria2c downloader), `qc` (quality-control runtime), `agent` (autonomous agent), `optimize` (GEPA prompt optimization), `distill` (distillation dataset export), and `log` (loguru-backed logging).
 - [CLI Reference](docs/cli.md): seven commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
@@ -31,7 +31,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## Contributor Development
 - [Contributing Guide](CONTRIBUTING.md): setup, style conventions, checks, and PR expectations.
 - [Development](docs/development.md): docs-site contributor setup and the local `uv run mkdocs build --strict` docs gate.
-- [Project Metadata](pyproject.toml): dependencies, tooling config, and CLI entrypoint. Optional extras: `rt`, `aria2`, `qc`, `agent`, `optimize`, `distill`, and `log`.
+- [Project Metadata](pyproject.toml): dependencies, tooling config, and CLI entrypoint. Optional extras: `cli`, `rt`, `aria2`, `qc`, `agent`, `optimize`, `distill`, and `log`.
 - [Tests](tests/): pytest coverage and fixtures.
 - [MkDocs Configuration](mkdocs.yml): docs navigation and published pages.
 - [GitHub Workflows](.github/workflows/): `ci.yml` runs lint, format, type, test, and rust checks; `docs.yml` builds and deploys MkDocs; `pipy.yml` checks the project version, builds sdist and wheel artifacts, and publishes to PyPI; `tag-version.yml` tags changed project versions.
@@ -40,6 +40,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Agent Module](src/tablassert/agent.py): article fetching, config derivation, auditing, and improvement orchestration.
 - [Biolink Module](src/tablassert/biolink.py): Biolink-derived vocabularies, edge fields, and KGX validation.
 - [CLI Module](src/tablassert/cli.py): command implementations and build pipeline stages.
+- [CLI Entry Point](src/tablassert/cli_entry.py): console-script launcher and `[cli]` runtime preflight.
 - [Coercion Helpers](src/tablassert/coerce.py): annotation and value coercion helpers.
 - [Distillation Module](src/tablassert/distill.py): ChatML distillation record serialization.
 - [Distill Reward Module](src/tablassert/distill_reward.py): reward calculation, selection policies, record/outcome joins, outcome flattening, and training-row schema normalization alongside outcome assembly and config-provenance checks.
