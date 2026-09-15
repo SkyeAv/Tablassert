@@ -37,10 +37,25 @@ use common::{
 };
 
 /// The pinned canonical output: `term|curie,curie` lines, sorted by term, CURIEs
-/// sorted within each term.  Regenerate with:
-///   cargo test --test build_golden regenerate_golden -- --ignored --nocapture
-const GOLDEN: &str = r#"alias disease|MONDO:1
-aliasdisease|MONDO:1
+/// sorted within each term.  Every key here is a `nlp::normalize_l1` (level-one)
+/// or `level_two` form of a raw fixture input, so the pin is ALSO the build-side
+/// half of the query/build lock-step contract: if `emit_term`'s key derivation
+/// drifts from the Python query side (`nlp.level_one` -> `rs.normalize_terms`),
+/// this file diverges and fullmap lookups would silently miss.
+///
+/// REGENERATE ONLY DELIBERATELY, after an intentional and reviewed output change
+/// (a schema bump, a normalization change), never to make a red build green:
+///   cargo test --manifest-path rust/Cargo.toml --test build_golden regenerate_golden -- --ignored --nocapture
+/// then diff the printed block against this constant and justify EVERY changed
+/// line.  US-003 (`tablassert.fullmap.v6`, level-one keys via `normalize_l1`)
+/// renamed exactly 8 of these keys — the fixture's multi-word and stemmable
+/// names ("alias disease" -> "alia diseas", "Quoted Name" -> "name quot",
+/// "shared" -> "share", "realname" -> "realnam", "nullname" -> "nullnam",
+/// "equivfree" -> "equivfre", plus the two `\W+`-stripped level-two twins) —
+/// with CURIE attribution byte-identical; each was re-derived independently
+/// through `rs.normalize_terms` rather than copied from the regenerator.
+const GOLDEN: &str = r#"alia diseas|MONDO:1
+aliadiseas|MONDO:1
 alpha|HGNC:1,HGNC:10
 alpha gene|HGNC:1
 alphagene|HGNC:1
@@ -50,7 +65,7 @@ caf|HGNC:2
 café|HGNC:2
 doid999|MONDO:1
 doid:999|MONDO:1
-equivfree|HGNC:9
+equivfre|HGNC:9
 hgnc1|HGNC:1
 hgnc10|HGNC:10
 hgnc2|HGNC:2
@@ -78,17 +93,17 @@ mondo:1|MONDO:1
 mondo:2|MONDO:2
 mondo:3|MONDO:3
 multi|HGNC:10,MONDO:3
+name quot|HGNC:3
+namequot|HGNC:3
 nave|HGNC:2
 naïve|HGNC:2
 ncbigene100|HGNC:1
 ncbigene101|HGNC:1
 ncbigene:100|HGNC:1
 ncbigene:101|HGNC:1
-nullname|HGNC:7
-quoted name|HGNC:3
-quotedname|HGNC:3
-realname|HGNC:4
-shared|HGNC:6,MONDO:2
+nullnam|HGNC:7
+realnam|HGNC:4
+share|HGNC:6,MONDO:2
 t|HGNC:3
 été|HGNC:3
 "#;
@@ -248,7 +263,7 @@ fn dimension_tables_are_complete_and_consistent() {
 }
 
 // ---------------------------------------------------------------------------
-// (e) SCHEMA PIN — META advertises the v5 schema, build_id, and 16 shards.
+// (e) SCHEMA PIN — META advertises the v6 schema, build_id, and 16 shards.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -548,11 +563,15 @@ fn class_row_without_equivalents_builds() {
 
     let map = term_curie_map(&output);
     // "equivfree" and the CURIE forms resolve; no equivalent-derived terms exist.
-    assert_eq!(map["equivfree"], vec!["HGNC:9".to_string()]);
+    // The name key is its `nlp::normalize_l1` form (Porter2 strips the final
+    // "e": "equivfree" -> "equivfre"), and level-two of that is identical, so
+    // there is still exactly one name key.  The CURIE keys are unchanged: a
+    // token carrying a digit or punctuation is never stemmed.
+    assert_eq!(map["equivfre"], vec!["HGNC:9".to_string()]);
     assert_eq!(map["hgnc:9"], vec!["HGNC:9".to_string()]);
     assert!(
         map.keys()
-            .all(|t| ["equivfree", "hgnc:9", "hgnc9"].contains(&t.as_str())),
+            .all(|t| ["equivfre", "hgnc:9", "hgnc9"].contains(&t.as_str())),
         "unexpected extra terms: {:?}",
         map.keys().collect::<Vec<_>>()
     );

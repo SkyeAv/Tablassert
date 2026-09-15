@@ -383,10 +383,11 @@ fn outdated_primary_copy(fixture_primary: &Path) -> PathBuf {
     outdated
 }
 
-/// WHY: prebuilt archives outlive schema bumps; extracting a v1..v4 bundle
-/// would land a DB that every lookup immediately rejects.  The error must
-/// carry the wrapped `validate_schema` demand to rebuild, and nothing may
-/// land.
+/// WHY: prebuilt archives outlive schema bumps; extracting a v1..v5 bundle
+/// would land a DB that every lookup immediately rejects (v5 is the closest
+/// case: its keys predate `nlp::normalize_l1`, so a normalized query can never
+/// hit them).  The error must carry the wrapped `validate_schema` demand to
+/// rebuild, and nothing may land.
 #[test]
 fn outdated_schema_is_rejected_and_demands_rebuild() {
     let fixture_dir = tempfile::tempdir().unwrap();

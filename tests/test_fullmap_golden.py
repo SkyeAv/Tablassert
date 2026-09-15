@@ -67,9 +67,20 @@ CLASSES: list[dict[str, Any]] = [class_row("HGNC:1", ["NCBIGene:100", "NCBIGene:
 
 # Every normalized term the fixture indexes (the l1/l2 forms), in sorted order.
 # Matches the terms enumerated by the Rust golden dump.
+#
+# REGENERATE ONLY DELIBERATELY, after a reviewed change to the build's key
+# derivation or to the fixture -- never to make a red build green.  US-003
+# (`tablassert.fullmap.v6`: level-one keys via `nlp::normalize_l1`) renamed
+# exactly 8 of these keys -- "alias disease" -> "alia diseas" (+ its level-two
+# twin), "quoted name" -> "name quot" (+ twin), "equivfree" -> "equivfre",
+# "nullname" -> "nullnam", "realname" -> "realnam", "shared" -> "share" -- with
+# every CURIE attribution and the row count unchanged.  Each new key was
+# re-derived independently from the RAW fixture spellings through
+# `rs.normalize_terms` (the same call the Python query side makes) and
+# cross-checked against the regenerated Rust golden, not copied from a build.
 PROBES: list[str] = [
-    "alias disease",
-    "aliasdisease",
+    "alia diseas",
+    "aliadiseas",
     "alpha",
     "alpha gene",
     "alphagene",
@@ -79,7 +90,7 @@ PROBES: list[str] = [
     "café",
     "doid999",
     "doid:999",
-    "equivfree",
+    "equivfre",
     "hgnc1",
     "hgnc10",
     "hgnc2",
@@ -107,25 +118,25 @@ PROBES: list[str] = [
     "mondo:2",
     "mondo:3",
     "multi",
+    "name quot",
+    "namequot",
     "nave",
     "naïve",
     "ncbigene100",
     "ncbigene101",
     "ncbigene:100",
     "ncbigene:101",
-    "nullname",
-    "quoted name",
-    "quotedname",
-    "realname",
-    "shared",
+    "nullnam",
+    "realnam",
+    "share",
     "t",
     "été",
 ]
 
 # The pinned hydrated lookup output (SOURCE_VERSION asserted separately).
 GOLDEN_ROWS: list[dict[str, object]] = [
-    {"term": "alias disease", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
-    {"term": "aliasdisease", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
+    {"term": "alia diseas", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
+    {"term": "aliadiseas", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "alpha", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "alpha", "CURIE": "HGNC:10", "PREFERRED_NAME": "Multi A", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "alpha gene", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
@@ -136,7 +147,7 @@ GOLDEN_ROWS: list[dict[str, object]] = [
     {"term": "café", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "doid999", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "doid:999", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
-    {"term": "equivfree", "CURIE": "HGNC:9", "PREFERRED_NAME": "Equiv Free", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "equivfre", "CURIE": "HGNC:9", "PREFERRED_NAME": "Equiv Free", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "hgnc1", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "hgnc10", "CURIE": "HGNC:10", "PREFERRED_NAME": "Multi A", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "hgnc2", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
@@ -165,18 +176,18 @@ GOLDEN_ROWS: list[dict[str, object]] = [
     {"term": "mondo:3", "CURIE": "MONDO:3", "PREFERRED_NAME": "Multi B", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "multi", "CURIE": "HGNC:10", "PREFERRED_NAME": "Multi A", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "multi", "CURIE": "MONDO:3", "PREFERRED_NAME": "Multi B", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
+    {"term": "name quot", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "namequot", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "nave", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "naïve", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene100", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene101", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene:100", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene:101", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "nullname", "CURIE": "HGNC:7", "PREFERRED_NAME": "HGNC:7", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "quoted name", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "quotedname", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "realname", "CURIE": "HGNC:4", "PREFERRED_NAME": "Dead", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "shared", "CURIE": "HGNC:6", "PREFERRED_NAME": "Shared Hit", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "shared", "CURIE": "MONDO:2", "PREFERRED_NAME": "Shared Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
+    {"term": "nullnam", "CURIE": "HGNC:7", "PREFERRED_NAME": "HGNC:7", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "realnam", "CURIE": "HGNC:4", "PREFERRED_NAME": "Dead", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "share", "CURIE": "HGNC:6", "PREFERRED_NAME": "Shared Hit", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "share", "CURIE": "MONDO:2", "PREFERRED_NAME": "Shared Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "t", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "été", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
 ]
@@ -305,8 +316,8 @@ def test_resolve_batch_matches_sequential_resolve(golden_db: Path) -> None:
         {
             "subject": ["alpha gene", "not-a-real-term"],
             "subject_two": ["alpha gene", "not-a-real-term"],
-            "object": ["equivfree", "equivfree"],
-            "object_two": ["equivfree", "equivfree"],
+            "object": ["equivfre", "equivfre"],
+            "object_two": ["equivfre", "equivfre"],
         }
     ).lazy()
 

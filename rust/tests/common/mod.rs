@@ -29,8 +29,11 @@ pub const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
 
 // Only asserted by `build_golden`'s schema pin; the allow keeps this shared
 // module compiling under `deny(dead_code)` for targets that never read it.
+// MUST equal `SCHEMA_VERSION` in `src/fullmap.rs` (v6 = level-one keys derived
+// through `nlp::normalize_l1`); `build_golden`'s schema pin compares the built
+// META tag against this literal, so a bump on one side only fails loudly there.
 #[allow(dead_code)]
-pub const SCHEMA_VERSION: &str = "tablassert.fullmap.v5";
+pub const SCHEMA_VERSION: &str = "tablassert.fullmap.v6";
 pub const SHARD_COUNT: usize = 16;
 
 /// bincode layout MUST match `CurieRow` in `src/fullmap.rs` (field order + types).

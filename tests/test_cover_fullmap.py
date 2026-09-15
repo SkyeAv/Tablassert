@@ -112,15 +112,25 @@ def test_taxon_allowlist_and_inchikey_paths(tmp_path: Path) -> None:
     )
     output = tmp_path / "fullmap.redb"
     rs.build_fullmap_db(output, [], [synonyms], taxon_allowlist=[9606])
-    assert rs.lookup_fullmap_terms(output, ["human gene"])[0]["CURIE"] == "HGNC:1"
-    assert rs.lookup_fullmap_terms(output, ["mouse gene"]) == []
-    assert rs.lookup_fullmap_terms(output, ["other gene"]) == []
+    # Probes are the KEYS the build stores, i.e. the `nlp::normalize_l1` forms of
+    # the synonym `names` above (US-003): a lookup is an exact key match, so the
+    # raw spellings no longer resolve.  Derived with the real normalizer
+    # (`rs.normalize_terms`), not hand-stemmed: "human gene" -> "gene human",
+    # "mouse gene" -> "gene mous", "other gene" -> "gene other",
+    # "untaxed chemical" -> "chemic untax", "sentinel chemical" ->
+    # "chemic sentinel", "malformed chemical" -> "chemic malform",
+    # "multi gene" -> "gene multi"; "other taxon", "multi-category taxon",
+    # "case-insensitive gene", "abc-def" and "inchikey:abc-def" are unchanged
+    # (hyphenated / digit-bearing tokens are never stemmed).
+    assert rs.lookup_fullmap_terms(output, ["gene human"])[0]["CURIE"] == "HGNC:1"
+    assert rs.lookup_fullmap_terms(output, ["gene mous"]) == []
+    assert rs.lookup_fullmap_terms(output, ["gene other"]) == []
     assert rs.lookup_fullmap_terms(output, ["other taxon"])[0]["CURIE"] == "NCBITaxon:999999"
     assert rs.lookup_fullmap_terms(output, ["multi-category taxon"])[0]["CURIE"] == "NCBITaxon:888888"
-    assert rs.lookup_fullmap_terms(output, ["untaxed chemical"])[0]["CURIE"] == "CHEBI:1"
-    assert rs.lookup_fullmap_terms(output, ["sentinel chemical"])[0]["CURIE"] == "CHEBI:2"
-    assert rs.lookup_fullmap_terms(output, ["malformed chemical"])[0]["CURIE"] == "CHEBI:3"
-    assert rs.lookup_fullmap_terms(output, ["multi gene"])[0]["CURIE"] == "HGNC:4"
+    assert rs.lookup_fullmap_terms(output, ["chemic untax"])[0]["CURIE"] == "CHEBI:1"
+    assert rs.lookup_fullmap_terms(output, ["chemic sentinel"])[0]["CURIE"] == "CHEBI:2"
+    assert rs.lookup_fullmap_terms(output, ["chemic malform"])[0]["CURIE"] == "CHEBI:3"
+    assert rs.lookup_fullmap_terms(output, ["gene multi"])[0]["CURIE"] == "HGNC:4"
     assert rs.lookup_fullmap_terms(output, ["case-insensitive gene"])[0]["CURIE"] == "HGNC:5"
     assert rs.lookup_fullmap_terms(output, ["abc-def"])[0]["CURIE"] == "INCHIKEY:ABC-DEF"
     assert rs.lookup_fullmap_terms(output, ["inchikey:abc-def"])[0]["CURIE"] == "INCHIKEY:ABC-DEF"
