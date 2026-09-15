@@ -1506,8 +1506,7 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p>Get a working <code>tablassert</code> install, then pick the <code>rt</code> / <code>aria2</code> / <code>qc</code> / <code>agent</code> / <code>optimize</code> / <code>distill</code> / <code>log</code> extras that match how you will
-use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging).</p>
+<p>Install Tablassert's Python API, then add the <code>[cli]</code> extra to use the <code>tablassert</code> command and any of the <code>rt</code> / <code>aria2</code> / <code>qc</code> / <code>agent</code> / <code>optimize</code> / <code>distill</code> / <code>log</code> extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging).</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Python 3.11 or higher</strong>: Tablassert requires Python 3.11+ for compatibility with modern tooling</li>
@@ -1528,8 +1527,8 @@ use it (runtime compatibility, accelerated fullmap downloads, auditing mappings,
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/SkyeAv/Tablassert.git
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nb">cd</span><span class="w"> </span>Tablassert
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># Install development dependencies and optional QC runtime</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>log
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># Install development dependencies, CLI runtime, and optional QC/logging runtimes</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w"> </span>--extra<span class="w"> </span>cli<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>log
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Build the editable Rust extension into the uv environment</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--manifest-path<span class="w"> </span>rust/Cargo.toml
@@ -1539,13 +1538,15 @@ use it (runtime compatibility, accelerated fullmap downloads, auditing mappings,
 </code></pre></div>
 <p>This creates a virtual environment in <code>.venv/</code>, installs the development dependencies, and builds the local PyO3 extension. The <code>tablassert</code> command is available through <code>uv run</code>. See <a href="../development/">Development</a> and the repository <code>CONTRIBUTING.md</code> for the daily edit/check loop.</p>
 <h3 id="method-2-install-from-pypi">Method 2: Install from PyPI<a class="headerlink" href="#method-2-install-from-pypi" title="Permanent link">&para;</a></h3>
-<p>Recommended for most users. The base install builds knowledge graphs from CSV/TSV sources; QC and other
-extras are opt-in.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Option A: Install from PyPI with UV</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>tablassert
+<p>Recommended for most users. The base install exposes Tablassert's Python API; add <code>[cli]</code> to install the <code>tablassert</code> command. QC and other extras are opt-in.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Option A: Install the command-line tool with UV</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Option B: Install from PyPI with pip</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Option B: Install the Python API with pip</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>pip<span class="w"> </span>install<span class="w"> </span>tablassert
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Add the command-line interface to a pip install</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span>
 </code></pre></div>
 <h4 id="optional-extras">Optional Extras<a class="headerlink" href="#optional-extras" title="Permanent link">&para;</a></h4>
 <table>
@@ -1557,6 +1558,11 @@ extras are opt-in.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>cli</code></td>
+<td><code>tablassert</code> command and rich terminal progress</td>
+<td><code>cyclopts</code>, <code>rich</code></td>
+</tr>
 <tr>
 <td><code>rt</code></td>
 <td>Runtime-compatible Polars build</td>
@@ -1594,24 +1600,28 @@ extras are opt-in.</p>
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Install with runtime-compatible Polars</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># (for CPUs without the required Polars instructions)</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[rt]&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Install the command-line interface</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># pip equivalents</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[rt]&quot;</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Install the bundled aria2c downloader</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># Install with runtime-compatible Polars</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1"># (for CPUs without the required Polars instructions)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[rt]&quot;</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># pip equivalents</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[rt]&quot;</span>
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="c1"># Install the QC runtime</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[qc]&quot;</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[qc]&quot;</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="c1"># Install the bundled aria2c downloader</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
 <a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="c1"># Install the autonomous agent</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[agent]&quot;</span>
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[agent]&quot;</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="c1"># Install the QC runtime</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[qc]&quot;</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[qc]&quot;</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="c1"># Install the autonomous agent</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[agent]&quot;</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[agent]&quot;</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title"><code>[aria2]</code> platform and license notes</p>
@@ -1640,6 +1650,11 @@ fails, not a failure report):</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>tablassert</code></td>
+<td><code>[cli]</code></td>
+<td>Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error</td>
+</tr>
 <tr>
 <td><code>build-kg --qc</code></td>
 <td><code>[qc]</code></td>
@@ -1683,7 +1698,7 @@ progress display, honor <code>build-kg --log</code>, or warn about the missing e
 <h3 id="method-3-install-from-github-main">Method 3: Install from GitHub main<a class="headerlink" href="#method-3-install-from-github-main" title="Permanent link">&para;</a></h3>
 <p>Use this when you want the latest main-branch build.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Install from main branch</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>git+https://github.com/SkyeAv/Tablassert.git@main
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli] @ git+https://github.com/SkyeAv/Tablassert.git@main&quot;</span>
 </code></pre></div>
 <h3 id="method-4-install-from-local-source">Method 4: Install from local source<a class="headerlink" href="#method-4-install-from-local-source" title="Permanent link">&para;</a></h3>
 <p>For contributors testing local repository changes.</p>
@@ -1692,7 +1707,7 @@ progress display, honor <code>build-kg --log</code>, or warn about the missing e
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nb">cd</span><span class="w"> </span>Tablassert
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="c1"># Install Tablassert CLI tool from local source</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>.
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;.[cli]&quot;</span>
 </code></pre></div>
 <h2 id="verifying-installation">Verifying Installation<a class="headerlink" href="#verifying-installation" title="Permanent link">&para;</a></h2>
 <p>Confirm the CLI is on your path (use <code>uv run tablassert --help</code> for the in-repo dev environment):</p>
@@ -1714,7 +1729,7 @@ progress display, honor <code>build-kg --log</code>, or warn about the missing e
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>pull<span class="w"> </span>origin<span class="w"> </span>main
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Update dependencies and rebuild the editable extension</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>log
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>uv<span class="w"> </span>sync<span class="w"> </span>--group<span class="w"> </span>dev<span class="w"> </span>--extra<span class="w"> </span>cli<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>log
 <a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--manifest-path<span class="w"> </span>rust/Cargo.toml
 </code></pre></div>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>

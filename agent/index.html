@@ -2514,14 +2514,14 @@ A JSON array (not a colon-separated string) keeps POSIX paths containing <code>:
 drive-letter paths working. The <code>&lt;agent-config&gt;</code> and <code>&lt;reference-config&gt;</code> may carry relative
 <code>source.local</code> paths; both are rebuilt over <code>&lt;payload&gt;</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nv">TABLASSERT_PMC_COMPARE</span><span class="o">=</span><span class="s1">&#39;[&quot;.tablassert/agent/configs/PMC10766526.yaml&quot;, &quot;./legacy/PMC10766526.v12.yaml&quot;, &quot;./downloads/PMC10766526/PMC10766526.1/table.xlsx&quot;, &quot;data/fullmap.redb&quot;]&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py::test_real_pmc_comparison<span class="w"> </span>-q
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>cli<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py::test_real_pmc_comparison<span class="w"> </span>-q
 </code></pre></div>
 <p>Unset, that test skips with a printed reason; the offline fixture tests run regardless.</p>
 <h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
 <p>The agent suite is <strong>fully offline</strong>: no live LLM or network. It uses a <code>FakeModel</code> smolagents stub,
 mocked/snapshotted PMC data, a tiny real redb (<code>rs.build_fullmap_db</code>), and injectable GEPA stubs.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Agent tests SKIP without the extra and PASS with it:</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>agent
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>cli<span class="w"> </span>--extra<span class="w"> </span>agent
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_agent_eval.py<span class="w"> </span>tests/test_agent_supervisor.py<span class="w"> </span>tests/test_agent_assembly.py
 </code></pre></div>
 <p>Without the extra, the base suite stays green and every agent test skips via <code>pytest.importorskip</code>.</p>
