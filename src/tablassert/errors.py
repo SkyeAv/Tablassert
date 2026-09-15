@@ -46,6 +46,7 @@ TablassertErrorCodes = Literal[
     "uuid-bad-fields",
     "uuid-fields-not-a-key",
     "uuid-merge-without-fields",
+    "reward-config-invalid",
 ]
 
 
@@ -186,6 +187,20 @@ class BabelDownloadError(TablassertError):
             f"BABEL download failed after {retries} attempts: {url} (last error: {last_error}). Check network connectivity or pin a different BABEL version.",
             code="babel-download-failed",
         )
+
+
+class RewardConfigError(TablassertError):
+    """A reward-config file failed to load or validate.
+
+    Notes:
+        The caller builds the full message (naming the offending file and key and
+        stating the valid set); this class only pins the stable
+        ``reward-config-invalid`` slug so a bad weighting policy is greppable and
+        docs-linkable like every other coded failure.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="reward-config-invalid")
 
 
 class SourceFileError(TablassertError):
