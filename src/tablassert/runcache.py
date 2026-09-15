@@ -1,28 +1,49 @@
-"""Pure content-addressed hashing of TCode op lists.
+"""Content-addressed op digests, worth-caching guards, and the ephemeral run cache for TCode.
 
 TCode compiles every config section to an ordered list of ``(callable, args)`` ops that
-:class:`tablassert.lib.compile_subgraph` reduces over a LazyFrame. This module turns such an
-op list into a stable digest (``prefix_digest``) so later stories can key a build cache on the
-pipeline's *semantics* rather than file paths or timestamps. Everything here is pure: no I/O,
-no global mutable state — identical op lists always digest identically, and any argument that
-could change the output frame changes the digest. Arguments that only feed log lines (section
-label / config name) are masked so two sections with identical transformations but different
-log labels share one cache entry.
+:class:`tablassert.lib.compile_subgraph` reduces over a LazyFrame. This module turns such an op
+list into a stable digest (:func:`prefix_digest`) so caching keys on the pipeline's *semantics*
+rather than file paths or timestamps, prices each op (:data:`OP_COST`) so only prefixes worth
+snapshotting are checkpointed (:func:`checkpoints`), and materializes those checkpoints for the
+duration of a single build (:class:`RunCache`).
+
+Two layers, deliberately split:
+
+- The digest and guard layers are pure: no I/O, no clock, no global mutable state. Identical op
+  lists always digest identically, and any argument that could change the output frame changes
+  the digest. Arguments that only feed log lines (section label / config name) are masked so two
+  sections with identical transformations but different log labels share one cache entry.
+- :class:`RunCache` is the only I/O here, and it is *ephemeral by design*: snapshots live in a
+  temp directory deleted when the build ends — including when it ends in an exception. It is a
+  separate layer from the persistent section store (``.tablassert/store``, xxh64-keyed, see
+  :mod:`tablassert.utils`), which this module never reads or writes.
 """
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel
 
 from tablassert import lib, rs
+from tablassert._lazy import LazyModule
 from tablassert.errors import DOCS_URL
 from tablassert.fullmap import resolve_batch
+from tablassert.log import cat
 from tablassert.qc import fullmap_audit
+
+if TYPE_CHECKING:
+    import polars as pl
+else:
+    pl = LazyModule("polars")
+
+logger = cat("CACHE")
 
 LABEL_PLACEHOLDER: str = "~"
 """Serialization stand-in for label-only arguments (see :data:`LABEL_FREE`)."""
@@ -43,25 +64,28 @@ LABEL_FREE: dict[Callable, tuple[int, ...]] = {
     ),
 }
 
-RunCacheErrorCode = Literal["runcache-unserializable-arg"]
-"""Stable kebab-case slug for canonicalization failures, appended to the docs URL on ``str()``."""
+RunCacheErrorCode = Literal["runcache-unserializable-arg", "runcache-duplicate-store", "runcache-bad-digest", "runcache-closed"]
+"""Stable kebab-case slugs for run-cache failures, appended to the docs URL on ``str()``."""
 
 
 class RunCacheError(RuntimeError):
-    """An argument cannot be canonically serialized into a content-addressed op digest.
+    """A run-cache operation cannot proceed without silently corrupting or mis-keying the cache.
 
     Follows the coded-error house style of :mod:`tablassert.errors` (human ``message`` plus
     kebab-case ``code`` plus docs URL on ``str()``), defined locally because widening the
     closed ``TablassertErrorCodes`` literal in ``errors.py`` is outside this module's scope.
-    Raised instead of ever falling back to a lossy hash: an unsupported type silently hashed
-    would mis-key the cache without anyone noticing, so unsupported types fail loudly.
+
+    Raised instead of ever degrading quietly, because every case it covers would otherwise stay
+    invisible until a build produced wrong data: an unsupported type hashed by a lossy fallback
+    mis-keys every downstream digest; a second frame stored under one digest means two different
+    prefixes claim the same content address; a store or load against a closed cache would either
+    write into a deleted directory or report a false miss.
     """
 
-    code: RunCacheErrorCode = "runcache-unserializable-arg"
-
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, code: RunCacheErrorCode) -> None:
         super().__init__(message)
         self.message = message
+        self.code: RunCacheErrorCode = code
 
     def __str__(self) -> str:
         return f"{self.message}\n\nFor further information visit {DOCS_URL}{self.code}"
@@ -125,7 +149,8 @@ def canonical(value: object) -> str:
     raise RunCacheError(
         f"cannot canonically serialize {type(value).__module__}.{type(value).__qualname__} value {value!r} "
         "for an op digest; supported types are None, bool, int, float, str, Path, list, tuple, dict, "
-        "Enum, pydantic BaseModel, and module-level callables"
+        "Enum, pydantic BaseModel, and module-level callables",
+        code="runcache-unserializable-arg",
     )
 
 
@@ -319,3 +344,232 @@ def checkpoints(ops: list[tuple[Callable, tuple[Any, ...]]]) -> list[int]:
             continue
         selected.append(prefix_len)
     return selected
+
+
+# --- Ephemeral run-scoped cache -------------------------------------------------------------
+#
+# ``checkpoints`` decides WHICH op prefixes are worth snapshotting; this is where a snapshot
+# actually lives, for exactly one build. The cache is never persisted, on purpose:
+#
+# - Correctness: a digest covers an op prefix's *semantics*, not its environment — the polars
+#   version, the bytes behind a source path argument, or an edited config that never reached the
+#   op list. Nothing in the key would tell a later build that a surviving snapshot went stale,
+#   so a stale hit would be indistinguishable from a fresh one.
+# - Size: checkpoints sit just before the expensive ``resolve``/``resolve_batch`` steps, so each
+#   snapshot is close to a full intermediate table. Accumulating those across runs fills the disk
+#   with data that is worthless the moment the build that produced it finishes.
+#
+# Hence a ``tempfile.TemporaryDirectory`` torn down by ``__exit__`` — on the exception path too,
+# so a crashed build leaves no artifacts either. I/O failures propagate rather than falling back
+# to a recompute: a silently skipped store shows up only as a mysteriously slower build, and a
+# silently failed load serves ``None`` where the caller expects a frame.
+
+CACHE_DIR_PREFIX: str = "tablassert-runcache-"
+"""``tempfile`` prefix naming a run's snapshot directory as Tablassert's.
+
+``TemporaryDirectory`` removes the tree on ``__exit__`` (and at garbage collection), so the
+prefix is normally visible only while a build runs. It earns its keep in the hard-crash case
+(``SIGKILL``, power loss), where cleanup never runs and the directory name is the only thing
+telling an operator that the leftover is a run cache and is safe to delete.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class RunCacheStats:
+    """Counters for one :class:`RunCache` lifetime — the values logged at context exit.
+
+    Attributes:
+        stores: Snapshots written. Equals the number of distinct digests held, because a
+            duplicate store raises instead of overwriting.
+        hits: :meth:`RunCache.load` calls that found a snapshot.
+        misses: :meth:`RunCache.load` calls that did not. A miss is the normal signal to compute
+            the prefix and then store it — never an error, which is why it gets its own counter
+            instead of an exception.
+        bytes_written: Sum of the on-disk parquet sizes written, i.e. what the ephemeral cache
+            cost the disk during this build.
+    """
+
+    stores: int = 0
+    hits: int = 0
+    misses: int = 0
+    bytes_written: int = 0
+
+
+class RunCache:
+    """Ephemeral, run-scoped snapshot store keyed by :func:`prefix_digest`.
+
+    A context manager that materializes shared op-prefix results as parquet inside a
+    ``tempfile.TemporaryDirectory`` for the duration of ONE build and deletes everything at exit
+    — never persistent, never shared across runs. Sections that open with the same expensive
+    prefix (load → encode → resolve) then :meth:`load` the snapshot a sibling already
+    :meth:`store`d instead of recomputing it.
+
+    Ephemerality is the design, not a limitation: see the section comment above this class for
+    why a snapshot must not outlive its build. ``__exit__`` logs the run summary, delegates
+    deletion to ``TemporaryDirectory.__exit__`` (which cleans up on the normal AND the exception
+    path), and returns ``None`` — so an exception raised inside the ``with`` body always
+    propagates. A cache is never a reason to swallow a build failure.
+
+    Notes:
+        Not thread-safe and not re-entrant: counters are plain ints mutated per call and one
+        build owns one cache. ``store``/``load`` outside the ``with`` block raise rather than
+        writing into a deleted directory or reporting a false miss.
+    """
+
+    def __init__(self: RunCache) -> None:
+        self._tmp: tempfile.TemporaryDirectory[str] | None = None
+        self._stores: int = 0
+        self._hits: int = 0
+        self._misses: int = 0
+        self._bytes_written: int = 0
+
+    @property
+    def directory(self: RunCache) -> Path:
+        """This run's snapshot directory — the tree :meth:`__exit__` deletes.
+
+        Returns:
+            The live ``TemporaryDirectory`` path.
+
+        Raises:
+            RunCacheError: ``runcache-closed`` outside the ``with`` block, so no caller can
+                write snapshots somewhere that would outlive the run.
+        """
+        if self._tmp is None:
+            raise RunCacheError(
+                "run cache is not open: store()/load()/directory are only valid inside "
+                "`with RunCache() as cache:`, because the snapshot directory exists for one build only",
+                code="runcache-closed",
+            )
+        return Path(self._tmp.name)
+
+    def __enter__(self: RunCache) -> RunCache:
+        """Create this run's snapshot directory.
+
+        Returns:
+            This cache, open and empty.
+        """
+        # tempfile owns the location (TMPDIR-aware); the prefix makes a crash leftover ours.
+        self._tmp = tempfile.TemporaryDirectory(prefix=CACHE_DIR_PREFIX)
+        return self
+
+    def __exit__(self: RunCache, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None) -> None:
+        """Log the run summary, delete every snapshot, and let any in-flight exception propagate.
+
+        Cleanup happens on both paths, so a failed build leaves no artifacts either. The return
+        type is ``None`` rather than ``bool`` on purpose: a context manager that returned ``True``
+        would suppress the exception, and this one never may.
+
+        Args:
+            exc_type: Type of the in-flight exception, or ``None`` on a normal exit.
+            exc: The in-flight exception instance, or ``None``.
+            tb: Its traceback, or ``None``.
+        """
+        summary: RunCacheStats = self.stats()
+        logger.info(
+            "Run cache: {stores} snapshots ({bytes} bytes) stored, {hits} hits, {misses} misses",
+            stores=summary.stores,
+            bytes=summary.bytes_written,
+            hits=summary.hits,
+            misses=summary.misses,
+        )
+        # Closed BEFORE delegating cleanup: if deletion itself raises, the cache is still not
+        # open, so no later call can mistake the deleted tree for a usable directory.
+        tmp: tempfile.TemporaryDirectory[str] | None = self._tmp
+        self._tmp = None
+        if tmp is not None:
+            tmp.__exit__(exc_type, exc, tb)
+
+    def stats(self: RunCache) -> RunCacheStats:
+        """Report the counters accumulated so far.
+
+        Returns:
+            A frozen :class:`RunCacheStats` copy — safe to hold and compare after the cache
+            is closed, since nothing in it references the deleted directory.
+        """
+        return RunCacheStats(stores=self._stores, hits=self._hits, misses=self._misses, bytes_written=self._bytes_written)
+
+    def store(self: RunCache, digest: str, lf: pl.LazyFrame) -> Path:
+        """Collect ``lf`` and write it as this run's snapshot for ``digest``.
+
+        Args:
+            digest: Content address of the op prefix that produced ``lf`` (:func:`prefix_digest`).
+            lf: LazyFrame to materialize.
+
+        Returns:
+            The parquet path written, inside this run's temp directory (polars' default zstd
+            compression: a good ratio for cheap CPU on data that lives minutes).
+
+        Raises:
+            RunCacheError: ``runcache-duplicate-store`` when this run already holds a snapshot
+                for ``digest``. Overwriting was rejected deliberately: a digest is a CONTENT
+                address, so a second frame under the same key means either a hash collision or a
+                caller bug, and in both cases every hit already served from that key is
+                suspect. Raising surfaces it at the store that caused it instead of letting a
+                later section silently read a frame its own prefix never produced.
+            RunCacheError: ``runcache-bad-digest`` or ``runcache-closed`` from :meth:`_snapshot`.
+            OSError: Propagated from the collect/write/stat — a snapshot that cannot be written
+                is a build failure, never a silent recompute.
+        """
+        path: Path = self._snapshot(digest)
+        if path.is_file():
+            raise RunCacheError(
+                f"run cache already holds a snapshot for digest {digest} at {path}; a digest is a content "
+                "address, so a second frame under it means two different op prefixes hashed alike (or the "
+                "same prefix was stored twice) and the cache can no longer be trusted",
+                code="runcache-duplicate-store",
+            )
+        df: pl.DataFrame = lf.collect()
+        df.write_parquet(path)
+        self._stores += 1
+        self._bytes_written += path.stat().st_size
+        return path
+
+    def load(self: RunCache, digest: str) -> pl.LazyFrame | None:
+        """Return a lazy scan of the snapshot for ``digest``, or ``None`` on a miss.
+
+        Args:
+            digest: Content address to look up.
+
+        Returns:
+            ``pl.scan_parquet`` of the snapshot — lazy, so a hit composes into the caller's
+            pipeline exactly like a freshly computed prefix and is only read when it collects —
+            or ``None`` when this run has not stored that digest. A miss is the signal to compute
+            and then :meth:`store`, so it never raises.
+
+        Raises:
+            RunCacheError: ``runcache-bad-digest`` or ``runcache-closed`` from :meth:`_snapshot`.
+                A closed cache raises instead of returning ``None``: its directory is gone, so a
+                "miss" would be a lie about a snapshot that may well have existed.
+            OSError: Propagated from ``scan_parquet`` for an unreadable or corrupt snapshot.
+        """
+        path: Path = self._snapshot(digest)
+        if not path.is_file():
+            self._misses += 1
+            return None
+        self._hits += 1
+        return pl.scan_parquet(path)
+
+    def _snapshot(self: RunCache, digest: str) -> Path:
+        """Map ``digest`` to its parquet path inside this run's directory.
+
+        Args:
+            digest: Content address used as the filename stem.
+
+        Returns:
+            ``<run directory>/<digest>.parquet``.
+
+        Raises:
+            RunCacheError: ``runcache-bad-digest`` when ``digest`` is not one safe filename
+                component. A digest carrying a separator would write OUTSIDE the temp directory,
+                where ``__exit__``'s cleanup never reaches it — quietly breaking the "no
+                artifacts survive a run" contract. :func:`prefix_digest` only ever emits hex, so
+                this guards against a caller handing the cache something that is not a digest.
+            RunCacheError: ``runcache-closed`` propagated from :attr:`directory`.
+        """
+        if not digest or digest in {".", ".."} or "\\" in digest or Path(digest).name != digest:
+            raise RunCacheError(
+                f"run cache digest {digest!r} is not a single safe filename component; digests come from "
+                "prefix_digest (16 hex chars) and must not contain path separators",
+                code="runcache-bad-digest",
+            )
+        return self.directory / f"{digest}.parquet"

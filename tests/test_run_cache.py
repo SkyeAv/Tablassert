@@ -1,4 +1,11 @@
-"""Tests for the pure content-addressed hashing in ``tablassert.runcache``.
+"""Tests for ``tablassert.runcache``: op digests, worth-caching guards, and the ephemeral run cache.
+
+The first half pins the pure layers — content-addressed hashing (:func:`prefix_digest`) and the
+cost guards (:func:`checkpoints`). The second half pins :class:`RunCache`, the one piece that
+touches the filesystem: its snapshots must round-trip a frame exactly, its directory must be
+deleted when the build ends (including when it ends in an exception), its counters must be
+exact, and every way it could be misused must fail loudly instead of degrading into a silent
+recompute or a false miss.
 
 The op-list shapes here mirror what ``Tcode.collect`` actually stores (see
 ``src/tablassert/lib.py``'s ``_source_ops``/``_node_ops`` and the ``(resolve_batch, (specs, db,
@@ -10,11 +17,13 @@ the stored args because ``compile_subgraph`` pipes it through ``reduce``.
 from __future__ import annotations
 
 import operator
+import tempfile
 from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 import pytest
 
 import tablassert.lib as lib
@@ -24,13 +33,16 @@ from tablassert.fullmap import ResolveSpec, resolve_batch
 from tablassert.models import Reindex
 from tablassert.qc import fullmap_audit
 from tablassert.runcache import (
+    CACHE_DIR_PREFIX,
     DEFAULT_OP_COST,
     LABEL_FREE,
     LABEL_PLACEHOLDER,
     MIN_PREFIX_COST,
     MIN_PREFIX_OPS,
     OP_COST,
+    RunCache,
     RunCacheError,
+    RunCacheStats,
     canonical,
     checkpoints,
     op_cost,
@@ -350,3 +362,233 @@ def test_op_cost_covers_every_phase_of_callable() -> None:
     assert op_cost(lib.to_store) == 4
     assert op_cost(lib.csv) == 2
     assert op_cost(lib.value) == 1
+
+
+# --- Ephemeral RunCache ----------------------------------------------------------------------
+
+
+class _BuildFailure(RuntimeError):
+    """Stand-in for any error a section raises mid-build, carrying the directory it failed in.
+
+    The directory rides along on the exception so the test can assert the tree was deleted AFTER
+    the context exited (``cache.directory`` itself raises once the cache is closed), while keeping
+    the ``pytest.raises`` body a single simple statement.
+    """
+
+    def __init__(self: _BuildFailure, directory: Path) -> None:
+        super().__init__("section blew up")
+        self.directory: Path = directory
+
+
+def _mixed_frame() -> pl.LazyFrame:
+    """A small frame spanning the dtype families a snapshot must survive: str, int, float, bool, null.
+
+    ``Null`` is the interesting case — a snapshot layer that widened it (or dropped the column)
+    would silently change a downstream section's schema, which is exactly what the schema-equality
+    assertions below exist to catch. Two rows make row order meaningful as well.
+    """
+    return pl.DataFrame(
+        {"subject": ["HGNC:11998", "MONDO:0005812"], "cases": [42, 7], "p_value": [1.5e-8, 0.25], "significant": [True, False], "note": [None, None]}
+    ).lazy()
+
+
+def _fail_after_storing(cache: RunCache, digest: str) -> None:
+    """Store one snapshot, then raise the way a failing section would.
+
+    Storing first is what makes the exception test meaningful: ``__exit__`` then has a NON-empty
+    tree to delete, so an implementation that skipped cleanup on the error path cannot pass.
+    """
+    cache.store(digest, _mixed_frame())
+    raise _BuildFailure(cache.directory)
+
+
+def test_run_cache_directory_deleted_after_exit() -> None:
+    """A normal exit must leave nothing behind — the run cache is ephemeral by contract.
+
+    Captures the directory inside the context and stores a real snapshot into it, so deletion has
+    actual work to do; a surviving directory would mean snapshots outlive the build, which is the
+    exact staleness (a later build trusting an environment it never hashed) and disk growth the
+    design forbids.
+    """
+    with RunCache() as cache:
+        directory: Path = cache.directory
+        assert directory.is_dir()
+        stored: Path = cache.store(prefix_digest(_source_ops()), _mixed_frame())
+        assert stored.is_file()
+        assert list(directory.iterdir()) == [stored]
+    assert not directory.exists()
+
+
+def test_run_cache_directory_deleted_on_exception() -> None:
+    """A failing build must still clean up, and the failure must reach the caller unswallowed.
+
+    Pins BOTH halves of the exception-path contract in one go: ``pytest.raises`` proves the
+    original error propagates (a cache that ate build errors would turn a loud failure into a
+    mysteriously empty graph), and the post-block assertion proves the non-empty snapshot tree was
+    deleted anyway, so a crashed build leaves no artifacts.
+    """
+    with pytest.raises(_BuildFailure, match="section blew up") as failure, RunCache() as cache:
+        _fail_after_storing(cache, prefix_digest(_source_ops()))
+    assert not failure.value.directory.exists()
+
+
+def test_run_cache_temp_dir_uses_tablassert_prefix() -> None:
+    """The run directory must be recognizable as Tablassert's, inside the system temp root.
+
+    ``tempfile`` picks the location (respecting ``TMPDIR``), but the prefix is ours: after a hard
+    crash (``SIGKILL``, power loss) ``TemporaryDirectory`` never runs, so the leftover's name is
+    the ONLY thing telling an operator it is a Tablassert run cache that is safe to delete — and
+    telling a tmp-reaping script not to mistake it for user data.
+    """
+    with RunCache() as cache:
+        directory: Path = cache.directory
+        assert directory.name.startswith(CACHE_DIR_PREFIX)
+        assert directory.name != CACHE_DIR_PREFIX  # tempfile appends its random suffix
+        assert directory.parent.resolve() == Path(tempfile.gettempdir()).resolve()
+        assert directory.is_dir()
+
+
+def test_run_cache_store_then_load_round_trips_schema_and_rows() -> None:
+    """A snapshot must come back exactly: same column names, same dtypes, same rows, same order.
+
+    Pinning dtype equality (not just names) is what keeps the cache from becoming a silent
+    type-coercion trap — parquet can widen a column, and a downstream op that expects ``String``
+    but receives ``Int64`` fails confusingly far from the cache that changed it. The collected
+    frame is compared INSIDE the context because ``load`` returns a lazy scan of a file that
+    ``__exit__`` deletes.
+    """
+    lf: pl.LazyFrame = _mixed_frame()
+    expected: pl.DataFrame = lf.collect()
+    digest: str = prefix_digest(_source_ops())
+    with RunCache() as cache:
+        stored: Path = cache.store(digest, lf)
+        assert stored == cache.directory / f"{digest}.parquet"
+        loaded: pl.LazyFrame | None = cache.load(digest)
+        assert loaded is not None
+        actual: pl.DataFrame = loaded.collect()
+    assert actual.schema == expected.schema
+    assert actual.columns == expected.columns
+    assert actual.dtypes == expected.dtypes
+    assert actual.schema["note"] == pl.Null
+    assert actual.equals(expected)
+
+
+def test_run_cache_missing_digest_is_a_miss() -> None:
+    """An unstored digest is a MISS (``None``), never an exception.
+
+    A miss is the normal branch of the cache protocol — it is what tells the caller to compute the
+    prefix and then store it — so raising here would force every lookup into a ``try``/``except``
+    and make the first section of every build look like a failure. Also pins that a miss counts as
+    a miss and not as a hit, since the exit summary is the only signal an operator gets.
+    """
+    with RunCache() as cache:
+        assert cache.load(prefix_digest(_source_ops())) is None
+        assert cache.stats().hits == 0
+    # stats() is a detached snapshot, so it stays readable after the directory is gone.
+    summary: RunCacheStats = cache.stats()
+    assert (summary.stores, summary.hits, summary.misses) == (0, 0, 1)
+
+
+def test_run_cache_stats_counts_stores_and_hits() -> None:
+    """Counters must be exact: they are the only evidence that a run cache paid for itself.
+
+    Two distinct digests stored, one loaded twice (two hits from ONE snapshot) and one unknown
+    digest loaded once (a miss). Exact equality rather than ``>=`` catches double counting (a hit
+    counted on both the lookup and the later collect) and a store counted even though its write
+    failed. ``bytes_written`` is pinned against the real parquet sizes on disk because it is what
+    the exit log line reports as the run's disk cost.
+    """
+    digest_a: str = prefix_digest(_source_ops())
+    digest_b: str = prefix_digest(_resolve_ops("aaaabbbb", "study.toml"))
+    unstored: str = prefix_digest(_audit_ops("aaaabbbb", "study.toml"))
+    assert len({digest_a, digest_b, unstored}) == 3
+    with RunCache() as cache:
+        path_a: Path = cache.store(digest_a, _mixed_frame())
+        path_b: Path = cache.store(digest_b, _mixed_frame())
+        on_disk: int = path_a.stat().st_size + path_b.stat().st_size
+        assert cache.load(digest_a) is not None
+        assert cache.load(digest_a) is not None
+        assert cache.load(unstored) is None
+        summary: RunCacheStats = cache.stats()
+    assert (summary.stores, summary.hits, summary.misses) == (2, 2, 1)
+    assert summary.bytes_written == on_disk > 0
+
+
+def test_run_cache_duplicate_store_raises_and_keeps_the_first_snapshot() -> None:
+    """A second frame under one digest raises the coded error; it does NOT overwrite.
+
+    Chosen behavior for criterion "store of a present digest": a digest is a CONTENT address, so a
+    second store under the same key means a hash collision or a caller bug — and either way every
+    hit already served from that key is suspect. Overwriting would hide that and silently change
+    what an earlier ``load`` returned, so the loud coded error is the repo's fail-loudly
+    convention. The test also pins that the rejected store left the first snapshot's rows and the
+    counters untouched.
+    """
+    digest: str = prefix_digest(_source_ops())
+    first: pl.DataFrame = _mixed_frame().collect()
+    with RunCache() as cache:
+        cache.store(digest, _mixed_frame())
+        before: RunCacheStats = cache.stats()
+        with pytest.raises(RunCacheError, match="runcache-duplicate-store"):
+            cache.store(digest, pl.DataFrame({"subject": ["a different frame"]}).lazy())
+        after: RunCacheStats = cache.stats()
+        reloaded: pl.LazyFrame | None = cache.load(digest)
+        assert reloaded is not None
+        assert reloaded.collect().equals(first)
+    assert after.stores == before.stores == 1
+    assert after.bytes_written == before.bytes_written
+
+
+def test_run_cache_store_and_load_outside_the_context_raise() -> None:
+    """``store``/``load`` only exist inside the ``with`` block — a closed cache never fakes a miss.
+
+    After ``__exit__`` the directory is gone, so ``load`` returning ``None`` would report a MISS for
+    a snapshot that did exist: the caller would silently recompute an expensive prefix, or treat a
+    cached result as absent. Before ``__enter__`` there is nowhere to write. Both directions must
+    raise the coded error, which is why the same three probes run before and after the context.
+    """
+    cache: RunCache = RunCache()
+    digest: str = prefix_digest(_source_ops())
+
+    def _store() -> None:
+        """Store against a cache with no directory (not yet, or not any more)."""
+        cache.store(digest, _mixed_frame())
+
+    def _load() -> None:
+        """Load against a cache with no directory (not yet, or not any more)."""
+        cache.load(digest)
+
+    def _directory() -> None:
+        """Read the directory of a cache that has none (not yet, or not any more)."""
+        _ = cache.directory  # the read itself must raise; a deleted path is nothing to inspect
+
+    probes: tuple[Callable[[], None], ...] = (_store, _load, _directory)
+    for probe in probes:
+        with pytest.raises(RunCacheError, match="runcache-closed"):
+            probe()
+
+    with cache:
+        cache.store(digest, _mixed_frame())
+
+    for probe in probes:
+        with pytest.raises(RunCacheError, match="runcache-closed"):
+            probe()
+
+
+def test_run_cache_rejects_a_digest_that_is_not_one_safe_filename() -> None:
+    """A digest is used as a filename, so anything path-shaped must be refused.
+
+    ``store`` writes ``<run dir>/<digest>.parquet``: a digest carrying a separator or ``..`` would
+    land OUTSIDE the temp directory, where ``__exit__`` never deletes it — quietly breaking the
+    "no artifacts survive a run" contract. ``prefix_digest`` only emits hex, so this guards against
+    a caller handing the cache a non-digest key. Rejected digests must not be counted either.
+    """
+    unsafe: tuple[str, ...] = ("", ".", "..", "ab/cd", f"../{prefix_digest(_source_ops())}", "a\\b")
+    with RunCache() as cache:
+        for digest in unsafe:
+            with pytest.raises(RunCacheError, match="runcache-bad-digest"):
+                cache.store(digest, _mixed_frame())
+            with pytest.raises(RunCacheError, match="runcache-bad-digest"):
+                cache.load(digest)
+        assert cache.stats() == RunCacheStats()
+        assert list(cache.directory.iterdir()) == []
