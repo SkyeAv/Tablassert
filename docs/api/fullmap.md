@@ -89,7 +89,7 @@ Controls category-frequency tie-breaking when multiple matches exist for a term.
 Suffix appended to `col` to locate the `level_two` output column.
 
 `resolve()` expects the LazyFrame to already have two NLP columns applied upstream:
-- `col`: the `level_one` output (whitespace stripped, lowercased)
+- `col`: the canonical `level_one` output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)
 - `col + tag`: the `level_two` output (non-word characters removed via `\W+`)
 
 The default `"_two"` matches `level_two`'s default tag.
@@ -116,8 +116,8 @@ The function:
 
 2. **Ranks matches** by:
    - Category priority (if `prioritize` specified)
-   - Preferred-name exactness (case-insensitive exact match of normalized term to preferred name)
-   - NLP level (exact case match preferred over normalized)
+   - Preferred-name exactness (raw exact match first, then normalized level-one match)
+   - NLP level (level one preferred over level two)
    - Category frequency (if `column_context=True`)
 
 3. **Filters by:**
@@ -176,7 +176,7 @@ from tablassert.biolink import Categories
 
 db = Path("/path/to/fullmap/data/fullmap.redb")
 lf = pl.LazyFrame({"gene": ["TP53", "BRCA1", "EGFR", "KRAS"]})
-lf = level_one(lf, "gene")   # lowercase + strip
+lf = level_one(lf, "gene")   # canonical tokenize, stem, deduplicate, and sort
 lf = level_two(lf, "gene")   # remove non-word chars → "gene_two" column
 
 result = resolve(lf=lf, col="gene", db=db, taxon="9606",
