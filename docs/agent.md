@@ -454,6 +454,22 @@ uncompacted config and the status is unaffected. Each record tracks `config_char
 count of what was actually written to `configs/<pmc_id>.yaml` — in `state.json`, so size deltas are
 auditable per article.
 
+Each record also carries `error_code` — the stable kebab-case `code` of the exception that caused a
+`SKIPPED` record, or `null` when the skip came from a **deterministic gate** (the
+`validate_table_config` final-answer gate, or the coverage / Biolink / judge threshold), when no
+coded error was raised, or when the `state.json` was written before the field existed. It always
+describes the **most recent attempt**: starting an attempt clears it back to `null`, so a rerun that
+ends `MAPPED` never keeps a stale transient code. Two values mean *requeue the article and try again
+later*: `network-transient` (the PMC/BABEL HTTP seam exhausted its bounded retries on a DNS, socket,
+or 5xx/429 failure) and `llm-transient` (the model call did the same). Every other value — for
+example `section-validation-failed` or `missing-extra` — is terminal for that payload, so requeueing
+it would only burn budget again. Consumers should inspect `error_code` only when `status == "SKIPPED"`,
+and switch on it rather than keyword-matching the free-text `notes`: `status` stays `SKIPPED` in all
+cases and `notes` keeps its verbatim
+`SKIPPED: <error>` prefix, so an older consumer keeps working unchanged. Every skip that reaches the
+supervisor's catch-all also writes one `ERROR` log line naming the article and attempt, so a network
+outage is visible in the worker log instead of only in `state.json`.
+
 A result is appended to the target graph only when it is `MAPPED` or `BUILT_UNMEASURED`. `SKIPPED`
 articles never append. If the same PMC is processed again, its old table entry is replaced and the new
 absolute config path is appended. Requested PMCs are deliberately processed again even when `state.json`

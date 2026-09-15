@@ -23,14 +23,18 @@ from typing import Any
 import pytest
 
 from tablassert.agent import (
+    ConfigRecord,
+    SupervisorState,
     artifact_root,
     best_config_path,
     builds_dir,
     configs_dir,
     derived_config_path,
     downloads_dir,
+    load_state,
     pmc_build_dir,
     pmc_download_dir,
+    save_state,
 )
 
 
@@ -233,7 +237,7 @@ def test_supervisor_writes_configs_to_configs_folder(tmp_path: Path, fullmap_db:
     pytest.importorskip("smolagents")
     import yaml
 
-    from tablassert.agent import ConfigRecord, make_fake_model, run_supervisor
+    from tablassert.agent import make_fake_model, run_supervisor
 
     state_dir: Path = tmp_path / "state"
     download_dir: Path = pmc_download_dir(state_dir, "PMC1")  # == state_dir/downloads/PMC1
@@ -306,7 +310,7 @@ def test_supervisor_builds_to_stable_builds_dir(tmp_path: Path, fullmap_db: Path
     pytest.importorskip("smolagents")
     import yaml
 
-    from tablassert.agent import ConfigRecord, make_fake_model, run_supervisor
+    from tablassert.agent import make_fake_model, run_supervisor
 
     state_dir: Path = tmp_path / "state"
     download_dir: Path = pmc_download_dir(state_dir, "PMC1")  # == state_dir/downloads/PMC1
@@ -371,7 +375,7 @@ def test_supervisor_best_config_pipeline_reuse(tmp_path: Path, fullmap_db: Path,
     pytest.importorskip("smolagents")
     import yaml
 
-    from tablassert.agent import ConfigRecord, build_and_audit, make_fake_model, run_supervisor
+    from tablassert.agent import build_and_audit, make_fake_model, run_supervisor
 
     state_dir: Path = tmp_path / "state"
     download_dir: Path = pmc_download_dir(state_dir, "PMC1")  # == state_dir/downloads/PMC1
@@ -428,3 +432,96 @@ def test_supervisor_best_config_pipeline_reuse(tmp_path: Path, fullmap_db: Path,
     fresh: Path = tmp_path / "fresh-reuse-cwd"
     report: dict[str, object] = build_and_audit(best.read_text(), fullmap=fullmap_db, workdir=fresh)
     assert report["ok"] is True, f"the best config must rebuild from a fresh cwd: {report.get('errors')}"
+
+
+# --------------------------------------------------------------------------- #
+# US-004: the persisted `error_code` schema (REQ-SIG-1, 2, 3, 13, 14)
+#
+# WHY these live here: `state.json` is read by an EXTERNAL 16-worker fleet
+# (`~/Code/ISB/MultiomicsHarness`), so the on-disk schema -- not the supervisor's behavior -- is the
+# contract under test. Both directions matter: an old file must load under new code, and a new file
+# must load under old code, because a fleet upgrade is never atomic.
+# --------------------------------------------------------------------------- #
+
+
+def test_config_record_error_code_roundtrips_through_state(tmp_path: Path) -> None:
+    """``error_code`` survives save -> load verbatim, sits LAST in field order, and defaults to ``None``.
+
+    WHY field order is asserted: ``ConfigRecord`` is constructed positionally at existing call sites, so
+    appending the field (rather than inserting it) is what keeps a mixed-version fleet from silently
+    shifting values between columns.
+    """
+    import dataclasses
+
+    names: list[str] = [f.name for f in dataclasses.fields(ConfigRecord)]
+    assert names[-1] == "error_code", "the new field must be appended, never inserted"
+    assert names[-2] == "config_chars", "... and must follow the previous tail field"
+
+    state_dir: Path = tmp_path / "state"
+    original: SupervisorState = SupervisorState(
+        pmc_ids=["PMC1", "PMC2", "PMC3"],
+        records={
+            "PMC1": ConfigRecord(pmc_id="PMC1", status="SKIPPED", notes="SKIPPED: transient", attempts=1, error_code="network-transient"),
+            "PMC2": ConfigRecord(pmc_id="PMC2", status="MAPPED", coverage_history=[1.0], best_coverage=1.0),
+            # Positional construction must still work exactly as before the field existed.
+            "PMC3": ConfigRecord("PMC3", "SKIPPED"),
+        },
+    )
+
+    save_state(state_dir, original)
+    loaded: SupervisorState | None = load_state(state_dir)
+
+    assert loaded is not None
+    assert loaded.records["PMC1"].error_code == "network-transient", "a populated code round-trips verbatim"
+    assert loaded.records["PMC1"].notes == "SKIPPED: transient"
+    assert loaded.records["PMC1"].status == "SKIPPED", "no new status value is introduced"
+    assert loaded.records["PMC2"].error_code is None, "a successful record carries no code"
+    assert loaded.records["PMC3"].error_code is None, "positional construction leaves it None"
+    raw: dict[str, Any] = json.loads((state_dir / "state.json").read_text())
+    assert raw["records"]["PMC1"]["error_code"] == "network-transient", "asdict serializes it with no extra wiring"
+
+
+def test_state_loading_is_backward_compatible_for_error_code(tmp_path: Path) -> None:
+    """A pre-``error_code`` ``state.json`` loads with ``None``; junk degrades to ``None``; unknown keys are ignored.
+
+    WHY all three: the fleet's 42,981-article run left state files WITHOUT the key (must not raise),
+    a hand-edited or corrupt file may hold a non-string (must not poison the field's ``str | None``
+    type), and a NEWER writer may add fields this version has never heard of (must not break an
+    older reader -- the mixed-version guarantee).
+    """
+    state_dir: Path = tmp_path / "state"
+    legacy: SupervisorState = SupervisorState(
+        pmc_ids=["PMCOLD"], records={"PMCOLD": ConfigRecord(pmc_id="PMCOLD", status="SKIPPED", notes="SKIPPED: dns", error_code="network-transient")}
+    )
+    save_state(state_dir, legacy)
+    path: Path = state_dir / "state.json"
+
+    # (1) A pre-field state.json: the key simply does not exist.
+    raw: dict[str, Any] = json.loads(path.read_text())
+    del raw["records"]["PMCOLD"]["error_code"]
+    path.write_text(json.dumps(raw))
+    old_state: SupervisorState | None = load_state(state_dir)
+    assert old_state is not None
+    assert old_state.records["PMCOLD"].error_code is None, "a missing key must default to None, never raise"
+    assert old_state.records["PMCOLD"].notes == "SKIPPED: dns", "every other field still loads"
+
+    # (2) Junk degrades predictably. `""` is the ONE non-None survivor: the reader follows the
+    #     `config_chars` precedent (`isinstance(raw, str)`) exactly, and an empty string IS a str.
+    #     Pinning it documents that a hand-edited `""` differs from `None`, so a consumer must compare
+    #     against the KNOWN requeueable codes rather than merely testing `is not None`.
+    for junk, expected in (("", ""), (42, None), (True, None), (["network-transient"], None), ({"code": "x"}, None), (None, None)):
+        raw["records"]["PMCOLD"]["error_code"] = junk
+        path.write_text(json.dumps(raw))
+        bad_state: SupervisorState | None = load_state(state_dir)
+        assert bad_state is not None
+        assert bad_state.records["PMCOLD"].error_code == expected, f"{junk!r} must load as {expected!r}"
+
+    # (3) A NEWER writer's unknown keys are ignored by this (older) reader.
+    raw["records"]["PMCOLD"]["error_code"] = "llm-transient"
+    raw["records"]["PMCOLD"]["some_field_from_the_future"] = {"nested": [1, 2, 3]}
+    raw["a_top_level_key_from_the_future"] = "ignored"
+    path.write_text(json.dumps(raw))
+    mixed: SupervisorState | None = load_state(state_dir)
+    assert mixed is not None
+    assert mixed.records["PMCOLD"].error_code == "llm-transient"
+    assert not hasattr(mixed.records["PMCOLD"], "some_field_from_the_future"), "unknown keys are dropped, not invented"
