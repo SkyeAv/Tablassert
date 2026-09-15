@@ -274,6 +274,19 @@ incomplete RIG fails the build with `[rig-validation-failed]` and nothing is emi
     Subgraphs the detail line also shows the per-section phase (`load`, `filter`, `clean`, `encode`,
     `resolve`, `qc`, `edge`, `provenance`, `significance`, `finalize`, `write`).
 
+### Automatic run-scoped TCode cache
+
+`build-kg` automatically caches only expensive TCode instruction prefixes shared by at least two
+sections. Worth-caching guards exclude trivial prefixes, and runs with no qualifying sharing create
+no cache. Snapshot keys use the bundled Rust XXH64 digest. Snapshots live in a temporary directory
+that is deleted when the build ends, including on failure; there is no persistent cache and no new
+CLI flag to control it.
+
+The `--head` option remains a debug/shape preview. When sections share a cached prefix, consumers
+reuse the producer's random sample, so identical samples for identical prefixes are intentional.
+With `--log`, resolve/audit lines from a shared label-free prefix are attributed to the producer
+section; other section-local operations retain their own section labels.
+
 ---
 
 ## validate
