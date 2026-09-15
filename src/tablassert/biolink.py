@@ -567,8 +567,28 @@ release from making ``species_context_qualifier`` silently emittable again.
 
 
 CLASS_FIELD_OVERRIDES: dict[str, frozenset[str]] = {
-    "EntityToDiseaseAssociation": frozenset({"disease_context_qualifier", "regulatory_approvals"}),
-    "EntityToPhenotypicFeatureAssociation": frozenset({"disease_context_qualifier", "regulatory_approvals"}),
+    "EntityToDiseaseAssociation": frozenset(
+        {
+            "anatomical_context_qualifier",
+            "disease_context_qualifier",
+            "frequency_qualifier",
+            "population_context_qualifier",
+            "regulatory_approvals",
+            "sex_qualifier",
+            "temporal_context_qualifier",
+        }
+    ),
+    "EntityToPhenotypicFeatureAssociation": frozenset(
+        {
+            "anatomical_context_qualifier",
+            "disease_context_qualifier",
+            "frequency_qualifier",
+            "population_context_qualifier",
+            "regulatory_approvals",
+            "sex_qualifier",
+            "temporal_context_qualifier",
+        }
+    ),
 }
 """Per-class grants of edge fields the resolved association class does not declare.
 
@@ -580,7 +600,15 @@ The motivating case is a DAKP contraindication edge: ``regulatory_approvals`` is
 canonical slot not yet attached by the installed model, while
 ``disease_context_qualifier`` is declared only on the
 ``ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`` lineage -- so one edge can
-natively carry both only through these explicit class-scoped grants. Tablassert
+natively carry both only through these explicit class-scoped grants. The same gap
+covers DAKP's sparse qualifier stack (``anatomical_context_qualifier``,
+``sex_qualifier``, ``population_context_qualifier``, ``frequency_qualifier``,
+``temporal_context_qualifier``): each is a satisfiable Biolink qualifier slot that no
+pinned class declares, so without a grant ``prune_to_class`` would null it off the
+edge. Deliberately excluded: ``species_context_qualifier`` (in
+``DISABLED_EDGE_FIELDS`` -- never emittable), ``temporal_interval_qualifier`` and
+``severity_qualifier`` (in ``UNSATISFIABLE_EDGE_FIELDS`` -- attached to no class, so
+a grant could never validate). Tablassert
 deliberately emits the granted fields on the pinned classes ahead of the pinned model
 (pending an upstream Biolink widening). ``_validation_record`` strips granted fields
 before record validation so the deliberate gap is not reported as ``extra_forbidden``.

@@ -4,6 +4,9 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- **DAKP sparse qualifier stack now survives `prune_to_class` on the pinned classes.** `CLASS_FIELD_OVERRIDES` grants `anatomical_context_qualifier`, `sex_qualifier`, `population_context_qualifier`, `frequency_qualifier`, and `temporal_context_qualifier` to `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` alongside the existing `disease_context_qualifier` / `regulatory_approvals` grants, so DAKP assertion rows carrying those qualifiers keep them on the edge instead of having them nulled and rescued into the pruned column. Deliberately ungranted: `species_context_qualifier` (disabled -- never emittable) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable -- attached to no class, so a grant could never validate). Record validation already strips granted fields from its in-memory copy, so no new `extra_forbidden` surface appears; the existing tripwire test fails the suite the moment a biolink-model release attaches a granted slot, until the stale grant is removed.
+
 ### Breaking Changes
 - **The `tablassert` command now requires the optional `[cli]` extra.** `cyclopts` and `rich` no longer install with the base Python API; install `pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"` to use the console command. The launcher preflights the extra before importing the application and reports the exact install command when it is absent.
 - **Level-one normalization now defines fullmap keys by cleaned Unicode-lowercase, whitespace-tokenized, Porter2-normalized terms, with duplicate removal and byte-wise token ordering.** Existing fullmap databases are schema-v5 and are rejected by the current resolver; rebuild fullmaps before use. Preferred-name ranking now compares normalized forms under the same level-one semantics.

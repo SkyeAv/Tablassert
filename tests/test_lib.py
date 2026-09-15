@@ -1909,13 +1909,17 @@ def test_prune_to_class_keeps_override_only_slots() -> None:
 
 
 def test_prune_to_class_keeps_class_field_override_grants() -> None:
-    """A slot granted to a class by CLASS_FIELD_OVERRIDES survives prune_to_class.
+    """Slots granted to a class by CLASS_FIELD_OVERRIDES survive prune_to_class.
 
     ``disease_context_qualifier`` is declared only on the
     ``ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`` lineage, but the policy
     grant keeps it on ``EntityToDiseaseAssociation`` /
     ``EntityToPhenotypicFeatureAssociation`` rows so a pinned edge can carry it
-    alongside ``regulatory_approvals``. Classes without the grant still prune it.
+    alongside ``regulatory_approvals`` -- and the same holds for DAKP's sparse
+    qualifier stack (``anatomical_context_qualifier``, ``sex_qualifier``,
+    ``population_context_qualifier``, ``frequency_qualifier``,
+    ``temporal_context_qualifier``), none of which the pinned classes declare.
+    Classes without the grant still prune them.
     """
     from tablassert.lib import PRUNED_COLUMN, prune_to_class
 
@@ -1928,12 +1932,31 @@ def test_prune_to_class_keeps_class_field_override_grants() -> None:
             ],
             "disease_context_qualifier": ["MONDO:0005148", "MONDO:0005148", "MONDO:0005015"],
             "regulatory_approvals": ["FDA:1", "FDA:2", "FDA:3"],
+            "anatomical_context_qualifier": ["UBERON:0001557", "UBERON:0001557", "UBERON:0001557"],
+            "sex_qualifier": ["PATO:0000383", "PATO:0000383", "PATO:0000383"],
+            "population_context_qualifier": ["NCIT:C25667", "NCIT:C25667", "NCIT:C25667"],
+            "frequency_qualifier": ["HP:0012823", "HP:0012823", "HP:0012823"],
+            "temporal_context_qualifier": ["TIME:1", "TIME:1", "TIME:1"],
         }
     )
     out: pl.DataFrame = prune_to_class(lf).collect()
     assert out["disease_context_qualifier"].to_list() == ["MONDO:0005148", None, "MONDO:0005015"]
     assert out["regulatory_approvals"].to_list() == ["FDA:1", None, "FDA:3"]
-    assert out[PRUNED_COLUMN].to_list() == [[], ["disease_context_qualifier=MONDO:0005148", "regulatory_approvals=FDA:2"], []]
+    for col in ("anatomical_context_qualifier", "sex_qualifier", "population_context_qualifier", "frequency_qualifier", "temporal_context_qualifier"):
+        assert out[col].to_list() == [out[col].to_list()[0], None, out[col].to_list()[2]], col
+    pruned_second: list[str] = out[PRUNED_COLUMN].to_list()[1]
+    for col in (
+        "disease_context_qualifier",
+        "regulatory_approvals",
+        "anatomical_context_qualifier",
+        "sex_qualifier",
+        "population_context_qualifier",
+        "frequency_qualifier",
+        "temporal_context_qualifier",
+    ):
+        assert any(entry.startswith(f"{col}=") for entry in pruned_second), col
+    assert out[PRUNED_COLUMN].to_list()[0] == []
+    assert out[PRUNED_COLUMN].to_list()[2] == []
 
 
 def test_supporting_case_ids_survives_prune_and_fold_to_dedup_input() -> None:

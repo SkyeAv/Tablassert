@@ -3530,7 +3530,8 @@ exactly. Legal predicates, from the installed Biolink Model:
   `nullable: true` so a blank or off-vocabulary cell keeps the edge and simply omits the
   qualifier. The ONE exception is `qualified_predicate`, which DOES take a CURIE
   (`qualified_predicate: biolink:causes`). CURIE-ranged qualifiers (anatomical_context_qualifier,
-  disease_context_qualifier, sex_qualifier) are entity-resolved through the fullmap like
+  disease_context_qualifier, sex_qualifier, population_context_qualifier,
+  frequency_qualifier, temporal_context_qualifier) are entity-resolved through the fullmap like
   subject/object. `species_context_qualifier` is disabled — never author it as a qualifier or
   annotation. A qualifier no association class can hold fails validation
   (qualifier-unsatisfiable) — carry that value as an annotation instead.
