@@ -590,10 +590,10 @@ def aria2_unavailable_detail() -> str:
 
     macOS gets DIFFERENT advice on purpose: the ``aria2`` distribution publishes no macOS
     wheels, so pointing a mac user at the extra sends them to a dead end. There the fix is
-    to drop the flag, and the default Python downloader takes over.
+    to stay on the default Python downloader.
     """
     if sys.platform == "darwin":
-        return "the [aria2] extra ships no macOS wheels; drop --aria2c to use the default Python downloader"
+        return "the [aria2] extra ships no macOS wheels; the default Python downloader takes over instead"
     return f"install the [aria2] extra: {extras.install_command('aria2')}"
 
 
@@ -1417,7 +1417,6 @@ def build_fullmap(
     output: Annotated[Path, cyclopts.Parameter(name=["--output", "-o"])] = Path("./fullmap/data/fullmap.redb"),
     cache: Annotated[Path, cyclopts.Parameter(name=["--cache", "-c"])] = Path("./fullmap/downloads"),
     version: Annotated[str, cyclopts.Parameter(name=["--version", "-v"])] = BABEL_VERSION,
-    aria2c: Annotated[bool, cyclopts.Parameter(name=["--aria2c", "-a"], negative="")] = False,
     force: Annotated[bool, cyclopts.Parameter(name=["--force", "-f"], negative="")] = False,
 ) -> None:
     """Build an embedded fullmap redb database, or download a prebuilt one from RENCI.
@@ -1435,15 +1434,16 @@ def build_fullmap(
     check fails), fall back to a from-scratch filtered build. ``--force`` / ``-f`` skips
     the prebuilt attempt and always builds from BABEL outputs.
 
-    ``--aria2c`` requires the ``[aria2]`` extra, checked before the first download rather
-    than on it, so an unusable flag costs nothing.
+    Downloads (the prebuilt archive and BABEL files alike) pick their downloader
+    automatically: the bundled ``aria2c`` binary from the optional ``[aria2]`` extra when
+    that extra is installed, Tablassert's Python downloader otherwise. There is no flag
+    to choose, and a failing ``aria2c`` download fails loud rather than silently
+    re-downloading with the Python downloader.
 
     Args:
         output: Path to write the redb file (prebuilt extraction or build output).
         cache: Directory for downloaded BABEL files when building from scratch.
         version: BABEL snapshot date to fetch (a RENCI stamp, NOT Tablassert's version).
-        aria2c: Use the bundled aria2c binary from the ``[aria2]`` extra for downloads
-            (prebuilt or BABEL).
         force: Skip the prebuilt download and always rebuild from BABEL outputs.
     """
     allowlist_ids: list[int] = load_taxon_allowlist()
@@ -1457,15 +1457,19 @@ def build_fullmap(
         # The probe also returns False for an unreadable/foreign file, so this warns and
         # rebuilds rather than trusting whatever sits at the path.
         logger.warning("Fullmap at {output} was not built with the current taxon allowlist (or is unreadable); rebuilding it.", output=output)
-    # Checked here rather than earlier: the reuse path above downloads nothing, so a
-    # missing [aria2] extra is irrelevant to it and must not fail a no-op command.
-    if aria2c and not extras.is_installed("aria2"):
-        print(f"tablassert build-fullmap: --aria2c is unavailable — {aria2_unavailable_detail()}", file=sys.stderr)
-        raise SystemExit(2)
+    # Downloader selection is automatic: the bundled aria2c when the [aria2] extra is
+    # installed, else the Python downloader. Resolved once HERE — after the reuse path
+    # above (which downloads nothing, so a no-op run stays silent) and before the choice
+    # branches, so it is logged exactly once and threaded to both download consumers.
+    use_aria2c: bool = extras.is_installed("aria2")
+    if use_aria2c:
+        download_logger.info("the [aria2] extra is installed; using the bundled aria2c for downloads")
+    else:
+        download_logger.info("the [aria2] extra is not installed; using the Python downloader")
     if not force:
         try:
-            run(2, fetch_prebuilt_fullmap, output, version=version, aria2c=aria2c, taxon_allowlist=allowlist_ids)
+            run(2, fetch_prebuilt_fullmap, output, version=version, aria2c=use_aria2c, taxon_allowlist=allowlist_ids)
             return
         except PrebuiltFullmapUnavailable as exc:
             logger.warning("Prebuilt fullmap unavailable ({reason}); building from BABEL outputs.", reason=exc)
-    run(3, build_fullmap_pipeline, output, cache=cache, version=version, aria2c=aria2c, taxon_allowlist=allowlist_ids)
+    run(3, build_fullmap_pipeline, output, cache=cache, version=version, aria2c=use_aria2c, taxon_allowlist=allowlist_ids)

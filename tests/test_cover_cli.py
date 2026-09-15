@@ -279,7 +279,12 @@ def test_download_babel_file_aria2c_missing_extra_raises(tmp_path: Path, monkeyp
 
 
 def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The unsupported macOS path explains that bundled aria2c wheels are unavailable."""
+    """The unsupported macOS path explains that bundled aria2c wheels are unavailable.
+
+    Why: with downloader selection automatic, this fires only when the ``[aria2]`` extra
+    is somehow importable-but-broken on macOS; the message must point at the Python
+    downloader, never at a flag that no longer exists.
+    """
 
     def _missing_extra() -> str:
         raise ImportError("No module named 'aria2c'")
@@ -294,7 +299,8 @@ def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(
         download_babel_file_aria2c("f.gz", "https://example.com/f.gz", tmp_path)
     message = str(excinfo.value)
     assert "no macOS wheels" in message
-    assert "drop --aria2c" in message
+    assert "Python downloader" in message
+    assert "--aria2c" not in message
 
 
 def test_download_babel_file_aria2c_zero_retries_raises_without_unlimited_aria2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -393,90 +399,144 @@ def test_build_kg_without_qc_never_probes_the_extra(tmp_path: Path, monkeypatch:
     assert len(calls) == 1
 
 
-def test_build_fullmap_command_force_build_passes_aria2c_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``build-fullmap --force --aria2c`` delegates both flags, plus the always-on allowlist.
+def test_build_fullmap_force_build_passes_the_resolved_downloader_choice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``build-fullmap --force`` delegates the auto-resolved downloader choice, plus the always-on allowlist.
 
-    With the download-first default, only ``--force`` reaches ``build_fullmap_pipeline``; the
-    default path is covered by :func:`test_build_fullmap_command_defaults_to_prebuilt_download`.
-    The built-in taxon allowlist rides along on every source build — there is no flag for it.
+    Why: the ``--aria2c`` flag is gone; the pipeline's ``aria2c`` keyword now carries the
+    auto-detected ``[aria2]`` state instead of a user choice. A force build must thread
+    that RESOLVED boolean (True when the extra is installed, False when not) — the one
+    place a stale hardcoded choice would silently resurrect the removed flag's semantics.
+    The built-in taxon allowlist rides along on every source build — there is no flag for
+    it either.
     """
     output: Path = tmp_path / "fullmap.redb"
     cache: Path = tmp_path / "downloads"
+
+    for absent, expected in (((), True), (("aria2",), False)):
+        calls: list[tuple[Any, ...]] = []
+
+        def _fake_run(stages: int, fn: Any, arg: Path, _calls: list[tuple[Any, ...]] = calls, **kwargs: Any) -> None:
+            _calls.append((stages, fn, arg, kwargs))
+
+        monkeypatch.setattr(cli, "run", _fake_run)
+        monkeypatch.setattr(extras, "missing", lambda extra, _absent=absent: _absent)
+        cli.build_fullmap(output=output, cache=cache, version="v", force=True)
+        assert calls == [
+            (
+                3,
+                cli.build_fullmap_pipeline,
+                output,
+                {"cache": cache, "version": "v", "aria2c": expected, "taxon_allowlist": cli.load_taxon_allowlist()},
+            )
+        ]
+
+
+class _RecordingDownloadLogger:
+    """Capture ``download_logger`` calls so tests can assert WHICH downloader was chosen.
+
+    Auto-selection logs the choice via ``download_logger.info``; without a recorder the
+    line is invisible to tests whenever the optional ``log`` extra is absent (null logger).
+    """
+
+    def __init__(self) -> None:
+        self.infos: list[str] = []
+        self.warnings: list[str] = []
+
+    def info(self, message: str, /, **fields: Any) -> None:
+        self.infos.append(message)
+
+    def warning(self, message: str, /, **fields: Any) -> None:
+        self.warnings.append(message)
+
+    def error(self, message: str, /, **fields: Any) -> None:
+        return
+
+    def debug(self, message: str, /, **fields: Any) -> None:
+        return
+
+
+def test_build_fullmap_without_the_aria2_extra_selects_the_python_downloader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An absent ``[aria2]`` extra automatically selects the Python downloader — no exit 2.
+
+    Why: the removed ``--aria2c`` flag used to exit 2 when the extra was missing. With
+    auto-selection the command must simply proceed: the prebuilt attempt gets
+    ``aria2c=False`` and actually downloads through ``download_babel_file`` (the Python
+    downloader), with exactly ONE info line naming the choice so users can tell which
+    downloader ran without a flag to tell them.
+    """
+    output: Path = tmp_path / "data" / "fullmap.redb"
     calls: list[tuple[Any, ...]] = []
+    recorder = _RecordingDownloadLogger()
 
     def _fake_run(stages: int, fn: Any, arg: Path, **kwargs: Any) -> None:
         calls.append((stages, fn, arg, kwargs))
+        fn(arg, PipelineProgress(total_stages=stages), **kwargs)  # run the real fetch end-to-end
+
+    def _aria2c_must_not_run(*args: Any, **kwargs: Any) -> Path:
+        raise AssertionError("aria2c must not run when the [aria2] extra is absent")
 
     monkeypatch.setattr(cli, "run", _fake_run)
-    monkeypatch.setattr(extras, "missing", lambda extra: ())
-    cli.build_fullmap(output=output, cache=cache, version="v", aria2c=True, force=True)
-    assert calls == [
-        (3, cli.build_fullmap_pipeline, output, {"cache": cache, "version": "v", "aria2c": True, "taxon_allowlist": cli.load_taxon_allowlist()})
-    ]
-
-
-def test_build_fullmap_aria2c_without_the_extra_stops_before_downloading(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """``--aria2c`` without the ``[aria2]`` extra exits 2 before any download starts.
-
-    Why: the flag is otherwise resolved on the FIRST download, after BABEL URL discovery has
-    already hit the network. A flag that cannot work should cost nothing.
-    """
-    monkeypatch.setattr(cli.sys, "platform", "linux")
-    monkeypatch.setattr(cli, "run", lambda *args, **kwargs: pytest.fail("the download started without the [aria2] extra"))
+    monkeypatch.setattr(cli, "download_logger", recorder)
     monkeypatch.setattr(extras, "missing", lambda extra: ("aria2",))
+    monkeypatch.setattr(cli, "download_babel_file", _write_archive)
+    monkeypatch.setattr(cli, "download_babel_file_aria2c", _aria2c_must_not_run)
+    monkeypatch.setattr(cli, "_fetch_prebuilt_sha256", lambda url: None)
 
-    with pytest.raises(SystemExit) as excinfo:
-        cli.build_fullmap(output=tmp_path / "fullmap.redb", aria2c=True)
+    def _fake_extract(archive: Path, out: Path, on_phase: object, taxon_allowlist: object = None) -> None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"PRIMARY")
 
-    assert excinfo.value.code == 2
-    assert 'pip install "tablassert[aria2]"' in capsys.readouterr().err
+    monkeypatch.setattr(cli, "_extract_prebuilt_fullmap", _fake_extract)
+
+    cli.build_fullmap(output=output, version="v")  # fresh output, no force — must not raise
+
+    assert len(calls) == 1
+    assert calls[0][1] is cli.fetch_prebuilt_fullmap
+    assert calls[0][3]["aria2c"] is False
+    assert output.read_bytes() == b"PRIMARY"  # the Python-downloader prebuilt path completed
+    # Exactly ONE line names the downloader choice (later infos are fetch bookkeeping), and
+    # it fires FIRST — the decision is logged before any download runs.
+    choice_lines: list[str] = [m for m in recorder.infos if "downloader" in m]
+    assert choice_lines == ["the [aria2] extra is not installed; using the Python downloader"]
+    assert recorder.infos[0] == choice_lines[0]
 
 
-def test_build_fullmap_aria2c_is_not_checked_when_the_db_already_exists(
+def test_build_fullmap_existing_db_neither_probes_nor_logs_the_downloader_choice(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """An existing DB still short-circuits, even with ``--aria2c`` and no ``[aria2]`` extra.
+    """A matching existing DB short-circuits without probing ``[aria2]`` or logging a choice.
 
-    Why: that path downloads nothing, so the flag is moot. Failing a command that was going to
-    be a no-op would turn a harmless leftover flag into an error.
+    Why: the reuse path downloads nothing, so probing the extra or naming a downloader
+    would be noise on a no-op command. This also pins the ORDER — the probe sits AFTER the
+    short-circuit — preserving the removed flag's "a no-op run costs nothing" property
+    under auto-selection.
     """
     output: Path = tmp_path / "fullmap.redb"
     output.write_bytes(b"existing-db")
     monkeypatch.setattr(cli, "run", lambda *args, **kwargs: pytest.fail("an existing DB must short-circuit"))
-    monkeypatch.setattr(extras, "missing", lambda extra: ("aria2",))
-    # The reuse short-circuit now requires the recorded allowlist identity to match; this
-    # test is about the aria2c preflight ORDER, not the probe (covered separately).
+
+    def _missing_must_not_be_probed(extra: str) -> tuple[str, ...]:
+        raise AssertionError("a no-op reuse run must not probe the [aria2] extra")
+
+    recorder = _RecordingDownloadLogger()
+    monkeypatch.setattr(extras, "missing", _missing_must_not_be_probed)
+    monkeypatch.setattr(cli, "download_logger", recorder)
+    # The reuse short-circuit requires the recorded allowlist identity to match; this
+    # test is about the auto-selection ORDER, not the probe (covered separately).
     monkeypatch.setattr(cli, "fullmap_matches_allowlist", lambda existing, ids: True)
 
-    cli.build_fullmap(output=output, aria2c=True)  # must not raise
+    cli.build_fullmap(output=output)  # must not raise
+    assert recorder.infos == []
     assert "already present" in capsys.readouterr().err
 
 
-def test_build_fullmap_aria2c_on_macos_says_drop_the_flag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """On macOS the preflight says to drop ``--aria2c``, never to install the extra.
+def test_build_fullmap_aria2c_flag_is_gone() -> None:
+    """``--aria2c``/``-a`` no longer parse — the hard removal locks, like ``--taxon-allowlist``.
 
-    Why: the ``aria2`` distribution publishes no macOS wheels, so telling a mac user to install
-    the extra is a dead end — the fix there is the default Python downloader.
+    Why: downloader selection is automatic now; keeping the tokens parseable (as a no-op or
+    a deprecation shim) would let stale scripts keep running while silently changing
+    behavior. An unknown-option parse error fails loud instead.
     """
-    monkeypatch.setattr(cli.sys, "platform", "darwin")
-    monkeypatch.setattr(cli, "run", lambda *args, **kwargs: pytest.fail("the download started on an unsupported platform"))
-    monkeypatch.setattr(extras, "missing", lambda extra: ("aria2",))
-
-    with pytest.raises(SystemExit) as excinfo:
-        cli.build_fullmap(output=tmp_path / "fullmap.redb", aria2c=True)
-
-    assert excinfo.value.code == 2
-    message: str = capsys.readouterr().err
-    assert "drop --aria2c" in message
-    assert "tablassert[aria2]" not in message
-
-
-def test_build_fullmap_aria2c_flag_parses() -> None:
-    """``build-fullmap`` accepts ``--aria2c`` and ``-a`` but no generated negative alias."""
 
     def parse(argv: list[str]) -> dict[str, Any]:
         fn, bound, _ = cli.APP.parse_args(argv, exit_on_error=False)
@@ -484,10 +544,112 @@ def test_build_fullmap_aria2c_flag_parses() -> None:
         return dict(bound.arguments)
 
     assert parse(["build-fullmap"]) == {}
-    assert parse(["build-fullmap", "--aria2c"])["aria2c"] is True
-    assert parse(["build-fullmap", "-a"])["aria2c"] is True
-    with pytest.raises(UnknownOptionError):
-        parse(["build-fullmap", "--no-aria2c"])
+    for removed in ("--aria2c", "-a", "--no-aria2c"):
+        with pytest.raises(UnknownOptionError):
+            parse(["build-fullmap", removed])
+
+
+def test_build_fullmap_auto_selects_aria2c_for_the_babel_loops_when_the_extra_is_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With ``[aria2]`` installed, a force build runs BOTH BABEL loops through aria2c.
+
+    Why: auto-selection is only real if the resolved True reaches the pipeline's per-file
+    download dispatch. This pins the whole chain — probe -> command -> pipeline -> helper —
+    for the class AND synonym loops, instead of trusting the keyword threading alone.
+    """
+
+    def _fake_babel_urls(version: str, endpoints: tuple[str, ...], pattern: object) -> list[tuple[str, str]]:
+        if endpoints == cli.BABEL_CLASS_ENDPOINTS:
+            return [("c.gz", "https://example.com/c.gz")]
+        return [("s.gz", "https://example.com/s.gz")]
+
+    monkeypatch.setattr(cli, "babel_urls", _fake_babel_urls)
+    monkeypatch.setattr(extras, "missing", lambda extra: ())
+    monkeypatch.setattr(
+        cli, "download_babel_file", lambda *args, **kwargs: pytest.fail("the Python downloader must not run when [aria2] is auto-selected")
+    )
+    aria_calls: list[str] = []
+
+    def _fake_aria2c(filename: str, url: str, destination: Path, retries: int = 5) -> Path:
+        aria_calls.append(filename)
+        destination.mkdir(parents=True, exist_ok=True)
+        path: Path = destination / filename
+        path.write_bytes(b"downloaded")
+        return path
+
+    monkeypatch.setattr(cli, "download_babel_file_aria2c", _fake_aria2c)
+    monkeypatch.setattr(rs, "build_fullmap_db", lambda *args, **kwargs: None)
+
+    class _RecordingProgress:
+        def __init__(self) -> None:
+            self.sub_steps: list[str] = []
+
+        def stage(self, name: str) -> None:
+            return
+
+        def section_loop(self, total: int, label: str) -> tuple[Any, Any, Any]:
+            def start(detail: str) -> None:
+                return
+
+            def advance() -> None:
+                return
+
+            def sub_step(phase: str) -> None:
+                self.sub_steps.append(phase)
+
+            return start, advance, sub_step
+
+        def dynamic_loop(self, label: str) -> Any:
+            return lambda *args: None
+
+        def end_section_task(self) -> None:
+            return
+
+    progress = _RecordingProgress()
+
+    def _fake_run(stages: int, fn: Any, arg: Path, **kwargs: Any) -> None:
+        assert fn is cli.build_fullmap_pipeline
+        assert kwargs["aria2c"] is True
+        fn(arg, progress, **kwargs)
+
+    monkeypatch.setattr(cli, "run", _fake_run)
+    cache: Path = tmp_path / "downloads"
+    cli.build_fullmap(output=tmp_path / "fullmap.redb", cache=cache, version="v", force=True)
+
+    assert aria_calls == ["c.gz", "s.gz"]  # class loop AND synonym loop both used aria2c
+    assert progress.sub_steps.count("aria2c downloading") == 2
+
+
+def test_build_fullmap_aria2c_prebuilt_failure_falls_back_to_a_scratch_aria2c_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failing aria2c prebuilt download degrades to the from-scratch build — still aria2c.
+
+    Why: the prebuilt fallback contract predates auto-selection and must survive it: a
+    ``BabelDownloadError`` from the aria2c helper wraps to ``PrebuiltFullmapUnavailable``,
+    warns, and rebuilds from BABEL with the SAME resolved downloader. It must NOT silently
+    re-attempt the prebuilt download with the Python downloader — a broken aria2 install
+    would otherwise hide behind a slow retry.
+    """
+    monkeypatch.setattr(extras, "missing", lambda extra: ())  # [aria2] present => aria2c auto-selected
+    monkeypatch.setattr(
+        cli, "download_babel_file", lambda *args, **kwargs: pytest.fail("an aria2c prebuilt failure must not retry with the Python downloader")
+    )
+
+    def _aria2c_fails(filename: str, url: str, destination: Path, retries: int = 5) -> Path:
+        raise BabelDownloadError(url, retries, RuntimeError("aria2c crashed"))
+
+    monkeypatch.setattr(cli, "download_babel_file_aria2c", _aria2c_fails)
+    calls: list[tuple[int, Any, dict[str, Any]]] = []
+
+    def _fake_run(stages: int, fn: Any, arg: Path, **kwargs: Any) -> None:
+        calls.append((stages, fn, kwargs))
+        if fn is cli.fetch_prebuilt_fullmap:
+            fn(arg, PipelineProgress(total_stages=2), **kwargs)  # raises PrebuiltFullmapUnavailable
+
+    monkeypatch.setattr(cli, "run", _fake_run)
+    cli.build_fullmap(output=tmp_path / "fullmap.redb", version="v")
+
+    assert [(stages, fn) for stages, fn, _ in calls] == [(2, cli.fetch_prebuilt_fullmap), (3, cli.build_fullmap_pipeline)]
+    assert calls[0][2]["aria2c"] is True  # the prebuilt attempt used the auto-selected aria2c
+    assert calls[1][2]["aria2c"] is True  # the scratch build keeps the same choice
 
 
 def test_build_kg_configuration_file_flag_parses(tmp_path: Path) -> None:
@@ -637,6 +799,31 @@ def test_build_fullmap_pipeline_uses_aria2c_when_opted_in(tmp_path: Path, monkey
     assert progress.sub_steps.count("aria2c downloading") == 2
     assert progress.advances == 4  # two discovery entries + two downloaded files
     assert built == [(output, [cache / "classes" / "c.gz"], [cache / "synonyms" / "s.gz"])]
+
+
+def test_build_fullmap_pipeline_aria2c_failure_propagates_without_python_rescue(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``BabelDownloadError`` inside the BABEL loop fails loud; the Python downloader never rescues.
+
+    Why: auto-selection means aria2c runs whenever the ``[aria2]`` extra is installed. If a
+    mid-loop aria2c failure were silently retried with the Python downloader, a broken
+    aria2 install would mask itself as slowness instead of surfacing the typed error —
+    the loud-failure contract the opt-in flag had must survive the flag's removal.
+    """
+
+    def _fake_babel_urls(version: str, endpoints: tuple[str, ...], pattern: object) -> list[tuple[str, str]]:
+        if endpoints == cli.BABEL_CLASS_ENDPOINTS:
+            return [("c.gz", "https://example.com/c.gz")]
+        return [("s.gz", "https://example.com/s.gz")]
+
+    monkeypatch.setattr(cli, "babel_urls", _fake_babel_urls)
+    monkeypatch.setattr(cli, "download_babel_file", lambda *args, **kwargs: pytest.fail("the Python downloader must not rescue a failing aria2c run"))
+
+    def _aria2c_fails(filename: str, url: str, destination: Path, retries: int = 5) -> Path:
+        raise BabelDownloadError(url, retries, RuntimeError("aria2c exited with status 1"))
+
+    monkeypatch.setattr(cli, "download_babel_file_aria2c", _aria2c_fails)
+    with pytest.raises(BabelDownloadError):
+        build_fullmap_pipeline(tmp_path / "fullmap.redb", PipelineProgress(total_stages=3), version="v", aria2c=True)
 
 
 # --- prebuilt fullmap downloader (download-first default; --force rebuilds from BABEL) ---
@@ -936,7 +1123,9 @@ def test_build_fullmap_command_defaults_to_prebuilt_download(tmp_path: Path, mon
 
     WHY: 'download from here first (before building)' is the requested default. The command
     calls ``run(2, fetch_prebuilt_fullmap, ...)`` and returns on success WITHOUT invoking the
-    3-stage build. (``output`` absent => no skip-if-exists short-circuit.)
+    3-stage build. (``output`` absent => no skip-if-exists short-circuit.) This is also the
+    auto-selection POSITIVE case: a monkeypatched-present ``[aria2]`` extra must thread
+    ``aria2c=True`` into the prebuilt attempt with no flag involved.
     """
     calls: list[tuple[Any, ...]] = []
 
@@ -944,9 +1133,9 @@ def test_build_fullmap_command_defaults_to_prebuilt_download(tmp_path: Path, mon
         calls.append((stages, fn, arg, kwargs))
 
     monkeypatch.setattr(cli, "run", _fake_run)
-    monkeypatch.setattr(extras, "missing", lambda extra: ())  # --aria2c preflight: report [aria2] as installed
+    monkeypatch.setattr(extras, "missing", lambda extra: ())  # auto-selection: [aria2] present => aria2c=True
     output: Path = tmp_path / "fullmap.redb"  # does not exist
-    cli.build_fullmap(output=output, version="v", aria2c=True)
+    cli.build_fullmap(output=output, version="v")
     assert calls == [(2, cli.fetch_prebuilt_fullmap, output, {"version": "v", "aria2c": True, "taxon_allowlist": cli.load_taxon_allowlist()})]
 
 
@@ -1028,7 +1217,8 @@ def test_build_fullmap_command_falls_back_to_build_on_prebuilt_unavailable(tmp_p
     """When the prebuilt fetch raises, the command falls back to a from-scratch build.
 
     WHY: a version with no published prebuilt (or a download/extract failure) must not abort;
-    it builds from BABEL. Both ``run`` calls fire: the fetch (which raises) then the build.
+    it builds from BABEL. Both ``run`` calls fire: the fetch (which raises) then the build,
+    and the auto-resolved downloader choice (``[aria2]`` present here) rides BOTH calls.
     """
     calls: list[tuple[Any, ...]] = []
     state: dict[str, int] = {"n": 0}
@@ -1040,10 +1230,10 @@ def test_build_fullmap_command_falls_back_to_build_on_prebuilt_unavailable(tmp_p
             raise cli.PrebuiltFullmapUnavailable("no prebuilt for this version")
 
     monkeypatch.setattr(cli, "run", _fake_run)
-    monkeypatch.setattr(extras, "missing", lambda extra: ())  # --aria2c preflight: report [aria2] as installed
+    monkeypatch.setattr(extras, "missing", lambda extra: ())  # auto-selection: [aria2] present => aria2c=True
     output: Path = tmp_path / "fullmap.redb"  # absent
     cache: Path = tmp_path / "c"
-    cli.build_fullmap(output=output, cache=cache, version="v", aria2c=True)
+    cli.build_fullmap(output=output, cache=cache, version="v")
     assert len(calls) == 2
     assert calls[0][0] == 2
     assert calls[0][1] is cli.fetch_prebuilt_fullmap
