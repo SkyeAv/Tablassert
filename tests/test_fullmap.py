@@ -73,6 +73,22 @@ def fullmap_db(tmp_path: Path) -> Path:
     return output
 
 
+# The `names` above are the RAW synonym spellings the build indexes; the query
+# frames in this module carry the KEYS the build stores.  US-003 made the build
+# derive level-one keys with `nlp::normalize_l1` (clean -> Unicode lowercase ->
+# Porter2 stem every all-ASCII-alphabetic token -> dedupe -> byte-sort -> single
+# spaces) and a fullmap lookup is an EXACT key match, so a query frame stands in
+# for the columns `nlp.level_one` produces and must hold the normalized form.
+# Every re-keyed value below was derived with the real normalizer
+# (`uv run python -c "from tablassert import rs; print(rs.normalize_terms([...]))"`),
+# never hand-stemmed:
+#   "shared" -> "share"     "ambiguous" -> "ambigu"   "contextual" -> "contextu"
+#   "breast cancer 1" -> "1 breast cancer" (l2: "1breastcancer")
+#   "BRCA1"/"mapk1"/"brca 1" -> unchanged (digit- and punctuation-bearing tokens
+#   are never stemmed), and "phenotype_term"/"disease_taxon" are unchanged too.
+# The Rust-side literal pin for the same contract is rust/tests/build_golden.rs.
+
+
 def test_empty_resolve_still_writes_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """empty resolve output still writes empty parquet and warns."""
     warnings: list[str] = []
@@ -122,7 +138,7 @@ def test_resolve_uses_equivalent_identifier(fullmap_db: Path) -> None:
 
 def test_resolve_honors_taxon_filter(fullmap_db: Path) -> None:
     """resolve honors taxon filter."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["shared"], "subject_two": ["shared"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["share"], "subject_two": ["share"]})
 
     result: dict[str, Any] = resolve(source.lazy(), "subject", fullmap_db, taxon="9606", log=False).collect().to_dicts()[0]
 
@@ -155,7 +171,7 @@ def test_resolve_honors_disease_taxon_filter(fullmap_db: Path) -> None:
 
 def test_taxon_filter_keeps_zero_taxon_entities(fullmap_db: Path) -> None:
     """taxon filtering retains rows with no taxon metadata (TAXON_ID 0)."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["ambiguous"], "subject_two": ["ambiguous"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"]})
 
     result: dict[str, Any] = resolve(source.lazy(), "subject", fullmap_db, taxon="10090", log=False).collect().to_dicts()[0]
 
@@ -166,7 +182,7 @@ def test_taxon_filter_keeps_zero_taxon_entities(fullmap_db: Path) -> None:
 
 def test_resolve_honors_avoid_category(fullmap_db: Path) -> None:
     """resolve honors avoid category."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["ambiguous"], "subject_two": ["ambiguous"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"]})
 
     result: dict[str, Any] = resolve(source.lazy(), "subject", fullmap_db, avoid=[Categories.DISEASE], log=False).collect().to_dicts()[0]
 
@@ -186,7 +202,7 @@ def test_resolve_honors_prioritize_category(fullmap_db: Path) -> None:
 
 def test_resolve_honors_avoid_category_given_strings(fullmap_db: Path) -> None:
     """avoid accepts plain strings (the build pipeline unwraps Categories via use_enum_values)."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["ambiguous"], "subject_two": ["ambiguous"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"]})
 
     result: dict[str, Any] = resolve(source.lazy(), "subject", fullmap_db, avoid=["Disease"], log=False).collect().to_dicts()[0]  # pyright: ignore
 
@@ -260,7 +276,7 @@ def test_resolve_level_two_fallback(fullmap_db: Path) -> None:
 
 def test_resolve_column_context_frequency(fullmap_db: Path) -> None:
     """resolve prefers the frequent category and retains its equally-ranked CURIEs."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["contextual"], "subject_two": ["contextual"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["contextu"], "subject_two": ["contextu"]})
 
     results: list[dict[str, Any]] = resolve(source.lazy(), "subject", fullmap_db, log=False).collect().to_dicts()
 
@@ -271,7 +287,7 @@ def test_resolve_column_context_frequency(fullmap_db: Path) -> None:
 
 def test_resolve_converts_zero_taxon_to_null(fullmap_db: Path) -> None:
     """resolve converts NCBITaxon:0 to null."""
-    source: pl.DataFrame = pl.DataFrame({"subject": ["ambiguous"], "subject_two": ["ambiguous"]})
+    source: pl.DataFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"]})
 
     result: dict[str, Any] = resolve(source.lazy(), "subject", fullmap_db, avoid=[Categories.GENE], log=False).collect().to_dicts()[0]
 
@@ -281,8 +297,8 @@ def test_resolve_converts_zero_taxon_to_null(fullmap_db: Path) -> None:
 
 def test_filter_and_rank_honors_avoid_category(fullmap_db: Path) -> None:
     """filter_and_rank applies avoid-category filtering against a pre-fetched raw frame."""
-    terms: pl.DataFrame = pl.DataFrame({"term": ["ambiguous"], "nlp_level": [1]})
-    raw: pl.DataFrame = pl.DataFrame(rs.lookup_fullmap_terms(fullmap_db, ["ambiguous"]))
+    terms: pl.DataFrame = pl.DataFrame({"term": ["ambigu"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(rs.lookup_fullmap_terms(fullmap_db, ["ambigu"]))
 
     matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=[Categories.DISEASE], column_context=True)
 
@@ -500,9 +516,9 @@ def test_join_matches_coalesces_level_one_hit(fullmap_db: Path) -> None:
 
 def test_join_matches_retains_equal_best_curies(fullmap_db: Path) -> None:
     """join_matches expands one source row into separate rows for tied CURIEs."""
-    lf: pl.LazyFrame = pl.DataFrame({"subject": ["contextual"], "subject_two": ["contextual"]}).lazy()
-    terms: pl.DataFrame = pl.DataFrame({"term": ["contextual"], "nlp_level": [1]})
-    raw: pl.DataFrame = pl.DataFrame(rs.lookup_fullmap_terms(fullmap_db, ["contextual"]))
+    lf: pl.LazyFrame = pl.DataFrame({"subject": ["contextu"], "subject_two": ["contextu"]}).lazy()
+    terms: pl.DataFrame = pl.DataFrame({"term": ["contextu"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(rs.lookup_fullmap_terms(fullmap_db, ["contextu"]))
     matches: pl.DataFrame = filter_and_rank(raw, terms, None, None, None, True)
 
     results: list[dict[str, Any]] = join_matches(lf, "subject", matches).collect().to_dicts()
@@ -513,7 +529,7 @@ def test_join_matches_retains_equal_best_curies(fullmap_db: Path) -> None:
 
 def test_resolve_batch_retains_equal_best_curies(fullmap_db: Path) -> None:
     """resolve_batch preserves tied CURIEs through its shared join path."""
-    lf: pl.LazyFrame = pl.DataFrame({"subject": ["contextual"], "subject_two": ["contextual"]}).lazy()
+    lf: pl.LazyFrame = pl.DataFrame({"subject": ["contextu"], "subject_two": ["contextu"]}).lazy()
 
     results: list[dict[str, Any]] = resolve_batch(lf, [ResolveSpec("subject")], fullmap_db, log=False).collect().to_dicts()
 
@@ -592,9 +608,7 @@ def test_resolve_batch_nullable_spec_keeps_unresolved_row(fullmap_db: Path) -> N
 
 def test_resolve_batch_applies_each_specs_filters_independently(fullmap_db: Path) -> None:
     """resolve_batch applies each spec's own avoid/taxon/prioritize filters independently (no cross-column leakage)."""
-    lf: pl.LazyFrame = pl.DataFrame(
-        {"subject": ["ambiguous"], "subject_two": ["ambiguous"], "object": ["ambiguous"], "object_two": ["ambiguous"]}
-    ).lazy()
+    lf: pl.LazyFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"], "object": ["ambigu"], "object_two": ["ambigu"]}).lazy()
 
     result: dict[str, Any] = (
         resolve_batch(lf, [ResolveSpec("subject", avoid=[Categories.DISEASE]), ResolveSpec("object", avoid=[Categories.GENE])], fullmap_db, log=False)
@@ -611,11 +625,12 @@ def test_resolve_batch_applies_each_specs_filters_independently(fullmap_db: Path
 def test_resolve_batch_carries_exclude_specs(fullmap_db: Path) -> None:
     """resolve_batch threads each spec's exclude_prefixes into filter_and_rank.
 
-    US-M3: 'ambiguous' matches both HGNC:2 (Gene) and MONDO:2 (Disease); excluding the
+    US-M3: the 'ambiguous' synonym (stored under its normalized key 'ambigu')
+    matches both HGNC:2 (Gene) and MONDO:2 (Disease); excluding the
     HGNC prefix drops HGNC:2 so subject resolves deterministically to MONDO:2, proving
     the ResolveSpec exclusion fields reach the hot resolution path.
     """
-    lf: pl.LazyFrame = pl.DataFrame({"subject": ["ambiguous"], "subject_two": ["ambiguous"]}).lazy()
+    lf: pl.LazyFrame = pl.DataFrame({"subject": ["ambigu"], "subject_two": ["ambigu"]}).lazy()
 
     result: dict[str, Any] = resolve_batch(lf, [ResolveSpec("subject", exclude_prefixes=["HGNC"])], fullmap_db, log=False).collect().to_dicts()[0]
 
@@ -640,8 +655,8 @@ def test_resolve_batch_makes_one_redb_call_regardless_of_spec_count(fullmap_db: 
             "subject_two": ["brca1"],
             "object": ["mapk1"],
             "object_two": ["mapk1"],
-            "disease_context_qualifier": ["shared"],
-            "disease_context_qualifier_two": ["shared"],
+            "disease_context_qualifier": ["share"],
+            "disease_context_qualifier_two": ["share"],
         }
     ).lazy()
 
@@ -665,8 +680,8 @@ def test_resolve_batch_three_node_columns_on_sharded_db(fullmap_db: Path) -> Non
     CURIE. The three columns share one pooled ``rs.lookup_fullmap_terms`` fetch
     (see ``test_resolve_batch_makes_one_redb_call_regardless_of_spec_count``);
     here we prove that pooled fetch fans out across the shards and hydrates all
-    three columns. The fixture's diverse terms (brca1, mapk1, shared, ambiguous,
-    contextual, ...) hash across multiple shards, so the shared fetch genuinely
+    three columns. The fixture's diverse terms (brca1, mapk1, share, ambigu,
+    contextu, ...) hash across multiple shards, so the shared fetch genuinely
     exercises more than one shard file.
     """
     # The sharded layout must actually be on disk: primary + sibling shard files.
@@ -683,8 +698,8 @@ def test_resolve_batch_three_node_columns_on_sharded_db(fullmap_db: Path) -> Non
             "subject_two": ["brca1"],
             "object": ["mapk1"],
             "object_two": ["mapk1"],
-            "disease_context_qualifier": ["shared"],
-            "disease_context_qualifier_two": ["shared"],
+            "disease_context_qualifier": ["share"],
+            "disease_context_qualifier_two": ["share"],
         }
     ).lazy()
 

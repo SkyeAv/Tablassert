@@ -1087,10 +1087,12 @@ _REAL_SYNONYM_LINES_HGNC: tuple[str, ...] = (
 _REAL_SYNONYM_LINES_MONDO: tuple[str, ...] = (
     '{"curie":"MONDO:2","preferred_name":"Shared Disease","names":["shared"],"types":["Disease"],"taxa":["NCBITaxon:0"]}',
 )
-# Level-one lowercase forms of the fixture names/preferred names above; every one
-# resolves (golden expectations: alpha -> HGNC:1+HGNC:10, alpha gene -> HGNC:1,
-# café/naïve -> HGNC:2, shared -> HGNC:6+MONDO:2, multi -> HGNC:10).
-_REAL_RESOLVING_TERMS: list[str] = ["alpha", "alpha gene", "café", "naïve", "shared", "multi"]
+# The level-one KEYS the build stores for the fixture names/preferred names above
+# (`nlp::normalize_l1` forms, derived with `rs.normalize_terms`: only "shared" ->
+# "share" differs from the raw lowercase spelling); every one resolves (golden
+# expectations: alpha -> HGNC:1+HGNC:10, alpha gene -> HGNC:1, café/naïve ->
+# HGNC:2, share -> HGNC:6+MONDO:2, multi -> HGNC:10).
+_REAL_RESOLVING_TERMS: list[str] = ["alpha", "alpha gene", "café", "naïve", "share", "multi"]
 
 
 def _write_gzip_ndjson(path: Path, lines: tuple[str, ...]) -> Path:
@@ -1213,8 +1215,8 @@ def test_fetch_prebuilt_fullmap_real_archive_matches_force_build(tmp_path: Path,
         ("alpha gene", "HGNC:1"),
         ("café", "HGNC:2"),
         ("naïve", "HGNC:2"),
-        ("shared", "HGNC:6"),
-        ("shared", "MONDO:2"),
+        ("share", "HGNC:6"),
+        ("share", "MONDO:2"),
         ("multi", "HGNC:10"),
     }
 

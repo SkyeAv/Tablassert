@@ -146,7 +146,7 @@ By default `build-fullmap` looks for a prebuilt `fullmap.tar.zst` at
 directory is the **installed Tablassert package version**, never hardcoded), verifies it against the
 published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming zstd →
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
-primary + shards against the force-build contract (exact `v5` schema, a recorded `build_id`, the exact
+primary + shards against the force-build contract (exact `v6` schema, a recorded `build_id`, the exact
 shard set, per-shard `build_id` equality, and a `META.taxon_allowlist` identity matching the built-in
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a

@@ -30,7 +30,13 @@ const CATEGORIES: TableDefinition<u16, &str> = TableDefinition::new("categories"
 const SOURCES: TableDefinition<u8, &[u8]> = TableDefinition::new("sources");
 const CURIES: TableDefinition<u32, &[u8]> = TableDefinition::new("curies");
 const META: TableDefinition<&str, &str> = TableDefinition::new("meta");
-const SCHEMA_VERSION: &str = "tablassert.fullmap.v5";
+/// On-disk schema tag.  Bumped to v6 when the build started deriving level-one
+/// keys through `nlp::normalize_l1` (stemmed + deduped + byte-sorted tokens):
+/// the RECORDS key SPACE changed, so a v5 database is not merely an older layout
+/// of the same data — its keys can never be hit by a normalized query.  Every
+/// older tag is rejected at lookup with the rebuild instruction.
+const SCHEMA_VERSION: &str = "tablassert.fullmap.v6";
+const SCHEMA_VERSION_V5: &str = "tablassert.fullmap.v5";
 const SCHEMA_VERSION_V4: &str = "tablassert.fullmap.v4";
 const SCHEMA_VERSION_V3: &str = "tablassert.fullmap.v3";
 const SCHEMA_VERSION_V2: &str = "tablassert.fullmap.v2";
@@ -283,9 +289,12 @@ pub(crate) fn clean_and_lower(value: &str) -> Cow<'_, str> {
 }
 
 /// QC a NORMALIZED (level-one / lowercase) term.  Callers must pass an
-/// already-lowercased form (emit_term feeds it the level-one value), so the
-/// banned-token checks compare lowercase needles directly and skip a per-term
-/// `to_lowercase` heap allocation on the hot path.  Behavior is unchanged:
+/// already-lowercased form (emit_term feeds it the cleaned+lowercased term and
+/// the level-two form), so the banned-token checks compare lowercase needles
+/// directly and skip a per-term `to_lowercase` heap allocation on the hot path.
+/// The banned needles are LITERAL SPELLINGS, so this must run BEFORE stemming
+/// (Porter2 turns "hypothetical" into "hypothet" and the substring check would
+/// silently stop matching).  Behavior is unchanged:
 /// lowercasing is case-only and never affects the empty/tab/newline guards, so
 /// QC-ing the lowercase form is exactly equivalent to QC-ing the original value
 /// and lowercasing internally.
@@ -342,8 +351,12 @@ fn level_two(value: &str) -> Cow<'_, str> {
 /// `^\d+$|^(none|nan|na|null|unknown|not applicable|p_value|variable|result|`
 /// `exposure|expression|symbol)$|^$` drops these from the query-term set before
 /// lookup, so storing them in the DB is dead weight.  `term` is already a
-/// normalized (level-one or level-two) form here.  Skipping them is provably
-/// safe: a stored term matching this can never meet a surviving query term.
+/// normalized (cleaned level-one, `nlp::normalize_l1`, or level-two) form here.
+/// Skipping them is provably safe: a stored term matching this can never meet a
+/// surviving query term.  The needles are LITERAL SPELLINGS, so `emit_term`
+/// applies this to the pre-stemming cleaned form (where the spellings still
+/// match) AND to the normalized key it is about to store (the exact string
+/// `distinct()` filters the query side on).
 fn is_dead_term(term: &str) -> bool {
     if term.is_empty() {
         return true;
@@ -1380,20 +1393,62 @@ impl EquivIndex {
     }
 }
 
-/// Process a single term through clean_and_lower → token_qc → level_two and
-/// insert the resulting normalized forms into `local_terms`.  token_qc runs on
-/// the level-one (lowercase) form — exactly equivalent to QC-ing the cleaned
-/// value, since lowercasing is case-only — but avoids a redundant per-term
-/// `to_lowercase`.  The whole chain is `Cow`: clean/level_one/level_two borrow in
-/// the common case (clean, lowercase, `[a-z0-9_]` ASCII), so the ONLY allocation
-/// is the `into_owned()` when a form is actually inserted as a map key.
+/// Process a single term through clean_and_lower → token_qc/is_dead_term →
+/// `nlp::normalize_l1` → level_two and insert the resulting normalized forms
+/// into `local_terms`.
+///
+/// The level-one KEY is `nlp::normalize_l1`'s output, which is byte-for-byte the
+/// form the Python query side produces (`nlp.level_one` → `rs.normalize_terms` →
+/// `normalize_l1`).  fullmap lookups are EXACT string matches, so build and query
+/// must stay lock-step: any drift between the two derivations is a SILENT MISS,
+/// not an error.  `normalize_l1` is fed the already-cleaned form rather than the
+/// raw term: `clean_and_lower` is a fixed point (`clean_slice` re-trims until the
+/// slice stops changing, and lowercasing an already-lowercase ASCII string
+/// borrows), so the internal re-clean is a one-iteration no-op — the remaining
+/// redundancy is one `to_lowercase` per NON-ASCII term, measured at ~2% of the
+/// derivation, which the build's throughput budget absorbs (a `pub(crate)`
+/// pre-cleaned entry point bought only that ~2%, so the single public
+/// `normalize_l1` stays the one derivation both sides share).
+///
+/// The QUALITY GATES deliberately run on the cleaned+lowercased
+/// PRE-normalization form (the exact string they have always seen), not on the
+/// normalized key, because normalization would defeat them:
+///
+/// * `token_qc`'s banned-token check is a substring test for the literal
+///   spellings "uncharacterized"/"hypothetical"; Porter2 stems them
+///   ("hypothetical" → "hypothet"), so gating post-normalization would silently
+///   stop rejecting the junk synonyms the gate exists to keep out of the DB.
+///   Its `\t`/`\n`/`\r` guards are likewise only meaningful pre-normalization:
+///   `normalize_l1` splits on whitespace and rejoins with single spaces, so a
+///   normalized key can never contain them.
+/// * `is_dead_term` is an exact-match mirror of the Python `distinct()` drop
+///   regex; stemming and word-order canonicalization move terms off those
+///   spellings ("not applicable" → "applic not", "variable" → "variabl"), so
+///   gating only post-normalization would start indexing sentinel phrases.
+///
+/// The SECOND `is_dead_term`, on the normalized key, is the other half of the
+/// same contract: `distinct()` filters the NORMALIZED query terms, so a key that
+/// only becomes dead once normalized ("Nones" → "none", or a duplicate-token
+/// sentinel collapsing onto one) can never be queried and storing it is dead
+/// weight.  Both gates reject a superset of what the pre-normalization gate
+/// alone rejected, so no term that used to be dropped is now indexed.
+///
+/// Allocations: clean/level_one/level_two borrow in the common case, and
+/// `normalize_l1` borrows its input for an unchanged single token; a MULTI-token
+/// term additionally pays the normalizer's token `Vec` plus the joined `String`
+/// (inherent to sorting/deduping), and each surviving form pays one
+/// `into_owned()` when it is inserted as a map key.
 fn emit_term<S: BuildHasher>(
     term: &str,
     pair: (u32, u8),
     local_terms: &mut HashMap<String, Vec<(u32, u8)>, S>,
 ) {
-    let l1 = clean_and_lower(term);
-    if !token_qc(&l1) || is_dead_term(&l1) {
+    let cleaned = clean_and_lower(term);
+    if !token_qc(&cleaned) || is_dead_term(&cleaned) {
+        return;
+    }
+    let l1 = crate::nlp::normalize_l1(&cleaned);
+    if is_dead_term(&l1) {
         return;
     }
     // Derive the (optional) level-two key while `l1` is still borrowable; the
@@ -2553,11 +2608,12 @@ fn validate_schema(database: &ReadOnlyDatabase) -> PyResult<()> {
         .map(|x| x.value().to_string());
     match schema.as_deref() {
         Some(SCHEMA_VERSION) => Ok(()),
-        Some(SCHEMA_VERSION_V4 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V2 | SCHEMA_VERSION_V1) => {
-            Err(PyRuntimeError::new_err(
-                "fullmap DB is outdated; rebuild with 'tablassert build-fullmap'",
-            ))
-        }
+        Some(
+            SCHEMA_VERSION_V5 | SCHEMA_VERSION_V4 | SCHEMA_VERSION_V3 | SCHEMA_VERSION_V2
+            | SCHEMA_VERSION_V1,
+        ) => Err(PyRuntimeError::new_err(
+            "fullmap DB is outdated; rebuild with 'tablassert build-fullmap'",
+        )),
         _ => Err(PyRuntimeError::new_err("unsupported fullmap redb schema")),
     }
 }
@@ -2884,7 +2940,7 @@ fn extract_validate_rename(
 
     // Validate the extracted bundle against the force-build contract BEFORE
     // any rename, reusing the exact read-path helpers so the contract cannot
-    // drift: exact v5 schema (older tags are rejected loudly), a parseable
+    // drift: exact v6 schema (older tags are rejected loudly), a parseable
     // build_id, the META-advertised shard count, and — when the caller
     // requires a taxon allowlist — the matching `META.taxon_allowlist`
     // identity.
@@ -3001,7 +3057,7 @@ fn extract_validate_rename(
 /// decompressed tar is never materialized on disk) into a fresh dot-prefixed
 /// temp dir inside `output`'s directory (same filesystem -> atomic renames),
 /// then VALIDATES the extracted bundle against the same contract the read path
-/// enforces — exact v5 schema, a parseable `build_id`, the META-advertised
+/// enforces — exact v6 schema, a parseable `build_id`, the META-advertised
 /// shard count with no gaps or extras, a matching `build_id` in every shard,
 /// and (when `taxon_allowlist` is given) a `META.taxon_allowlist` identity
 /// equal to the one a filtered build would record — BEFORE renaming anything
@@ -4892,6 +4948,40 @@ mod tests {
             .contains("fullmap DB is outdated; rebuild with 'tablassert build-fullmap'"));
     }
 
+    /// v4 and v5 are the outdated tags the per-version tests above did not
+    /// cover, and v5 is the schema this bump migrates FROM: a v5 DB's RECORDS
+    /// keys are cleaned+lowercased terms, NOT `nlp::normalize_l1` output, so a
+    /// normalized query can never hit them (a v5 DB opened silently would look
+    /// like "nothing resolves" rather than "rebuild me").  Both must fail at
+    /// LOOKUP with the actionable rebuild instruction — never as the generic
+    /// unsupported-schema error, and never by returning zero matches.
+    #[test]
+    fn lookup_rejects_v4_and_v5_schemas_as_outdated() {
+        pyo3::Python::initialize();
+        let dir = tempfile::tempdir().unwrap();
+        for (index, tag) in [SCHEMA_VERSION_V4, SCHEMA_VERSION_V5]
+            .into_iter()
+            .enumerate()
+        {
+            let path = dir.path().join(format!("outdated{index}.redb"));
+            let database = Database::create(&path).unwrap();
+            let write = database.begin_write().unwrap();
+            {
+                let mut meta = write.open_table(META).unwrap();
+                meta.insert("schema", tag).unwrap();
+            }
+            write.commit().unwrap();
+            drop(database);
+
+            let err = lookup_terms(path, vec!["brca1".to_string()]).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("fullmap DB is outdated; rebuild with 'tablassert build-fullmap'"),
+                "{tag} must be rejected as outdated with the rebuild instruction, got: {err}"
+            );
+        }
+    }
+
     /// Two `ReadOnlyDatabase` handles on one file coexist (shared locks) and
     /// both read — the in-process analogue of the cross-process reader
     /// guarantee that motivated the redb 4 read-only switch.
@@ -5569,7 +5659,10 @@ mod tests {
 
         build_test(output.clone(), Vec::new(), vec![synonyms], 1, 4_000_000).unwrap();
 
-        let alive = lookup_terms(output.clone(), vec!["realname".to_string()]).unwrap();
+        // Lookups are EXACT key matches and the build stores `nlp::normalize_l1`
+        // keys, so the probe is the NORMALIZED form of the synonym ("realname"
+        // -> "realnam"); the raw spelling is no longer a key at all.
+        let alive = lookup_terms(output.clone(), vec!["realnam".to_string()]).unwrap();
         assert_eq!(alive.len(), 1);
         assert_eq!(alive[0].1[0].curie, "HGNC:1100");
 
@@ -5741,7 +5834,11 @@ mod tests {
         .unwrap();
 
         build_test(output.clone(), Vec::new(), vec![synonyms], 1, 4_000_000).unwrap();
-        let rows = lookup_terms(output, vec!["alias disease".to_string()]).unwrap();
+        // The key is the alias field's NORMALIZED level-one form ("Alias
+        // disease" -> tokens stemmed and byte-sorted -> "alia diseas"); the
+        // alias plumbing (id/name/categories/taxon) is what this test pins, and
+        // it must survive the normalization the build now applies.
+        let rows = lookup_terms(output, vec!["alia diseas".to_string()]).unwrap();
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].1[0].curie, "MONDO:1");
@@ -5789,7 +5886,10 @@ mod tests {
         .unwrap();
 
         build_test(output.clone(), Vec::new(), vec![synonyms], 1, 4_000_000).unwrap();
-        let rows = lookup_terms(output, vec!["quoted gene".to_string()]).unwrap();
+        // Cleaning still happens (the quotes are gone from the key) and the
+        // cleaned value then goes through `normalize_l1`, which stems "quoted"
+        // and byte-sorts the tokens: `"Quoted Gene"` -> `gene quot`.
+        let rows = lookup_terms(output, vec!["gene quot".to_string()]).unwrap();
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].1[0].preferred_name, "Quoted Gene");
@@ -5825,7 +5925,10 @@ mod tests {
 
         let probes = vec![
             "alpha".to_string(),
-            "shared".to_string(),
+            // "shared" normalizes to "share" (Porter2), so the probe must use the
+            // stored key form; the spill/merge equivalence this test pins is
+            // about run regrouping, not about the key spelling.
+            "share".to_string(),
             "gamma".to_string(),
             "beta".to_string(),
             "delta".to_string(),
@@ -5849,7 +5952,7 @@ mod tests {
         // "shared" must resolve to all three curies that list it.
         let shared = tiny
             .iter()
-            .find(|(t, _)| t == "shared")
+            .find(|(t, _)| t == "share")
             .map(|(_, recs)| {
                 let mut c: Vec<String> = recs.iter().map(|r| r.curie.clone()).collect();
                 c.sort();
@@ -6134,6 +6237,78 @@ mod tests {
         assert_eq!(
             terms.get("gene").map(Vec::as_slice),
             Some([(5, 0), (6, 1)].as_slice())
+        );
+    }
+
+    /// The level-one key `emit_term` stores is EXACTLY `nlp::normalize_l1`'s
+    /// output — the same form the Python query side produces (`nlp.level_one` →
+    /// `rs.normalize_terms`) — while the `token_qc` / `is_dead_term` gates keep
+    /// seeing the PRE-normalization cleaned spelling, so stemming cannot smuggle
+    /// a banned or sentinel term into the index.  fullmap lookups are exact
+    /// string matches, so either half drifting is a silent miss, not an error.
+    #[test]
+    fn emit_term_keys_match_normalize_l1_and_gates_stay_pre_normalization() {
+        // Multi-word names canonicalize: whitespace runs collapse and tokens are
+        // stemmed and byte-sorted, so word order stops mattering and both
+        // spellings accumulate under ONE key.
+        let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
+        emit_term("Oral  Aspirin", (1, 0), &mut terms);
+        emit_term("aspirin oral", (2, 0), &mut terms);
+        assert_eq!(
+            terms.get("aspirin oral").map(Vec::as_slice),
+            Some([(1, 0), (2, 0)].as_slice()),
+            "both spellings must land on one normalized level-one key"
+        );
+        // Level-two still composes AFTER level-one: it is the `[a-z0-9_]` strip
+        // of the NORMALIZED key ("aspirin oral" -> "aspirinoral"), not of the
+        // raw term (which would have been "oralaspirin").
+        assert_eq!(
+            terms.get("aspirinoral").map(Vec::as_slice),
+            Some([(1, 0), (2, 0)].as_slice())
+        );
+        assert_eq!(terms.len(), 2);
+
+        // Stemming folds morphological variants onto one key and duplicates
+        // collapse after stemming, so no distinct level-two key is emitted.
+        let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
+        emit_term("Genes gene", (3, 0), &mut terms);
+        assert_eq!(terms.len(), 1, "expected only the key `gene`: {terms:?}");
+        assert!(terms.contains_key("gene"));
+
+        // Digit- and punctuation-bearing tokens survive verbatim (never stemmed)
+        // and non-ASCII folds case but skips stemming, so the level-two strip is
+        // the only place those characters disappear.
+        let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
+        emit_term("TNF-alpha", (4, 0), &mut terms);
+        emit_term("café", (5, 0), &mut terms);
+        for key in ["tnf-alpha", "tnfalpha", "café", "caf"] {
+            assert!(terms.contains_key(key), "missing key {key:?}: {terms:?}");
+        }
+        assert_eq!(terms.len(), 4);
+
+        // The gates run BEFORE stemming: "Hypothetical Protein" is rejected on
+        // its cleaned spelling (post-normalization it reads "hypothet protein"
+        // and would slip past token_qc's literal-needle substring check), and
+        // "Not Applicable" is rejected by is_dead_term's exact-match sentinel
+        // list (post-normalization it reads "applic not" and would be indexed).
+        let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
+        emit_term("Hypothetical Protein", (6, 0), &mut terms);
+        emit_term("Not Applicable", (7, 0), &mut terms);
+        emit_term("uncharacterized", (8, 0), &mut terms);
+        assert!(
+            terms.is_empty(),
+            "banned/sentinel terms must be rejected pre-normalization: {terms:?}"
+        );
+
+        // A key that only BECOMES dead once normalized is dropped as well: the
+        // Python `distinct()` drop regex filters the NORMALIZED query terms, so
+        // "Nones" -> "none" could never be queried and must not be stored.
+        let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
+        emit_term("Nones", (9, 0), &mut terms);
+        emit_term("unknowns", (10, 0), &mut terms);
+        assert!(
+            terms.is_empty(),
+            "keys normalizing onto a sentinel must not be stored: {terms:?}"
         );
     }
 
