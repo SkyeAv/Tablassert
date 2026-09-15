@@ -180,13 +180,22 @@ def test_agent_env_fallback_and_forwarding(monkeypatch: pytest.MonkeyPatch, caps
         return {"records": {}, "metrics": {"mapped": 0, "skipped": 0}}
 
     build_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    retry_calls: list[dict[str, object]] = []
 
     def fake_build_model(*args: object, **kwargs: object) -> object:
         build_calls.append((args, kwargs))
         return object()
 
+    def fake_retrying_model(model: object, **kwargs: object) -> object:
+        retry_calls.append(kwargs)
+        return model
+
     monkeypatch.setattr("tablassert.agent.run_supervisor", fake_run_supervisor)
     monkeypatch.setattr("tablassert.agent.build_model", fake_build_model)
+    # The retry wrapper is faked for the same reason build_model is: the real one subclasses the
+    # smolagents Model base, which _requires the [agent] extra CI never installs. The passthrough
+    # still lets us assert the CLI forwards the resolved API key as `secrets`.
+    monkeypatch.setattr("tablassert.agent.make_retrying_model", fake_retrying_model)
 
     agent(["PMC1", "PMC2"], graph_configuration_file=_graph_path(), map_threshold=0.7, max_improve_iters=5)
 
@@ -209,7 +218,68 @@ def test_agent_env_fallback_and_forwarding(monkeypatch: pytest.MonkeyPatch, caps
     args, kwargs = build_calls[0]
     assert args == ("env-model", "env-base", "env-key")
     assert kwargs == {"backend": "openai"}
+    assert retry_calls == [{"secrets": ("env-key",)}], "the resolved API key is forwarded as secrets"
     # The summary line printed without error.
+    assert "tablassert agent:" in capsys.readouterr().out
+
+
+def test_agent_command_composes_retrying_model_for_agent_reflexion_and_judge(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """All three runtime model roles use retrying, with distillation OUTER of retrying."""
+    _set_model_env(monkeypatch)
+    import tablassert.agent as agent_mod
+
+    base_models: list[object] = []
+    retry_wrapped: list[object] = []
+    distilled_wrapped: list[object] = []
+    captured: dict[str, object] = {}
+
+    class Base:
+        pass
+
+    def fake_build(*args: object, **kwargs: object) -> object:
+        model = Base()
+        base_models.append(model)
+        return model
+
+    def fake_retry(model: object, **kwargs: object) -> object:
+        wrapper = {"kind": "retry", "inner": model}
+        retry_wrapped.append(wrapper)
+        return wrapper
+
+    def fake_distill(model: object, recorder: object, **kwargs: object) -> object:
+        wrapper = {"kind": "distill", "inner": model}
+        distilled_wrapped.append(wrapper)
+        return wrapper
+
+    monkeypatch.setattr(agent_mod, "build_model", fake_build)
+    monkeypatch.setattr(agent_mod, "make_retrying_model", fake_retry)
+    monkeypatch.setattr(agent_mod, "make_distilling_model", fake_distill)
+    monkeypatch.setattr(agent_mod, "make_prompt_callable", lambda model: model)
+    monkeypatch.setattr(agent_mod, "run_supervisor", lambda pmc_ids, **kwargs: captured.update(kwargs) or {"records": {}, "metrics": {}})
+
+    agent(["PMC1"], graph_configuration_file=_graph_path(), reflexion=True, judge_model="judge", distill=True)
+    factory = captured["build_model_factory"]
+    reflexion_factory = captured["reflexion_model_factory"]
+    factory_model: dict[str, object] = factory()  # type: ignore[operator]
+    reflexion_model: dict[str, object] = reflexion_factory()  # type: ignore[operator]
+    judge_model: dict[str, object] = captured["judge_model"]  # type: ignore[assignment]
+
+    assert len(base_models) == 3
+    assert len(retry_wrapped) == 3
+    # The inner agent's distilling wrapper is applied by run_supervisor, after its factory returns;
+    # these two construction sites (reflexion and judge) are wrapped here.
+    assert len(distilled_wrapped) == 2
+    assert factory_model["kind"] == "retry"
+    assert factory_model["inner"] in base_models
+    assert reflexion_model["kind"] == "distill"
+    reflexion_inner: dict[str, object] = reflexion_model["inner"]  # type: ignore[assignment]
+    assert reflexion_inner["kind"] == "retry"
+    assert judge_model["kind"] == "distill"
+    judge_inner: dict[str, object] = judge_model["inner"]  # type: ignore[assignment]
+    assert judge_inner["kind"] == "retry"
+    assert all(isinstance(wrapper, dict) and wrapper["kind"] == "retry" for wrapper in retry_wrapped)
     assert "tablassert agent:" in capsys.readouterr().out
 
 

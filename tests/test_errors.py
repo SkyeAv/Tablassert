@@ -8,6 +8,7 @@ from tablassert.errors import (
     DOCS_URL,
     BabelDownloadError,
     GraphValidationError,
+    LlmTransientError,
     NetworkTransientError,
     QcRuntimeMissingError,
     RewardConfigError,
@@ -15,6 +16,7 @@ from tablassert.errors import (
     SourceFileError,
     TablassertValidationError,
     error_code_of,
+    redact_secrets,
 )
 
 
@@ -81,6 +83,46 @@ def test_network_transient_error_code_and_docs_url() -> None:
     assert err.last_error is last
     assert "4 attempts" in str(err)
     assert "Name or service not known" in str(err)
+    assert "retryable later" in str(err)
+
+
+def test_redact_secrets_preserves_context_and_avoids_false_positive_text() -> None:
+    """Credential redaction covers gateway shapes without corrupting ordinary provider diagnostics."""
+    cases: dict[str, str] = {
+        "api_key=VALUE123": "api_key=[REDACTED]",
+        "api_key: VALUE123": "api_key: [REDACTED]",
+        'x-api-key: "VALUE123"': 'x-api-key: "[REDACTED]"',
+        "Authorization: Bearer JWT.VALUE": "Authorization: Bearer [REDACTED]",
+        "Bearer JWT.VALUE": "Bearer [REDACTED]",
+        '{"api_key": "VALUE123"}': '{"api_key": "[REDACTED]"}',
+        "sk-proj-TOKEN123456": "[REDACTED]",
+        "max_tokens=4096": "max_tokens=4096",
+        "8192 tokens. tokenizer failed; secret sauce": "8192 tokens. tokenizer failed; secret sauce",
+        "qwen-token-plan": "qwen-token-plan",
+    }
+    for raw, expected in cases.items():
+        assert redact_secrets(raw) == expected, raw
+    assert redact_secrets("prefix-SECRET-suffix", ("SECRET",)) == "prefix-[REDACTED]-suffix"
+    assert redact_secrets("a", ("a",)) == "[REDACTED]"
+
+
+def test_error_code_of_walks_wrapped_coded_errors() -> None:
+    """smolagents-style wrapper exceptions still expose the inner LLM code to the supervisor."""
+    inner: LlmTransientError = LlmTransientError("llm", 4, RuntimeError("503"))
+    outer: RuntimeError = RuntimeError("AgentGenerationError")
+    outer.__cause__ = inner
+    assert error_code_of(outer) == "llm-transient"
+
+
+def test_llm_transient_error_code_and_docs_url() -> None:
+    """Guard: an exhausted LLM retry budget carries the stable slug and docs URL."""
+    last: RuntimeError = RuntimeError("gateway 503")
+    err: LlmTransientError = LlmTransientError("gateway/model", 4, last)
+    assert err.code == "llm-transient"
+    assert str(err).endswith(DOCS_URL + "llm-transient")
+    assert err.target == "gateway/model"
+    assert err.attempts == 4
+    assert err.last_error is last
     assert "retryable later" in str(err)
 
 

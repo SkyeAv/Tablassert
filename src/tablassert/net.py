@@ -39,7 +39,7 @@ from typing import TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from tablassert.errors import NetworkTransientError
+from tablassert.errors import NetworkTransientError, redact_secrets
 from tablassert.log import cat
 
 logger = cat("NET")
@@ -545,6 +545,7 @@ def retry_transient(
     sleep: Callable[[float], None] = time.sleep,
     rng: Callable[[], float] = random.random,
     error_factory: Callable[[str, int, BaseException], BaseException] | None = None,
+    secrets: tuple[str, ...] = (),
 ) -> T:
     """Call ``operation()`` until it succeeds, its failures stop being transient, or its budget runs out.
 
@@ -568,6 +569,7 @@ def retry_transient(
             attempts ACTUALLY made (a truncated budget can end the loop early); defaults to
             :class:`tablassert.errors.NetworkTransientError`. The LLM path passes a factory producing
             ``LlmTransientError`` instead.
+        secrets: Configured credentials to redact from retry warning and exhaustion log messages.
 
     Returns:
         Whatever ``operation()`` returned on its first successful call.
@@ -585,6 +587,12 @@ def retry_transient(
     if attempts < 1:
         raise ValueError("attempts must be >= 1")
     factory: Callable[[str, int, BaseException], BaseException] = NetworkTransientError if error_factory is None else error_factory
+    # Redaction applies to the DEFAULT factory's message too, so a caller passing ``secrets`` without
+    # a custom factory cannot leak a credential into state.json notes while the logs are redacted.
+    if error_factory is None and secrets:
+        factory = lambda target_name, attempt_count, last_error: NetworkTransientError(  # noqa: E731 - local alias keeps the default transparent
+            target_name, attempt_count, last_error, secrets=secrets
+        )
     history: list[RetryAttempt] = []
     slept: float = 0.0
     for attempt in range(1, attempts + 1):
@@ -623,7 +631,7 @@ def retry_transient(
                 # exceptions with required __init__ args) fails to unpickle there, so passing the object
                 # would make THIS log line -- the one that exists to stop transient failures from being
                 # invisible -- silently die in the handler.
-                error=str(error),
+                error=redact_secrets(str(error), secrets),
             )
             sleep(delay)
     # Invariant: every exit from the loop above appends first, so `history` is never empty here.
@@ -633,7 +641,7 @@ def retry_transient(
         target=last.target,
         attempt=last.attempt,
         slept=slept,
-        error=str(last.error),  # see the enqueue=True pickling note above
+        error=redact_secrets(str(last.error), secrets),  # see the enqueue=True pickling note above
     )
     raise factory(target, last.attempt, last.error) from last.error
 
