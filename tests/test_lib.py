@@ -75,7 +75,13 @@ def fake_fullmap_row(term: str, curie: str, name: str, category: str, taxon: int
 
 
 def install_fake_fullmap(monkeypatch: Any, rows: dict[str, list[dict[str, object]]]) -> list[list[str]]:
-    """Monkeypatch fullmap lookup and return captured term batches."""
+    """Monkeypatch fullmap lookup and return captured term batches.
+
+    ``rows`` keys (and each row's ``term`` field) must match ``nlp.level_one``
+    output exactly -- clean -> lowercase -> Porter2 stem -> dedupe -> sort --
+    not the raw source text, because the pipeline queries the normalized form.
+    Any change to level-one normalization must re-key these fixtures deliberately.
+    """
     calls: list[list[str]] = []
 
     def fake_lookup(db: Path, terms: list[str], return_format: str = "rows") -> list[dict[str, object]]:
@@ -3247,11 +3253,13 @@ def test_compile_subgraph_e2e_column_cleanup_and_numeric_annotations(monkeypatch
 
 def test_compile_subgraph_e2e_release_drops_rows_before_fullmap_lookup(monkeypatch: Any, tmp_path: Path) -> None:
     """release-mode subgraph compilation drops not-significant rows before resolution."""
+    # Keys are the level_one form of the source row below ("KeptGene" -> "keptgen", Porter2 stem).
+    # Hardcoded on purpose: deriving them through nlp.level_one would let normalization drift pass silently.
     rows: dict[str, list[dict[str, object]]] = {
-        "keptgene": [fake_fullmap_row("keptgene", "HGNC:1", "KEPTGENE", "Gene", 9606)],
-        "keptdisease": [fake_fullmap_row("keptdisease", "MONDO:1", "Kept disease", "Disease", 0)],
-        "droppedgene": [fake_fullmap_row("droppedgene", "HGNC:2", "DROPPEDGENE", "Gene", 9606)],
-        "droppeddisease": [fake_fullmap_row("droppeddisease", "MONDO:2", "Dropped disease", "Disease", 0)],
+        "keptgen": [fake_fullmap_row("keptgen", "HGNC:1", "KEPTGENE", "Gene", 9606)],
+        "keptdiseas": [fake_fullmap_row("keptdiseas", "MONDO:1", "Kept disease", "Disease", 0)],
+        "droppedgen": [fake_fullmap_row("droppedgen", "HGNC:2", "DROPPEDGENE", "Gene", 9606)],
+        "droppeddiseas": [fake_fullmap_row("droppeddiseas", "MONDO:2", "Dropped disease", "Disease", 0)],
     }
     calls: list[list[str]] = install_fake_fullmap(monkeypatch, rows)
     table_path, source_path = write_text_section(
@@ -3282,17 +3290,19 @@ def test_compile_subgraph_e2e_release_drops_rows_before_fullmap_lookup(monkeypat
     study: dict[str, Any] = result["has_supporting_studies"].to_list()[0]["PMCID:PMC0000000"]
     assert study["name"] == source_path.name
     assert not study.get("has_study_results")
-    assert "droppedgene" not in looked_up
-    assert "droppeddisease" not in looked_up
+    assert "droppedgen" not in looked_up
+    assert "droppeddiseas" not in looked_up
 
 
 def test_compile_subgraph_e2e_release_drops_zero_effect_size_before_fullmap_lookup(monkeypatch: Any, tmp_path: Path) -> None:
     """release-mode subgraph compilation drops zero effect-size rows before resolution."""
+    # Keys are the level_one form of the source row below ("KeptGene" -> "keptgen", Porter2 stem).
+    # Hardcoded on purpose: deriving them through nlp.level_one would let normalization drift pass silently.
     rows: dict[str, list[dict[str, object]]] = {
-        "keptgene": [fake_fullmap_row("keptgene", "HGNC:1", "KEPTGENE", "Gene", 9606)],
-        "keptdisease": [fake_fullmap_row("keptdisease", "MONDO:1", "Kept disease", "Disease", 0)],
-        "droppedgene": [fake_fullmap_row("droppedgene", "HGNC:2", "DROPPEDGENE", "Gene", 9606)],
-        "droppeddisease": [fake_fullmap_row("droppeddisease", "MONDO:2", "Dropped disease", "Disease", 0)],
+        "keptgen": [fake_fullmap_row("keptgen", "HGNC:1", "KEPTGENE", "Gene", 9606)],
+        "keptdiseas": [fake_fullmap_row("keptdiseas", "MONDO:1", "Kept disease", "Disease", 0)],
+        "droppedgen": [fake_fullmap_row("droppedgen", "HGNC:2", "DROPPEDGENE", "Gene", 9606)],
+        "droppeddiseas": [fake_fullmap_row("droppeddiseas", "MONDO:2", "Dropped disease", "Disease", 0)],
     }
     calls: list[list[str]] = install_fake_fullmap(monkeypatch, rows)
     table_path, _ = write_text_section(
@@ -3322,8 +3332,8 @@ def test_compile_subgraph_e2e_release_drops_zero_effect_size_before_fullmap_look
     assert result["object"].to_list() == ["MONDO:1"]
     # biolink-model 4.4.4 types ``effect_size`` float (PR #1774): a real JSON number.
     assert result["effect_size"].to_list() == [1.5]
-    assert "droppedgene" not in looked_up
-    assert "droppeddisease" not in looked_up
+    assert "droppedgen" not in looked_up
+    assert "droppeddiseas" not in looked_up
 
 
 def test_compile_subgraph_e2e_head_caps_rows_to_five(monkeypatch: Any, tmp_path: Path) -> None:
@@ -3364,8 +3374,9 @@ def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatc
     monkeypatch.chdir(tmp_path)
     rows: dict[str, list[dict[str, object]]] = {
         "brca1": [fake_fullmap_row("brca1", "HGNC:1100", "BRCA1", "Gene", 9606)],
-        "disease x": [fake_fullmap_row("disease x", "MONDO:0000001", "Disease X", "Disease", 0)],
-        "homo sapiens": [fake_fullmap_row("homo sapiens", "NCBITaxon:9606", "Homo sapiens", "OrganismTaxon", 9606)],
+        # level_one keys: "Disease X" -> "diseas x", "Homo sapiens" -> "homo sapien" (Porter2 stems).
+        "diseas x": [fake_fullmap_row("diseas x", "MONDO:0000001", "Disease X", "Disease", 0)],
+        "homo sapien": [fake_fullmap_row("homo sapien", "NCBITaxon:9606", "Homo sapiens", "OrganismTaxon", 9606)],
     }
     install_fake_fullmap(monkeypatch, rows)
     table_path, _ = write_text_section(
@@ -3404,7 +3415,8 @@ def test_node_output_reflects_disease_taxon(monkeypatch: Any, tmp_path: Path, ri
     """Taxon-bearing disease nodes surface their taxon in KGX nodes NDJSON."""
     monkeypatch.chdir(tmp_path)
     rows: dict[str, list[dict[str, object]]] = {
-        "disease taxon": [fake_fullmap_row("disease taxon", "MONDO:50", "Taxon-bearing disease", "Disease", 9606)],
+        # level_one key: "Disease Taxon" -> "diseas taxon" (Porter2 stem of "disease").
+        "diseas taxon": [fake_fullmap_row("diseas taxon", "MONDO:50", "Taxon-bearing disease", "Disease", 9606)],
         "brca1": [fake_fullmap_row("brca1", "HGNC:1100", "BRCA1", "Gene", 9606)],
     }
     install_fake_fullmap(monkeypatch, rows)

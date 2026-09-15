@@ -62,3 +62,88 @@ def test_level_two_custom_tag() -> None:
     result: pl.DataFrame = level_two(lf, "name", tag="_clean").collect()
     assert "name_clean" in result.columns
     assert result["name_clean"].to_list() == ["helloworld"]
+
+
+def test_level_one_token_order_insensitive() -> None:
+    """level one canonicalizes token order.
+
+    WHY: "aspirin oral" and "oral aspirin" are the same drug term; sorting
+    tokens to one canonical order makes term equality (and every downstream
+    join/dedupe that rides on it) insensitive to word order.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["aspirin oral", "oral aspirin"]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == ["aspirin oral", "aspirin oral"]
+
+
+def test_level_one_stems_to_common_root() -> None:
+    """level one folds morphological variants onto their stem.
+
+    WHY: plural/singular variants ("genes" vs "gene") must share one
+    normalized key or lexical matching silently misses them; Porter2 stemming
+    is what makes the fold happen.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["genes", "gene"]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == ["gene", "gene"]
+
+
+def test_level_one_dedupes_and_collapses_whitespace() -> None:
+    """level one drops repeated tokens and collapses whitespace runs.
+
+    WHY: repeated words (a common artifact of concatenating synonyms) and
+    stray spacing/tabs must not defeat term equality — both spellings of the
+    same term fold onto one canonical value.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["aspirin   aspirin\t oral", "  oral  aspirin  "]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == ["aspirin oral", "aspirin oral"]
+
+
+def test_level_one_preserves_nulls_and_empties() -> None:
+    """level one keeps nulls null and empties empty.
+
+    WHY: missing values are semantically different from blank terms — a null
+    that turned into "" (or crashed the Rust call, which takes list[str])
+    would silently corrupt downstream missing-value handling.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": [None, "", "   ", "aspirin"]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == [None, "", "", "aspirin"]
+
+
+def test_level_one_passes_through_digits_and_punctuation() -> None:
+    """level one leaves digit and punctuated identifiers verbatim.
+
+    WHY: "tnf-alpha" and "51" are not English words — stemming them would
+    corrupt the identifier, and guards downstream rely on digits surviving.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["tnf-alpha", "51"]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == ["tnf-alpha", "51"]
+
+
+def test_level_one_unicode_lowercase() -> None:
+    """level one folds non-ASCII casing via full Unicode lowercase.
+
+    WHY: source casing is not ASCII-only ("ÄTHÉROGENIC"); ASCII-only lowering
+    would leave Ä/É untouched and split one term into two. The folded token is
+    then correctly skipped by the ASCII-only stemmer.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["ÄTHÉROGENIC"]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == ["äthérogenic"]
+
+
+def test_level_one_leaves_other_columns_untouched() -> None:
+    """level one normalizes one column and leaves siblings byte-identical.
+
+    WHY: normalization is an in-place column rewrite — sibling columns (even
+    when the normalized column holds nulls) must come through unchanged, or
+    a frame that was merely cleaned would silently lose data.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": [None, "  Genes  "], "age": [42, 7], "weight": [1.5, 2.5]}).lazy()
+    result: pl.DataFrame = level_one(lf, "name").collect()
+    assert result["name"].to_list() == [None, "gene"]
+    assert result["age"].to_list() == [42, 7]
+    assert result["weight"].to_list() == [1.5, 2.5]
