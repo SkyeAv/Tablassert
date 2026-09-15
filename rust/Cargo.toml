@@ -35,6 +35,11 @@ rayon = "1"
 redb = { git = "https://github.com/cberner/redb.git", rev = "a35e7cc86f191d08a444d5973469b34673d586fc", features = ["experimental_cursor"] }
 rlimit = "0.10"
 rustc-hash = "1"
+# English (Porter2) stemmer for `nlp::normalize_l1` term normalization: pure
+# Rust (no dictionaries, no C deps) and fast enough for the per-token hot path;
+# it requires already-lowercased input, which the pipeline guarantees by
+# lowercasing the whole term before splitting/stemming.
+rust-stemmers = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tar = "0.4"

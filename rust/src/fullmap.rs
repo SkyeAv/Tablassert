@@ -274,7 +274,11 @@ fn clean(value: &str) -> Cow<'_, str> {
 /// sub-slice, then ASCII-fast-path lowercase via `level_one`.  The `Cow` is
 /// borrowed in the common case (already-clean, already-lowercase ASCII) and only
 /// allocates when the term actually needs lowercasing.
-fn clean_and_lower(value: &str) -> Cow<'_, str> {
+///
+/// `pub(crate)`: also the cleaning+lowercasing first stage of
+/// `nlp::normalize_l1`, so the normalization pipeline and the fullmap emit
+/// path share ONE cleaning implementation and can never drift apart.
+pub(crate) fn clean_and_lower(value: &str) -> Cow<'_, str> {
     level_one(clean_slice(value))
 }
 
