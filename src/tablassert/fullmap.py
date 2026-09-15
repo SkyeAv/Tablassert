@@ -12,6 +12,7 @@ from tablassert._lazy import LazyModule
 from tablassert.biolink import Categories
 from tablassert.errors import TablassertError
 from tablassert.log import cat
+from tablassert.nlp import _normalize_terms_series
 
 logger = cat("FULLMAP")
 
@@ -413,14 +414,23 @@ def filter_and_rank(
         priority: pl.Expr = pl.when(pl.col("CATEGORY_NAME").is_in(priority_values)).then(pl.lit(1)).otherwise(pl.lit(50))
     else:
         priority = pl.lit(50)
+    # ``term`` is normally already level-one normalized, but normalize both sides
+    # here so this ranking remains correct for direct callers and for every v6 key
+    # shape (token order, casing, and Porter2-stemmed inflections). Keep the raw
+    # equality branch first: it is the stronger historical exact-name boost.
+    normalized_columns: list[pl.Expr] = [
+        pl.col("PREFERRED_NAME").cast(pl.String).map_batches(_normalize_terms_series, return_dtype=pl.String).alias("_preferred_name_l1"),
+        pl.col("term").cast(pl.String).map_batches(_normalize_terms_series, return_dtype=pl.String).alias("_term_l1"),
+    ]
+    result = result.with_columns(normalized_columns)
     pr_base: pl.Expr = (
         pl.when(pl.col("PREFERRED_NAME") == pl.col("term"))
         .then(pl.lit(1))
-        .when((pl.col("PREFERRED_NAME").str.to_lowercase() == pl.col("term")) & (pl.col("NLP_LEVEL") == 1))
+        .when((pl.col("_preferred_name_l1") == pl.col("_term_l1")) & (pl.col("NLP_LEVEL") == 1))
         .then(pl.lit(5))
         .otherwise(pl.lit(10))
     )
-    result = result.with_columns((priority * pr_base).alias("PR"))
+    result = result.with_columns((priority * pr_base).alias("PR")).drop(["_preferred_name_l1", "_term_l1"])
     return deduplicate_result(result, column_context)
 
 

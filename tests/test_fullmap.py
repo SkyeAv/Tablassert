@@ -241,6 +241,81 @@ def test_pr_case_insensitive_preferred() -> None:
     assert matches["PR"].to_list() == [250]
 
 
+def test_pr_reordered_preferred_name_gets_normalized_boost() -> None:
+    """A reordered preferred name receives the level-one preferred-name boost.
+
+    WHY: v6 fullmap keys canonicalize token order, so ranking must compare the
+    same canonical form rather than the old case-only spelling.
+    """
+    terms: pl.DataFrame = pl.DataFrame({"term": ["aspirin oral"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(
+        {
+            "term": ["aspirin oral", "aspirin oral"],
+            "CURIE": ["CHEBI:1", "CHEBI:2"],
+            "PREFERRED_NAME": ["Oral Aspirin", "Other Drug"],
+            "CATEGORY_NAME": ["ChemicalEntity", "ChemicalEntity"],
+            "TAXON_ID": [0, 0],
+            "SOURCE_NAME": ["CHEBI", "CHEBI"],
+            "SOURCE_VERSION": [rs.fullmap_source_version()] * 2,
+        }
+    )
+
+    matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=None, column_context=False)
+
+    assert matches["CURIE"].to_list() == ["CHEBI:1"]
+    assert matches["PR"].to_list() == [250]
+
+
+def test_pr_inflected_preferred_name_gets_normalized_boost() -> None:
+    """An inflected preferred name receives the Porter2-normalized boost.
+
+    WHY: the production key for ``Oral Aspirins`` is ``aspirin oral``; ranking
+    must use the same stemming semantics or it would lose a valid name boost.
+    """
+    terms: pl.DataFrame = pl.DataFrame({"term": ["aspirin oral"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(
+        {
+            "term": ["aspirin oral", "aspirin oral"],
+            "CURIE": ["CHEBI:1", "CHEBI:2"],
+            "PREFERRED_NAME": ["Oral Aspirins", "Other Drug"],
+            "CATEGORY_NAME": ["ChemicalEntity", "ChemicalEntity"],
+            "TAXON_ID": [0, 0],
+            "SOURCE_NAME": ["CHEBI", "CHEBI"],
+            "SOURCE_VERSION": [rs.fullmap_source_version()] * 2,
+        }
+    )
+
+    matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=None, column_context=False)
+
+    assert matches["CURIE"].to_list() == ["CHEBI:1"]
+    assert matches["PR"].to_list() == [250]
+
+
+def test_pr_nonmatching_preferred_name_does_not_get_normalized_boost() -> None:
+    """A genuinely different preferred name keeps the synonym-only rank.
+
+    WHY: normalization must not turn merely related names into preferred-name
+    matches or change ranking for nonmatching rows.
+    """
+    terms: pl.DataFrame = pl.DataFrame({"term": ["aspirin oral"], "nlp_level": [1]})
+    raw: pl.DataFrame = pl.DataFrame(
+        {
+            "term": ["aspirin oral"],
+            "CURIE": ["CHEBI:1"],
+            "PREFERRED_NAME": ["Oral Ibuprofen"],
+            "CATEGORY_NAME": ["ChemicalEntity"],
+            "TAXON_ID": [0],
+            "SOURCE_NAME": ["CHEBI"],
+            "SOURCE_VERSION": [rs.fullmap_source_version()],
+        }
+    )
+
+    matches: pl.DataFrame = filter_and_rank(raw, terms, taxon=None, prioritize=None, avoid=None, column_context=False)
+
+    assert matches["CURIE"].to_list() == ["CHEBI:1"]
+    assert matches["PR"].to_list() == [500]
+
+
 def test_filter_and_rank_collapses_duplicate_curies_and_keeps_equal_best_curies() -> None:
     """Only the best ranking tier survives, with one row per distinct CURIE."""
     terms: pl.DataFrame = pl.DataFrame({"term": ["tie"], "nlp_level": [1]})
