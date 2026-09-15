@@ -1,7 +1,6 @@
 # Installation
 
-Get a working `tablassert` install, then pick the `rt` / `aria2` / `qc` / `agent` / `optimize` / `distill` / `log` extras that match how you will
-use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging).
+Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `agent` / `optimize` / `distill` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging).
 
 ## Prerequisites
 
@@ -31,8 +30,8 @@ Best for development, testing, and active work on Tablassert.
 git clone https://github.com/SkyeAv/Tablassert.git
 cd Tablassert
 
-# Install development dependencies and optional QC runtime
-uv sync --group dev --extra qc --extra log
+# Install development dependencies, CLI runtime, and optional QC/logging runtimes
+uv sync --group dev --extra cli --extra qc --extra log
 
 # Build the editable Rust extension into the uv environment
 uv run maturin develop --manifest-path rust/Cargo.toml
@@ -45,21 +44,24 @@ This creates a virtual environment in `.venv/`, installs the development depende
 
 ### Method 2: Install from PyPI
 
-Recommended for most users. The base install builds knowledge graphs from CSV/TSV sources; QC and other
-extras are opt-in.
+Recommended for most users. The base install exposes Tablassert's Python API; add `[cli]` to install the `tablassert` command. QC and other extras are opt-in.
 
 ```bash
-# Option A: Install from PyPI with UV
-uv tool install tablassert
+# Option A: Install the command-line tool with UV
+uv tool install "tablassert[cli]"
 
-# Option B: Install from PyPI with pip
+# Option B: Install the Python API with pip
 pip install tablassert
+
+# Add the command-line interface to a pip install
+pip install "tablassert[cli]"
 ```
 
 #### Optional Extras
 
 | Extra | Description | Includes |
 |---|---|---|
+| `cli` | `tablassert` command and rich terminal progress | `cyclopts`, `rich` |
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact → fuzzy → abbreviation → SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
@@ -69,6 +71,10 @@ pip install tablassert
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
 ```bash
+# Install the command-line interface
+uv tool install "tablassert[cli]"
+pip install "tablassert[cli]"
+
 # Install with runtime-compatible Polars
 # (for CPUs without the required Polars instructions)
 uv tool install "tablassert[rt]"
@@ -115,6 +121,7 @@ fails, not a failure report):
 
 | Command | Checked | When |
 |---|---|---|
+| `tablassert` | `[cli]` | Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error |
 | `build-kg --qc` | `[qc]` | Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass |
 | `tablassert agent` | `[agent]` | After flag validation, before any model is built or any article fetched |
 | `tablassert agent --optimize` | `[agent]` + `[optimize]` | Same point; both are reported at once |
@@ -144,7 +151,7 @@ Use this when you want the latest main-branch build.
 
 ```bash
 # Install from main branch
-uv tool install git+https://github.com/SkyeAv/Tablassert.git@main
+uv tool install "tablassert[cli] @ git+https://github.com/SkyeAv/Tablassert.git@main"
 ```
 
 ### Method 4: Install from local source
@@ -157,7 +164,7 @@ git clone https://github.com/SkyeAv/Tablassert.git
 cd Tablassert
 
 # Install Tablassert CLI tool from local source
-uv tool install .
+uv tool install ".[cli]"
 ```
 
 ## Verifying Installation
@@ -196,7 +203,7 @@ To upgrade to the latest version:
 git pull origin main
 
 # Update dependencies and rebuild the editable extension
-uv sync --group dev --extra qc --extra log
+uv sync --group dev --extra cli --extra qc --extra log
 uv run maturin develop --manifest-path rust/Cargo.toml
 ```
 

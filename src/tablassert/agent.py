@@ -47,6 +47,7 @@ from tablassert.errors import (
     SectionValidationError,
     TablassertValidationError,
     error_code_of,
+    flatten_pydantic_error,
     redact_secrets,
 )
 from tablassert.extras import install_command, require_module
@@ -55,7 +56,6 @@ from tablassert.graph_target import append_successful_config
 from tablassert.lib import Tcode
 from tablassert.log import cat
 from tablassert.models import Graph, NodeEncoding, Section
-from tablassert.progress import flatten_pydantic_error
 
 if TYPE_CHECKING:
     import dspy  # pyright: ignore[reportMissingImports,reportUnusedImport]

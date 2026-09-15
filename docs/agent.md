@@ -769,7 +769,7 @@ drive-letter paths working. The `<agent-config>` and `<reference-config>` may ca
 
 ```bash
 TABLASSERT_PMC_COMPARE='[".tablassert/agent/configs/PMC10766526.yaml", "./legacy/PMC10766526.v12.yaml", "./downloads/PMC10766526/PMC10766526.1/table.xlsx", "data/fullmap.redb"]' \
-  uv run --extra qc --extra agent pytest tests/test_agent_edgecount.py::test_real_pmc_comparison -q
+  uv run --extra cli --extra qc --extra agent pytest tests/test_agent_edgecount.py::test_real_pmc_comparison -q
 ```
 
 Unset, that test skips with a printed reason; the offline fixture tests run regardless.
@@ -781,7 +781,7 @@ mocked/snapshotted PMC data, a tiny real redb (`rs.build_fullmap_db`), and injec
 
 ```bash
 # Agent tests SKIP without the extra and PASS with it:
-uv sync --extra agent
+uv sync --extra cli --extra agent
 uv run pytest -q tests/test_agent_eval.py tests/test_agent_supervisor.py tests/test_agent_assembly.py
 ```
 

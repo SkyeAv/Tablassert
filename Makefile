@@ -1,8 +1,8 @@
 .PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check clean
 
-# Install Python dev dependencies, QC and log extras, and the editable Rust extension.
+# Install Python dev dependencies, CLI/QC/log extras, and the editable Rust extension.
 setup:
-	uv sync --group dev --extra qc --extra log
+	uv sync --group dev --extra cli --extra qc --extra log
 	uv run maturin develop --manifest-path rust/Cargo.toml
 
 # Build and install the Rust extension in release mode for local performance checks.

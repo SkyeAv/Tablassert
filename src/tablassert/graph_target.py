@@ -18,10 +18,9 @@ from typing import Any
 import pydantic
 import yaml
 
-from tablassert.errors import GraphValidationError
+from tablassert.errors import GraphValidationError, flatten_pydantic_error
 from tablassert.ingests import from_yaml
 from tablassert.models import Graph
-from tablassert.progress import flatten_pydantic_error
 
 
 @dataclass(frozen=True)

@@ -15,8 +15,6 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TaskID, TextC
 from rich.text import Text
 
 if TYPE_CHECKING:
-    from pydantic import ValidationError
-
     from tablassert.lib import Tcode
 
 
@@ -30,25 +28,6 @@ def format_section_compact(x: Tcode) -> str:
         Compact ``"<config stem> · <hash[:8]>"`` label.
     """
     return f"{Path(x.config.name).stem} · {x.store.stem[:8]}"
-
-
-def flatten_pydantic_error(e: ValidationError) -> str:
-    """Flatten a pydantic ``ValidationError`` into a single-line, ``;``-joined summary.
-
-    Each fragment is ``"<loc>: <msg> [<kind>]"``. ``<kind>`` is the stable
-    Tablassert error code when the error is coded (recovered from
-    ``ctx["error"].code``), else the pydantic ``type``. Coded messages already
-    embed their docs URL via ``_Coded.__str__``.
-    """
-    parts: list[str] = []
-    for err in e.errors():
-        loc: str = ".".join(str(p) for p in err.get("loc", ())) or "<root>"
-        msg: str = str(err.get("msg", "")).replace("\n", " ").replace("|", "/").strip()
-        ctx: object = err.get("ctx") or {}
-        code: str | None = getattr(ctx.get("error"), "code", None) if isinstance(ctx, dict) else None
-        kind: str = code if code is not None else str(err.get("type", ""))
-        parts.append(f"{loc}: {msg} [{kind}]")
-    return "; ".join(parts)
 
 
 def _truncate(s: str, max_width: int) -> str:

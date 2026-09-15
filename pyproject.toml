@@ -52,8 +52,6 @@ dependencies = [
     "rapidfuzz>=3.14.3",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
-    "cyclopts>=1.0.0",
-    "rich>=13.0.0",
     "fastexcel>=0.20.2",
 ]
 
@@ -75,9 +73,13 @@ features = ["extension-module"]
 include = ["src/tablassert/data/experimental_taxa.yaml"]
 
 [project.scripts]
-tablassert = "tablassert.cli:APP"
+tablassert = "tablassert.cli_entry:main"
 
 [project.optional-dependencies]
+cli = [
+    "cyclopts>=1.0.0",
+    "rich>=13.0.0",
+]
 rt = [
     "polars[rtcompat]>=1.40.1",
 ]

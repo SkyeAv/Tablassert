@@ -3473,13 +3473,11 @@ version = "18.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "biolink-model" },
-    { name = "cyclopts" },
     { name = "fastexcel" },
     { name = "polars" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rapidfuzz" },
-    { name = "rich" },
 ]
 
 [package.optional-dependencies]
@@ -3489,6 +3487,10 @@ agent = [
 ]
 aria2 = [
     { name = "aria2" },
+]
+cli = [
+    { name = "cyclopts" },
+    { name = "rich" },
 ]
 distill = [
     { name = "datasets" },
@@ -3547,7 +3549,7 @@ typecheck = [
 requires-dist = [
     { name = "aria2", marker = "extra == 'aria2'", specifier = "==0.0.1b0" },
     { name = "biolink-model", specifier = ">=4.4.4" },
-    { name = "cyclopts", specifier = ">=1.0.0" },
+    { name = "cyclopts", marker = "extra == 'cli'", specifier = ">=1.0.0" },
     { name = "datasets", marker = "extra == 'distill'", specifier = ">=3.0.0" },
     { name = "dspy", marker = "extra == 'optimize'", specifier = ">=3.2.1" },
     { name = "fastexcel", specifier = ">=0.20.2" },
@@ -3558,12 +3560,12 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rapidfuzz", specifier = ">=3.14.3" },
-    { name = "rich", specifier = ">=13.0.0" },
+    { name = "rich", marker = "extra == 'cli'", specifier = ">=13.0.0" },
     { name = "scikit-learn", marker = "extra == 'qc'", specifier = ">=1.8.0" },
     { name = "sentence-transformers", marker = "extra == 'qc'", specifier = ">=5.3.0" },
     { name = "smolagents", marker = "extra == 'agent'", specifier = ">=1.26.0" },
 ]
-provides-extras = ["rt", "aria2", "qc", "agent", "optimize", "distill", "log"]
+provides-extras = ["cli", "rt", "aria2", "qc", "agent", "optimize", "distill", "log"]
 
 [package.metadata.requires-dev]
 ci = [

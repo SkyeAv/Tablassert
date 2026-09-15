@@ -14,12 +14,12 @@ Thank you for helping make Tablassert reliable. Reliability here includes the de
 ```bash
 git clone https://github.com/SkyeAv/Tablassert.git
 cd Tablassert
-uv sync --group dev --extra qc --extra log
+uv sync --group dev --extra cli --extra qc --extra log
 uv run maturin develop --manifest-path rust/Cargo.toml
 uv run tablassert --help
 ```
 
-`uv sync --group dev --extra qc --extra log` installs the development tools plus the optional QC runtime and loguru logging. `maturin develop` builds the PyO3 extension from `rust/` and installs it into the uv-managed environment.
+`uv sync --group dev --extra cli --extra qc --extra log` installs the development tools plus the CLI runtime, optional QC runtime, and loguru logging. `maturin develop` builds the PyO3 extension from `rust/` and installs it into the uv-managed environment.
 
 Shortcut:
 
@@ -49,7 +49,7 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 
 | Target | Runs |
 |---|---|
-| `make setup` | `uv sync --group dev --extra qc --extra log` and debug `maturin develop` |
+| `make setup` | `uv sync --group dev --extra cli --extra qc --extra log` and debug `maturin develop` |
 | `make dev` | Debug editable extension build |
 | `make build` | Release editable extension build |
 | `make test` | Python tests with coverage |
@@ -103,7 +103,7 @@ What the gates cover:
 
 - **Ruff linting and formatting.** The current tree enforces core pycodestyle/pyflakes safety checks plus stale-suppression detection. It also enforces an expanded rule set covering common bug patterns (bugbear), simplifications, Python-version upgrades, pytest style, import order, and comprehensions. Treat `uv run ruff check .` and `uv run ruff format --check .` as the stable interface rather than relying on individual rule codes.
 - **Pyright.** Type checking runs through `uv run pyright`; the project is tightening this as a strict-inference ratchet over time.
-- **Python tests.** The suite is offline and runs in parallel by default via [pytest-xdist](https://pypi.org/project/pytest-xdist/) (`-n auto` in `pyproject.toml`'s addopts, which also enable `--cov` so coverage is reported inline); expect roughly 20-30 seconds for a full local run. Disable parallelism for a single serial run with `pytest -n 0`. CI installs the `ci` dependency group with the `qc` and `log` extras (`--no-default-groups --group ci --extra qc --extra log`) and runs the suite as a single job rather than sharding it across a matrix of runners: most of a run is fixed overhead (interpreter start, imports, xdist worker spin-up, coverage init) rather than test execution, so splitting the suite would cost more in per-runner setup than it recovers.
+- **Python tests.** The suite is offline and runs in parallel by default via [pytest-xdist](https://pypi.org/project/pytest-xdist/) (`-n auto` in `pyproject.toml`'s addopts, which also enable `--cov` so coverage is reported inline); expect roughly 20-30 seconds for a full local run. Disable parallelism for a single serial run with `pytest -n 0`. CI installs the `ci` dependency group with the `cli`, `qc`, and `log` extras (`--no-default-groups --group ci --extra cli --extra qc --extra log`) and runs the suite as a single job rather than sharding it across a matrix of runners: most of a run is fixed overhead (interpreter start, imports, xdist worker spin-up, coverage init) rather than test execution, so splitting the suite would cost more in per-runner setup than it recovers.
 - **Rust tests.** `cargo test --manifest-path rust/Cargo.toml` runs the extension's Rust unit tests.
 - **Rust style and lints.** `cargo fmt --check` enforces formatting; clippy runs all targets with warnings denied.
 

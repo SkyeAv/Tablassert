@@ -110,11 +110,12 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 pip install tablassert
 ```
 
-Or with uv: `uv tool install tablassert`. The base install builds knowledge graphs from
-CSV/TSV/Excel sources; optional extras add runtime and pipeline capabilities:
+Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API;
+install `[cli]` to use the `tablassert` command and optional extras for additional runtime and pipeline capabilities:
 
 | Extra | Adds | Install |
 | ----- | ---- | ------- |
+| `cli` | `tablassert` command and rich terminal progress | `pip install "tablassert[cli]"` |
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact → fuzzy → abbreviation → SapBERT embeddings) | `pip install "tablassert[qc]"` |
@@ -123,7 +124,7 @@ CSV/TSV/Excel sources; optional extras add runtime and pipeline capabilities:
 | `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) | `pip install "tablassert[distill]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
-QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never
+The `tablassert` command requires `[cli]`; without it, the console launcher reports the exact install command. QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never
 produces a bare `ModuleNotFoundError`: the failure names the missing package and the exact install
 command, and for `build-kg --qc` and `tablassert agent` it arrives before the run starts rather than
 partway through. Logging is the exception: without the `log` extra Tablassert produces no logs
@@ -166,7 +167,7 @@ no LazyFrame setup or NLP preprocessing required. See the
 ## Developing
 
 ```bash
-uv sync --group dev --extra qc --extra log
+uv sync --group dev --extra cli --extra qc --extra log
 uv run maturin develop --manifest-path rust/Cargo.toml
 make check
 ```

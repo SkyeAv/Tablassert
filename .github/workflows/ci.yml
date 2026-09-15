@@ -13,7 +13,7 @@ concurrency:
 env:
   # Both syncing jobs install this EXACT set, so they share one warm uv cache instead of
   # racing to save mutually-useless ones. See the `ci` group in pyproject.toml.
-  SYNC_ARGS: --no-default-groups --group ci --extra qc --extra log
+  SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log
 
 jobs:
   python-lint:
@@ -48,7 +48,7 @@ jobs:
           # `prune-cache` is NOT on by default; without it the saved cache carries both the
           # zipped and unzipped copy of every wheel, which matters a lot with the qc extra.
           prune-cache: true
-          cache-suffix: ci-qc
+          cache-suffix: ci-cli-qc
       - name: Sync dependencies
         run: uv sync --frozen ${{ env.SYNC_ARGS }}
       - name: Pyright
@@ -75,7 +75,7 @@ jobs:
           python-version: "3.13"
           enable-cache: true
           prune-cache: true
-          cache-suffix: ci-qc
+          cache-suffix: ci-cli-qc
       - name: Sync dependencies
         run: uv sync --frozen ${{ env.SYNC_ARGS }}
       - name: Build Rust extension
