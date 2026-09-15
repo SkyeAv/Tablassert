@@ -398,11 +398,37 @@ def test_class_field_overrides_track_the_installed_model() -> None:
     philosophy as the ``UNSATISFIABLE_EDGE_FIELDS`` derivation guard). A field the
     family allow-list would strip anyway must never be granted. The canonical
     ``regulatory_approvals`` grant is intentionally present on exactly the two
-    association classes that need it while the installed model catches up.
+    association classes that need it while the installed model catches up, alongside
+    DAKP's sparse qualifier stack (``anatomical_context_qualifier``,
+    ``sex_qualifier``, ``population_context_qualifier``, ``frequency_qualifier``,
+    ``temporal_context_qualifier`` -- each satisfiable, none declared by the pinned
+    classes). Deliberately excluded from the grants: ``species_context_qualifier``
+    (disabled) plus ``temporal_interval_qualifier`` and ``severity_qualifier``
+    (unsatisfiable -- a grant could never validate).
     """
     assert {
-        "EntityToDiseaseAssociation": frozenset({"disease_context_qualifier", "regulatory_approvals"}),
-        "EntityToPhenotypicFeatureAssociation": frozenset({"disease_context_qualifier", "regulatory_approvals"}),
+        "EntityToDiseaseAssociation": frozenset(
+            {
+                "anatomical_context_qualifier",
+                "disease_context_qualifier",
+                "frequency_qualifier",
+                "population_context_qualifier",
+                "regulatory_approvals",
+                "sex_qualifier",
+                "temporal_context_qualifier",
+            }
+        ),
+        "EntityToPhenotypicFeatureAssociation": frozenset(
+            {
+                "anatomical_context_qualifier",
+                "disease_context_qualifier",
+                "frequency_qualifier",
+                "population_context_qualifier",
+                "regulatory_approvals",
+                "sex_qualifier",
+                "temporal_context_qualifier",
+            }
+        ),
     } == CLASS_FIELD_OVERRIDES
     for class_name, fields in CLASS_FIELD_OVERRIDES.items():
         cls: type[Any] = association_class(f"biolink:{class_name}")

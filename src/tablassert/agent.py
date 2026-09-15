@@ -3529,11 +3529,11 @@ exactly. Legal predicates, from the installed Biolink Model:
   (`object_direction_qualifier: increased`, not a UMLS id); with `method: column` add
   `nullable: true` so a blank or off-vocabulary cell keeps the edge and simply omits the
   qualifier. The ONE exception is `qualified_predicate`, which DOES take a CURIE
-  (`qualified_predicate: biolink:causes`). CURIE-ranged qualifiers (anatomical_context_qualifier,
-  disease_context_qualifier, sex_qualifier) are entity-resolved through the fullmap like
-  subject/object. `species_context_qualifier` is disabled — never author it as a qualifier or
-  annotation. A qualifier no association class can hold fails validation
-  (qualifier-unsatisfiable) — carry that value as an annotation instead.
+  (`qualified_predicate: biolink:causes`). CURIE-ranged qualifiers
+  (anatomical/disease/population/temporal_context_qualifier, sex/frequency_qualifier)
+  are entity-resolved through the fullmap like subject/object. `species_context_qualifier` is
+  disabled — never author it as a qualifier or annotation. A qualifier no association class can
+  hold fails validation (qualifier-unsatisfiable) — carry that value as an annotation instead.
 
 # DERIVATION GUIDANCE (breadth first: map every mappable sheet, capture every evidence slot)
 - HEADERS + row_slice: inspect the first rows BEFORE authoring the source: titles/captions often
