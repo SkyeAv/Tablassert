@@ -17,6 +17,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 mod fullmap;
 mod json;
 mod ndjson;
+mod nlp;
 mod uuid;
 
 /// XXH64 hex digest (seed 0) of a string's UTF-8 bytes.
@@ -60,6 +61,11 @@ pub use fullmap::{
     fullmap_taxon_allowlist_identity, hydrate_categories, hydrate_curies, hydrate_prefixes,
     hydrate_sources, lookup_fullmap_terms, taxon_allowlist_identity,
 };
+// Level-one normalization.  `normalize_l1` is a plain Rust function consumed
+// by `fullmap::emit_term` (US-003) and by integration tests; `normalize_terms`
+// is the batch pyo3 surface the Python side calls (US-002).  Both are
+// intentional public exports, not dead code.
+pub use nlp::{normalize_l1, normalize_terms};
 
 #[pymodule]
 fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -77,6 +83,7 @@ fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fullmap::lookup_fullmap_terms, module)?)?;
     module.add_function(wrap_pyfunction!(fullmap::taxon_allowlist_identity, module)?)?;
     module.add_function(wrap_pyfunction!(ndjson::dedup_ndjson, module)?)?;
+    module.add_function(wrap_pyfunction!(nlp::normalize_terms, module)?)?;
     module.add_function(wrap_pyfunction!(uuid::namespace_uuid, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64_file, module)?)?;
