@@ -61,7 +61,7 @@ pip install tablassert
 | Extra | Description | Includes |
 |---|---|---|
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
-| `aria2` | Bundled aria2c downloader for `build-fullmap --aria2c` (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
+| `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact → fuzzy → abbreviation → SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
 | `agent` | Autonomous PMC → KG agent (`tablassert agent`) | `smolagents`, `litellm` |
 | `optimize` | GEPA prompt optimization (`tablassert agent --optimize`) | `dspy` |
@@ -90,7 +90,7 @@ pip install "tablassert[agent]"
 ```
 
 !!! note "`[aria2]` platform and license notes"
-    The `[aria2]` extra depends on the PyPI `aria2` package, which imports as `aria2c` and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; on macOS, omit `--aria2c` and use Tablassert's default Python downloader.
+    The `[aria2]` extra depends on the PyPI `aria2` package, which imports as `aria2c` and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, so macOS always uses Tablassert's Python downloader.
 
     The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.
 
@@ -117,7 +117,7 @@ Where the gap is knowable up front, it is reported up front rather than mid-run:
 | `tablassert agent` | `[agent]` | After flag validation, before any model is built or any article fetched |
 | `tablassert agent --optimize` | `[agent]` + `[optimize]` | Same point; both are reported at once |
 | `tablassert distill-export` | `[distill]` | After the recorded-NDJSON input check (an empty `--distill-dir` is reported first, since that typo is the faster loop to close) and before `datasets` is imported |
-| `build-fullmap --aria2c` | `[aria2]` | Before any download starts |
+| `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader — bundled aria2c when the extra is installed, Python downloader otherwise (logged either way; never a missing-extra failure) |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example

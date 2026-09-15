@@ -10,7 +10,7 @@ built from NCATS Translator BABEL export files. It comprises a primary file hold
 CURIEs, and schema metadata, plus hash-sharded RECORDS files (`fullmap.s0.redb` … `fullmap.s15.redb`
 by default) holding the term→postings index.
 
-Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). If you opt into `build-fullmap --aria2c` / `-a`, only the download stage uses the bundled aria2c binary from the optional `[aria2]` extra (`pip install "tablassert[aria2]"`; Linux/Windows wheels only).
+Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). When the optional `[aria2]` extra is installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), the download stage uses the bundled aria2c binary automatically; without it, Tablassert's Python downloader is used.
 
 ## Build Command
 
@@ -21,8 +21,8 @@ tablassert build-fullmap
 # Force a from-scratch build from BABEL outputs (skips the prebuilt download)
 tablassert build-fullmap --force
 
-# Optional: after `pip install "tablassert[aria2]"`, use bundled aria2c for resumable segmented downloads (the multi-GB prebuilt is the ideal aria2 use case)
-tablassert build-fullmap --aria2c
+# Optional: with `pip install "tablassert[aria2]"`, the same command downloads through the bundled aria2c automatically (the multi-GB prebuilt is the ideal aria2 use case)
+tablassert build-fullmap
 ```
 
 The taxon allowlist is always on; there is no flag. Every database `build-fullmap` installs uses the
@@ -41,8 +41,8 @@ records its allowlist identity in `META.taxon_allowlist`, and that identity gate
   otherwise it is rebuilt.
 
 See the [CLI Reference → build-fullmap](cli.md#build-fullmap) for the complete flag table (output path,
-cache directory, BABEL snapshot version, the optional `--aria2c` / `-a` downloader,
-and the `--force` / `-f` rebuild flag), their defaults, and more examples.
+cache directory, BABEL snapshot version, and the `--force` / `-f` rebuild flag), their defaults, and
+more examples.
 
 By default, `build-fullmap` first downloads a **prebuilt** database published for this Tablassert
 version, a `fullmap.tar.zst` under `.../fullmap/<tablassert-version>/` (the version directory is the
@@ -56,9 +56,10 @@ advertises (no gaps, no extras), every shard's `build_id` equals the primary's, 
 `META.taxon_allowlist` identity equals the one the built-in allowlist would record. Only a bundle that
 passes is atomically renamed into place (primary → `--output`, shards beside it); any failure raises
 and the command falls back to the from-scratch build below. If no prebuilt is published for this
-version it falls back the same way; `--force` / `-f` skips the prebuilt attempt and always builds. The
-optional `--aria2c` / `-a` accelerates **either** download: the multi-GB prebuilt archive is the ideal
-aria2 use case.
+version it falls back the same way; `--force` / `-f` skips the prebuilt attempt and always builds.
+When the optional `[aria2]` extra is installed, the bundled aria2c from that extra accelerates
+**either** download automatically — the multi-GB prebuilt archive is the ideal aria2 use case — and
+the Python downloader is used otherwise.
 
 Two facts matter most when planning a build:
 
@@ -74,7 +75,7 @@ Two facts matter most when planning a build:
 
 The build is a parallel, **memory-bounded** pipeline executed by the Rust extension:
 
-1. **Download**: fetch BABEL class and synonym files from RENCI into the cache (resumable, reused). By default this uses Tablassert's Python downloader; `--aria2c` / `-a` opts into the bundled `aria2c` binary from the `[aria2]` extra, preserving aria2 resume control files across dropped downloads and failing loud if the extra is missing, unsupported on the current platform, or the download fails.
+1. **Download**: fetch BABEL class and synonym files from RENCI into the cache (resumable, reused). This uses Tablassert's Python downloader, or the bundled `aria2c` binary automatically when the `[aria2]` extra is installed, preserving aria2 resume control files across dropped downloads and failing loud on a non-zero aria2c exit instead of being silently rescued by the Python downloader.
 2. **Equivalents index**: parse class files into sorted on-disk runs, then k-way merge them into a
    memory-mapped index mapping each primary CURIE to its equivalents.
 3. **Synonym pass**: a producer/consumer pool streams byte-bounded line-chunks; workers dedup CURIEs,
@@ -90,11 +91,11 @@ The build is a parallel, **memory-bounded** pipeline executed by the Rust extens
     multi-threaded allocation from bloating resident memory.
 
     - **Download**: files come from `https://stars.renci.org/var/babel_outputs` via resumable,
-      range-request downloads; cached files are reused. Passing `--aria2c` / `-a` switches only this
-      stage to the bundled `aria2c` binary from the optional `[aria2]` extra, using aria2's segmented
+      range-request downloads; cached files are reused. When the `[aria2]` extra is installed, only this
+      stage uses the bundled `aria2c` binary from that extra, with aria2's segmented
       HTTP downloads and retry/resume control files while suppressing aria2's own progress UI so
       Tablassert's progress bar stays clean.
-      The progress detail remains file-level (`aria2c downloading`) rather than byte-level in this mode.
+      The progress detail remains file-level (`aria2c downloading`) rather than byte-level in that mode.
     - **Equivalents index**: class files parse in parallel into sorted on-disk runs, k-way merged into a
       single memory-mapped CURIE→equivalents index; only a compact `(hash, offset)` index lives in RAM,
       the string data is mmap'd.

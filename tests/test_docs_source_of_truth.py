@@ -1990,6 +1990,52 @@ def test_llms_contains_no_retired_config_labels() -> None:
     assert re.search(r"\b(?:TC|GC)\d+\b", _llms_text()) is None
 
 
+# --- Retired CLI flags must stay retired in live docs ----------------- #
+# `build-fullmap --aria2c` / `-a` was removed (the downloader is now selected automatically
+# from the optional [aria2] extra), yet afterwards every live documentation surface still
+# documented the flag. The live docs are the source of truth readers copy commands from, so a
+# retired flag mentioned there silently misleads users into an unknown-option parse error.
+# CHANGELOG.md is excluded on purpose: history legitimately names retired flags when it
+# retires them.
+
+RETIRED_CLI_FLAGS: frozenset[str] = frozenset({"--aria2c"})
+
+
+def _live_doc_surfaces() -> list[Path]:
+    """Return every live documentation surface a reader may copy commands from.
+
+    The published ``docs/`` corpus plus the README, ``CONTRIBUTING.md``, and the ``llms.txt``
+    index. ``CHANGELOG.md`` is deliberately absent: history legitimately names retired flags
+    when it retires them.
+
+    Returns:
+        The live documentation surfaces, README first.
+    """
+    return [*_markdown_pages(), ROOT / "CONTRIBUTING.md", LLMS_TXT]
+
+
+@pytest.mark.parametrize("flag", sorted(RETIRED_CLI_FLAGS))
+@pytest.mark.parametrize("page", _live_doc_surfaces(), ids=lambda page: str(page.relative_to(ROOT)))
+def test_live_docs_mention_no_retired_cli_flags(page: Path, flag: str) -> None:
+    """No live documentation surface mentions a retired CLI flag.
+
+    ``build-fullmap --aria2c`` / ``-a`` was removed -- the downloader is now selected
+    automatically from the optional ``[aria2]`` extra -- yet afterwards every live surface
+    still documented the flag. Docs are the source of truth readers copy commands from, so a
+    retired flag mentioned in live docs silently misleads users into an unknown-option parse
+    error (passing the retired flag fails parsing before the command ever runs).
+
+    Args:
+        page: One live documentation surface.
+        flag: One retired CLI flag that must not appear on any of them.
+    """
+    text: str = page.read_text(encoding="utf-8")
+    assert flag not in text, (
+        f"{page.relative_to(ROOT)} still mentions the retired flag {flag}; live docs are the source of truth readers copy from, "
+        "and a retired flag silently misleads them into an unknown-option parse error (only CHANGELOG.md history may name it)"
+    )
+
+
 # --- Agent page dependency tables and flag reminder (US-006) ------------ #
 # docs/agent.md presented the [agent]/[optimize] requirements as `==` pins (and litellm as
 # `(any)`) where pyproject declares lower bounds, and its compact flag reminder never listed
