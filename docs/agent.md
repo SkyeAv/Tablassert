@@ -242,27 +242,114 @@ endpoint; neither is required):
 
 `--distill` (short: `-d`, `-dt`) records **every LLM call of the run** — the inner agent's
 multi-turn conversations, plus the judge and reflexion calls when those gates are enabled — as one
-ChatML JSON object per line, appended to `<state-dir>/distill/records.ndjson`:
+ChatML JSON object per line, appended to `<state-dir>/distill/records.ndjson`. Every record line
+carries the same canonical 13-key v2 set, with an explicit `null` where a value is unknown, so a
+key never first appears partway down an append-only file:
 
 ```json
-{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "purpose": "agent", "model_id": "...", "pmc_id": "PMC11708054", "call_index": 0, "timestamp": "...", "token_usage": {"input_tokens": 0, "output_tokens": 0}}
+{"record_type": "record", "schema_version": 2, "run_id": "a1b2c3d4e5f6:PMC11708054", "timestamp": "...", "purpose": "agent", "call_index": 0, "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}], "token_usage": {"input_tokens": 512, "output_tokens": 128}, "input_tokens": 512, "output_tokens": 128, "n_messages": 3, "pmc_id": "PMC11708054", "model_id": "..."}
 ```
 
-The file is **append-only**: every `--distill` invocation keeps adding to the same dataset, so a
-corpus accumulates over many batches. The `messages` column is plain ChatML, which Unsloth Studio
-auto-detects on JSONL upload (no column mapping needed); the metadata columns (`purpose`,
-`pmc_id`, `call_index`, `timestamp`, `token_usage`) ride along for filtering — e.g. join on
-`pmc_id` against `state.json` to keep only `MAPPED` runs, or keep each run's highest `call_index`
-for the most complete conversation. Recording is zero-dependency and never breaks a run: a failed
-write is logged, not raised. `--distill` is not supported with `--optimize` (the GEPA path
-bypasses the recording seam).
+Alongside the records, the supervisor appends **one outcome line per run** to a sibling
+`outcomes.ndjson` in the same directory: the terminal status, the build/audit figures, the
+tool-call tallies, the gate thresholds, and the package versions — the full 35-key outcome set,
+schema-uniform with explicit nulls in the same way (abbreviated here):
 
-To convert the NDJSON into an on-disk Hugging Face dataset, use
-[`tablassert distill-export`](cli.md#distill-export) (requires the `[distill]` extra):
+```json
+{"record_type": "outcome", "schema_version": 2, "run_id": "a1b2c3d4e5f6:PMC11708054", "run_status": "MAPPED", "ok": true, "measured": true, "head": false, "coverage_pct": 0.86, "biolink_valid_pct": 1.0, "demoted_edge_pct": 0.02, "edge_count": 412, "tool_calls": {"total": 5, "failed": 0, "wrong": 0, "redundant": 0}}
+```
+
+`run_id` (`<invocation-id>:<pmc-id>`) is the join key between the two files. They are separate
+because the two halves exist at different times: a record is appended the moment each model call
+completes, mid-run, while the outcome — build verdict, coverage, Biolink validity, demoted-edge
+fraction — is only known once the supervisor has decided the run's terminal status, so it is
+written exactly once, at the end of the run. Both files are **append-only** and never rewritten in
+place: a corpus accumulates over many batches, and retuning a weight never requires re-recording
+it. The `messages` column is plain ChatML, which Unsloth Studio auto-detects on JSONL upload (no
+column mapping needed). Recording is zero-dependency and never breaks a run: a failed write is
+logged, not raised. `--distill` is not supported with `--optimize` (the GEPA path bypasses the
+recording seam).
+
+**Weighing.** [`tablassert distill-weigh`](cli.md#distill-weigh) joins the two files on `run_id`,
+computes a deterministic reward weight per record, applies a selection policy, and writes one flat
+training row per input record plus a reproducibility manifest. Flags: `--distill-dir`/`-dd` and
+`--out`/`-o` (both required), `--policy`/`-p` (default `threshold`), `--threshold`/`-t` (`0.75`),
+`--top-n`/`-tn` (`2`), `--replication-k`/`-rk` (`2`), `--reward-config`/`-rc` (a YAML/JSON policy
+override), `--edge-ref` (a breadth-reference override), `--purpose` (default `agent`; the literal
+`all` disables filtering), `--final-call-only` (keep only each run's highest `call_index` — the
+most complete conversation), and `--manifest` (default `<out>.manifest.json`). Keep `--out`
+**outside** `--distill-dir`: [`tablassert distill-export`](cli.md#distill-export) loads every
+`*.ndjson` in its input directory, so a weighed file placed there would be re-ingested as raw
+corpus. The weigh → export composition (export requires the `[distill]` extra):
 
 ```bash
-tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dataset
+tablassert distill-weigh --distill-dir .tablassert/agent/distill --out ./training/train.ndjson
+tablassert distill-export --distill-dir ./training --out ./hf-dataset
 ```
+
+**The reward** is a deterministic function of the captured outcome — same outcome in, same weight
+out — and it is **tunable policy with documented defaults**, not a law: every knob is a
+`RewardConfig` field overridable via `--reward-config`, and retuning never touches the corpus. The
+defaults are Tablassert's own policy (they mirror the shape of the supervisor's quality score with
+its two degenerate terms replaced), not a borrowed standard. Five additive terms whose
+coefficients sum to 1.00:
+
+- `coverage_pct` — completeness / entity-resolution success — **0.40**
+- `biolink_valid_pct` — semantic validity of the built edges — **0.28**
+- `specificity = 1 - demoted_edge_pct` — predicate specificity vs generic fallback — **0.17**
+- `cleanliness = 1 - (failed + wrong) / total tool calls` — tool-call correctness — **0.07**
+- `breadth = clamp(log1p(edge_count) / log1p(edge_ref), 0, 1)` — non-degeneracy — **0.08**
+
+The hard gates then apply **multiplicatively**, never additively: `ok is not True`, `head is
+True`, or a `SKIPPED`/`FAILED` status zero the row outright; `BUILT_UNMEASURED` (or coverage never
+measured) floors the row at `unmeasured_weight` (default `0.0`) — the record is kept, just not
+selectable. On top of the raw score, two farming penalties multiply: `demoted_edge_pct > 0.50`
+scales by **0.5** (generic-predicate farming), and a redundant tool-call share above **0.30**
+scales by **0.7**. The breadth reference `edge_ref` defaults to the **corpus median** edge count
+over comparable builds (head builds and failed builds excluded, deduplicated to the last outcome
+per run id); `--edge-ref` or the config file pins it instead, and a corpus with no comparable
+build warns and lets breadth contribute 0.0. The reward reads only deterministic fields — never
+the judge score, `qc_pass_rate`, or `provenance_ok`, which are recorded as metadata only.
+
+**Selection policies.** All three are computed at weigh time (re-recording is never needed) and
+annotate every row with the same five keys (`weight`, `selected`, `replicas`, `policy`,
+`threshold`):
+
+| Policy | What it does | Prefer when | Caveat |
+| --- | --- | --- | --- |
+| `threshold` (default) | `selected = weight >= --threshold` (0.75); each selected row counts once | The zero-code path — the only selection TRL consumes with no trainer code | A miscalibrated corpus can empty the selection; the manifest's `selected_count` makes that visible |
+| `best-of-n` | Groups by `pmc_id`, ranks each group by weight (ties: fewer attempts, fewer failed tool calls, earlier call), keeps the top `--top-n` (2) | Several attempts per article: keep the best trajectory per prompt while preserving distinct paths | **No weight floor**: a prompt whose every trajectory weighs 0.0 still contributes its top-ranked row, so gated-failed trajectories can be selected — the manifest's `selected_zero_weight` exposes this |
+| `replication` | `selected = weight > 0`; `replicas` scales from 1 to `1 + --replication-k` (default 2, capped at 3) across the selected rows' weight spread | Soft importance weighting with no custom loss code | `replicas` is a **count on one row**, never physical duplication — the training sampler must expand the rows |
+
+**The goal is LoRA/QLoRA supervised fine-tuning — explicitly not RLHF.** There is no reward model,
+no PPO/GRPO, and no online RL anywhere in this pipeline; the reward is a deterministic scoring
+function used for data selection. The weight drives row filtering, ranking, and replication
+because TRL's `SFTConfig` has **no per-example sample-weight column** — selection and replication
+are the only zero-code weighting mechanisms an SFT trainer offers.
+
+Consumption caveats that are easy to get wrong:
+
+- `SFTConfig.max_length` defaults to **1024** with `truncation_mode="keep_start"`: long multi-turn
+  agent trajectories are silently truncated, and TRL then **drops** examples left fully masked.
+  Size it from the recorded `n_messages`/`tokens_total` metadata — set `max_length=None` or to at
+  least the corpus's p99.
+- `assistant_only_loss=True` trains on the assistant (agent) turns only — usually what you want
+  for a config-authoring agent.
+- `packing=True` makes any effective weight **token-proportional rather than row-proportional**
+  and destroys per-example identity, which quietly undermines replication.
+- Extra metadata columns (every `outcome_*` column, `weight`, `selected`, and friends) are
+  **ignored** by TRL, not fatal — safe to keep them in the file.
+
+Honest limitations. SFT on curated optimal trajectories stabilizes output **format and schema
+compliance** — for a YAML-config-writing agent whose supervisor is deterministic Python, that is
+the honest deliverable of a LoRA. It is **not** evidence-backed for out-of-distribution
+generalization (Chu et al., arXiv:2501.17161, App. C.1); do not promise OOD gains. Two
+reward-hacking caveats: `demoted_edge_pct` gating exists because coverage can be **farmed with a
+generic predicate** — a predicate the derived association class forbids never raises, it silently
+demotes the edge, so a config can map perfectly while emitting bare `biolink:Association` edges —
+and over-hard selection is a measured Goodhart risk (Gao et al., arXiv:2210.10760). Hold out a
+differently-scored validation set rather than trusting the same weight that selected the training
+rows.
 
 ### Biolink validity
 
