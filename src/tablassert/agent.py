@@ -4247,18 +4247,54 @@ def run_supervisor(
                 rec.status = "SKIPPED"
                 rec.notes = "SKIPPED: agent final answer failed the validate_table_config gate."
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: this exit reaches neither the success-path nor the except-path
+                    # capture, and a gate-failed run is the most instructive negative example.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
             config: str = normalize_config(raw_config)
             if not validate_table_config(config):
                 rec.status = "SKIPPED"
                 rec.notes = "SKIPPED: normalized agent answer failed the validate_table_config gate."
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: same early-exit gap as the raw-answer gate above.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
 
             configs_dir(state_dir).mkdir(parents=True, exist_ok=True)
             derived_path: Path = derived_config_path(state_dir, pmc_id).resolve()
             derived_path.write_text(config)
             rec.config_path = str(derived_path)
+            current_config = config  # terminal config so far: a DERIVED exit below still hashes it
 
             if derive_mode in {"derive_only", "derive_coverage"}:
                 # Derive mode: the config is schema-valid but NOT built here (the build tools were withheld
@@ -4266,6 +4302,24 @@ def run_supervisor(
                 # these configs later.
                 rec.status = "DERIVED"
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: the DERIVED exit needs its outcome row as much as a built one —
+                    # unbuilt is a measured null, never a missing line.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
 
             report: dict[str, object] = audit_config(config, workdir=pmc_build_dir(art_root, pmc_id))
@@ -4283,7 +4337,6 @@ def run_supervisor(
             #   Tier 2 (LLM reflexion, only when tier 1 stalls AND a reflexion model is supplied): a genuinely
             #     distinct config that may change predicate/source (llm_propose_config_edit).
             iters: int = 0
-            current_config = config
             current_cov: float = coverage
             current_ok: bool = bool(report.get("ok"))
             current_report = report
