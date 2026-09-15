@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,20 @@ from tablassert.enums import Comparisons, Tokens
 from tablassert.fullmap import ResolveSpec, resolve_batch
 from tablassert.models import Reindex
 from tablassert.qc import fullmap_audit
-from tablassert.runcache import LABEL_FREE, LABEL_PLACEHOLDER, RunCacheError, canonical, op_repr, prefix_digest
+from tablassert.runcache import (
+    DEFAULT_OP_COST,
+    LABEL_FREE,
+    LABEL_PLACEHOLDER,
+    MIN_PREFIX_COST,
+    MIN_PREFIX_OPS,
+    OP_COST,
+    RunCacheError,
+    canonical,
+    checkpoints,
+    op_cost,
+    op_repr,
+    prefix_digest,
+)
 
 
 def _source_ops() -> list[tuple[Callable, tuple[Any, ...]]]:
@@ -210,3 +224,129 @@ def test_prefix_digest_is_deterministic_within_and_across_instances() -> None:
     assert prefix_digest(ops) == prefix_digest(rebuilt)
     # A semantically different pipeline must differ from both.
     assert prefix_digest([*reversed(rebuilt)]) != prefix_digest(rebuilt)
+
+
+def _cost_ops(*fns: Callable) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """Build a checkpoints-test op list from callables.
+
+    ``checkpoints`` prices an op by its callable identity alone (the cumulative :data:`OP_COST`
+    of ``ops[:k]``); the stored args never affect cost, so they are left empty here. This keeps
+    the guard tests focused on cost accounting rather than arg serialization (covered above).
+    """
+    return [(fn, ()) for fn in fns]
+
+
+def test_checkpoints_skip_trivial_prefixes() -> None:
+    """Trivial instruction runs must never be checkpointed — snapshotting them costs more than it saves.
+
+    The whole point of the worth-caching guard: a prefix that is too short (``MIN_PREFIX_OPS``) or
+    too cheap (cumulative cost below ``MIN_PREFIX_COST``) recomputes for less than the snapshot
+    write-plus-rescan a checkpoint forces on every downstream section. Asserts the empty result
+    for (a) a cheap-ops list whose total stays under the cost threshold, (b) a single expensive op
+    blocked by ``MIN_PREFIX_OPS`` even though its cost alone clears ``MIN_PREFIX_COST``, (c) a
+    two-op list at the length floor but below the cost floor, and (d) a long run of 1-unit ops
+    that satisfies length yet never accumulates enough cost — proving length alone cannot qualify.
+    """
+    # (a) csv(2) + pick(1) + value(1) = 4 < MIN_PREFIX_COST(8): no checkpoint at any prefix.
+    cheap: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(lib.csv, lib.pick, lib.value)
+    assert sum(op_cost(fn) for fn, _ in cheap) < MIN_PREFIX_COST
+    assert checkpoints(cheap) == []
+
+    # (b) A single resolve_batch (cost 60) clears the cost floor but not MIN_PREFIX_OPS(2).
+    assert op_cost(lib.resolve_batch) >= MIN_PREFIX_COST
+    assert checkpoints(_cost_ops(lib.resolve_batch)) == []
+
+    # (c) Two ops at the length floor but below the cost floor: csv(2) + pick(1) = 3 < 8.
+    two_cheap: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(lib.csv, lib.pick)
+    assert len(two_cheap) == MIN_PREFIX_OPS
+    assert checkpoints(two_cheap) == []
+
+    # (d) Seven 1-unit ops satisfy MIN_PREFIX_OPS at every k>=2 but total 7 < 8: still nothing.
+    long_cheap: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(*([lib.value] * 7))
+    assert sum(op_cost(fn) for fn, _ in long_cheap) < MIN_PREFIX_COST
+    assert checkpoints(long_cheap) == []
+
+
+def test_checkpoints_include_expensive_prefixes() -> None:
+    """Once cumulative cost crosses the threshold, every longer prefix up to the write is a checkpoint.
+
+    A realistic pipeline that reaches ``resolve_batch`` (cost 60) must be checkpointed from the
+    crossing point onward: recomputing that resolution for each sibling section is exactly the
+    cost the cache exists to avoid. Asserts the EXACT boundary set (not mere membership) for a
+    short list and a full pipeline, and pins that the returned prefix lengths are strictly
+    increasing ints within ``[1, len(ops)]`` so a later story can slice ``ops[:k]`` safely.
+    """
+    # csv(2), pick(1), resolve_batch(60): k=1 <MIN_PREFIX_OPS, k=2 total 3 <8, k=3 total 63 -> [3].
+    short: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(lib.csv, lib.pick, lib.resolve_batch)
+    assert checkpoints(short) == [3]
+
+    # Full pipeline ending in a write: csv(2), idx(1), pick(1), resolve_batch(60), fullmap_audit(30),
+    # prune_to_class(2), to_store(4). Cumulative crosses 8 at k=4 (64); k=5,6 also qualify; k=7 is
+    # the final to_store and is excluded -> [4, 5, 6].
+    full: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(
+        lib.csv, lib.idx, lib.pick, lib.resolve_batch, lib.fullmap_audit, lib.prune_to_class, lib.to_store
+    )
+    result: list[int] = checkpoints(full)
+    assert result == [4, 5, 6]
+
+    # Prefix lengths are ints, strictly increasing, and within range.
+    for k in result:
+        assert isinstance(k, int)
+        assert 1 <= k <= len(full)
+    assert result == sorted(result)
+    assert all(b > a for a, b in pairwise(result))
+
+
+def test_checkpoint_never_placed_after_final_write_op() -> None:
+    """A section always replays its own final write, so ``len(ops)`` is never a to_store checkpoint.
+
+    The parquet a section writes IS its result; snapshotting the prefix that ends on that write
+    would cache an output every consumer must produce anyway. Asserts that a write-final list
+    whose cumulative cost fully qualifies still stops at ``len(ops) - 1`` (``len(ops)`` absent),
+    and — as the contrast that proves the rule is write-specific, not "always drop the last" —
+    that the SAME expensive list without the trailing ``to_store`` does include ``len(ops)``.
+    """
+    with_write: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(lib.csv, lib.pick, lib.resolve_batch, lib.to_store)
+    # Cumulative cost at k=len is 2+1+60+4 = 67 >= 8, so the ONLY reason k=4 is absent is the write rule.
+    assert sum(op_cost(fn) for fn, _ in with_write) >= MIN_PREFIX_COST
+    result: list[int] = checkpoints(with_write)
+    assert len(with_write) not in result
+    assert max(result) <= len(with_write) - 1
+
+    # Contrast: drop the trailing to_store and the identical expensive prefix now checkpoints at len.
+    without_write: list[tuple[Callable, tuple[Any, ...]]] = _cost_ops(lib.csv, lib.pick, lib.resolve_batch)
+    assert len(without_write) in checkpoints(without_write)
+
+
+def test_op_cost_covers_every_phase_of_callable() -> None:
+    """Every op TCode can emit is costed deliberately; unpriced ops fall back to the cheap default.
+
+    Exhaustiveness pin: ``lib.PHASE_OF`` enumerates the op callables the pipeline dispatches, so
+    each must appear in :data:`OP_COST` with a positive int — a future op added to ``PHASE_OF``
+    without a cost would otherwise silently default and skew every checkpoint decision. Also
+    verifies the :data:`DEFAULT_OP_COST` fallback for a callable absent from the table, and pins
+    the dominant weights (``resolve_batch``/``resolve`` 60, ``fullmap_audit`` 30, ``to_store`` 4)
+    so an accidental edit cannot quietly change cache behavior.
+    """
+    for fn in lib.PHASE_OF:
+        assert fn in OP_COST, f"{getattr(fn, '__qualname__', fn)} is in lib.PHASE_OF but missing from OP_COST"
+        cost: int = OP_COST[fn]
+        assert isinstance(cost, int)
+        assert cost > 0
+        assert op_cost(fn) == cost
+
+    # A callable absent from the table falls back to DEFAULT_OP_COST (never a KeyError, never 0).
+    def _uncosted_op() -> None:
+        """Dummy op deliberately absent from OP_COST to exercise the cost fallback."""
+
+    assert _uncosted_op not in OP_COST
+    assert op_cost(_uncosted_op) == DEFAULT_OP_COST
+    assert DEFAULT_OP_COST > 0
+
+    # Pin the dominant/structural weights the guard thresholds are calibrated against.
+    assert op_cost(lib.resolve_batch) == 60
+    assert op_cost(lib.resolve) == 60
+    assert op_cost(lib.fullmap_audit) == 30
+    assert op_cost(lib.to_store) == 4
+    assert op_cost(lib.csv) == 2
+    assert op_cost(lib.value) == 1
