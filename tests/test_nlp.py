@@ -35,9 +35,14 @@ def test_level_one_performance_one_million_terms() -> None:
     """Normalize one million seeded multi-token terms within the Python bound.
 
     WHY: level-one normalization is a hot path for large tabular inputs; this
-    absolute 2.5-second ceiling protects the Rust-backed batch implementation
-    from regressing to per-row Python work while keeping the workload stable
-    and independent of data generation, locale, network, or optional extras.
+    absolute ceiling protects the Rust-backed batch implementation from
+    regressing to per-row Python work while keeping the workload stable and
+    independent of data generation, locale, network, or optional extras.
+    Calibration: ~0.6s on a 12-core dev box and a stable ~3.2s on 2-core CI
+    runners, so the 8.0s ceiling keeps >2x headroom on the slowest observed
+    environment while still failing immediately (minutes at this N) for the
+    regression classes it guards: `map_elements` per-row UDFs, serial loops,
+    and accidental quadratic token work.
     """
     term_parts: tuple[str, ...] = ("Aspirin", "genes", "inhibiting", "tnf-alpha", "oral", "tablets", "alpha", "51")
     generator = random.Random(5005)
@@ -59,7 +64,7 @@ def test_level_one_performance_one_million_terms() -> None:
     assert result.columns == ["name"]
     assert result.schema["name"] == pl.String
     assert result["name"].head(4).to_list() == ["tnf-alpha", "aspirin tnf-alpha", "51", "oral tablet"]
-    assert elapsed <= 2.5, f"level_one median took {elapsed:.3f}s for 1,000,000 terms (samples={elapsed_samples!r})"
+    assert elapsed <= 8.0, f"level_one median took {elapsed:.3f}s for 1,000,000 terms (samples={elapsed_samples!r})"
 
 
 def test_level_one_strips_and_lowercases() -> None:
