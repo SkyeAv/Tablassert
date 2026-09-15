@@ -1,8 +1,70 @@
 from __future__ import annotations
 
+import csv
+import random
+import time
+from pathlib import Path
+
 import polars as pl
 
 from tablassert.nlp import level_one, level_two
+
+GOLDEN_FIXTURE: Path = Path(__file__).resolve().parents[1] / "rust" / "tests" / "fixtures" / "nlp_golden.tsv"
+
+
+def test_level_one_golden_matches_rust_fixture() -> None:
+    """The Python Rust-normalizer path agrees with the shared golden fixture.
+
+    WHY: Rust fullmap keys and Python query terms must remain byte-for-byte
+    equivalent; reading one fixture from both integration suites prevents the
+    two sides from silently acquiring different normalization contracts.
+    """
+    with GOLDEN_FIXTURE.open(newline="", encoding="utf-8") as handle:
+        rows: list[tuple[str, str]] = [(raw, expected) for raw, expected in csv.reader(handle, delimiter="\t") if raw != "raw"]
+
+    rows = [("" if raw == "@EMPTY" else raw, "" if expected == "@EMPTY" else expected) for raw, expected in rows]
+    raw_terms: list[str] = [raw for raw, _expected in rows]
+    expected_terms: list[str] = [expected for _raw, expected in rows]
+    assert raw_terms
+    frame: pl.LazyFrame = pl.DataFrame({"name": raw_terms}).lazy()
+    result: pl.DataFrame = level_one(frame, "name").collect()
+    assert result["name"].to_list() == expected_terms
+
+
+def test_level_one_performance_one_million_terms() -> None:
+    """Normalize one million seeded multi-token terms within the Python bound.
+
+    WHY: level-one normalization is a hot path for large tabular inputs; this
+    absolute ceiling protects the Rust-backed batch implementation from
+    regressing to per-row Python work while keeping the workload stable and
+    independent of data generation, locale, network, or optional extras.
+    Calibration: ~0.6s on a 12-core dev box and a stable ~3.2s on 2-core CI
+    runners, so the 8.0s ceiling keeps >2x headroom on the slowest observed
+    environment while still failing immediately (minutes at this N) for the
+    regression classes it guards: `map_elements` per-row UDFs, serial loops,
+    and accidental quadratic token work.
+    """
+    term_parts: tuple[str, ...] = ("Aspirin", "genes", "inhibiting", "tnf-alpha", "oral", "tablets", "alpha", "51")
+    generator = random.Random(5005)
+    terms: list[str] = [f"{generator.choice(term_parts)} {generator.choice(term_parts)}" for _ in range(1_000_000)]
+    frame: pl.DataFrame = pl.DataFrame({"name": terms})
+    lazy_frame: pl.LazyFrame = frame.lazy()
+
+    level_one(lazy_frame, "name").collect()
+    elapsed_samples: list[float] = []
+    result: pl.DataFrame | None = None
+    for _ in range(3):
+        started: float = time.perf_counter()
+        result = level_one(lazy_frame, "name").collect()
+        elapsed_samples.append(time.perf_counter() - started)
+
+    assert result is not None
+    elapsed: float = sorted(elapsed_samples)[1]
+    assert result.height == 1_000_000
+    assert result.columns == ["name"]
+    assert result.schema["name"] == pl.String
+    assert result["name"].head(4).to_list() == ["tnf-alpha", "aspirin tnf-alpha", "51", "oral tablet"]
+    assert elapsed <= 8.0, f"level_one median took {elapsed:.3f}s for 1,000,000 terms (samples={elapsed_samples!r})"
 
 
 def test_level_one_strips_and_lowercases() -> None:

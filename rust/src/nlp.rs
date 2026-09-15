@@ -121,6 +121,7 @@ mod tests {
     use super::{normalize_l1, normalize_terms};
     use pyo3::prelude::*;
     use std::borrow::Cow;
+    use std::time::Instant;
 
     #[test]
     fn single_token_normalizes_to_itself() {
@@ -255,6 +256,76 @@ mod tests {
                 .extract()
                 .unwrap();
             assert!(empty.is_empty());
+        });
+    }
+
+    #[test]
+    fn normalize_terms_performance_one_million_terms() {
+        // WHY: level-one normalization is a hot path for large tabular inputs;
+        // this absolute ceiling protects the rayon batch/core path from
+        // regressing to serial work. The seeded, multi-token workload is
+        // generated before timing and uses only stable ASCII terms, so the gate
+        // is independent of locale, network, and optional Python dependencies.
+        // Calibration: ~0.8s on a 12-core dev box and 3.6-4.9s per sample on
+        // 2-core CI runners (also contending with parallel tests), so the 12s
+        // ceiling keeps >2x headroom on the slowest observed environment while
+        // still failing immediately for the guarded regression classes: loss of
+        // rayon parallelism, per-token quadratic work, and allocation
+        // regressions on the batch path.
+        //
+        let vocabulary = [
+            "Aspirin",
+            "genes",
+            "inhibiting",
+            "tnf-alpha",
+            "oral",
+            "tablets",
+            "alpha",
+            "51",
+        ];
+        let mut seed = 5005_u64;
+        let terms: Vec<String> = (0..1_000_000)
+            .map(|_| {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let first = vocabulary[(seed % vocabulary.len() as u64) as usize];
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let second = vocabulary[(seed % vocabulary.len() as u64) as usize];
+                format!("{first} {second}")
+            })
+            .collect();
+
+        let first_term = terms[0].clone();
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            let func = pyo3::wrap_pyfunction!(normalize_terms, py).unwrap();
+            let warmup: Vec<String> = func
+                .call1((terms[..1024].to_vec(),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(warmup.len(), 1024);
+
+            let timed_inputs: Vec<Vec<String>> = (0..3).map(|_| terms.clone()).collect();
+            let mut elapsed_samples: Vec<f64> = Vec::with_capacity(3);
+            let mut output: Vec<String> = Vec::new();
+            for input in timed_inputs {
+                let started = Instant::now();
+                output = func.call1((input,)).unwrap().extract().unwrap();
+                elapsed_samples.push(started.elapsed().as_secs_f64());
+            }
+            elapsed_samples.sort_by(f64::total_cmp);
+            let elapsed = elapsed_samples[1];
+
+            println!(
+                "normalize_terms median took {elapsed:.3}s for 1,000,000 terms (samples={elapsed_samples:?})"
+            );
+            assert_eq!(output.len(), 1_000_000);
+            assert!(output.iter().all(|term| !term.is_empty()));
+            assert_eq!(output[0], normalize_l1(&first_term));
+            assert!(
+                elapsed <= 12.0,
+                "normalize_terms median took {elapsed:.3}s for 1,000,000 terms (samples={elapsed_samples:?})"
+            );
         });
     }
 }
