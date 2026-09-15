@@ -522,3 +522,29 @@ def test_distill_weigh_applies_a_reward_config_file(tmp_path: Path) -> None:
     manifest = json.loads(output.with_name("rows.ndjson.manifest.json").read_text(encoding="utf-8"))
     assert manifest["reward_config"]["w_coverage"] == 0.0
     assert manifest["reward_config"]["w_breadth"] == 0.48
+
+
+def test_weighed_ndjson_round_trips_through_distill_export(tmp_path: Path) -> None:
+    """A weighed ``train.ndjson`` exports as-is with no extra flag (REQ-EXP-7 composition).
+
+    Why: ``distill-weigh`` deliberately emits the full canonical key set on every row (unknown
+    record keys appended after it), so the export must load that directory without a schema flag,
+    without re-joining, and without treating the sidecar manifest (``*.json``) as corpus input.
+    """
+    pytest.importorskip("datasets")
+    from datasets import load_from_disk  # pyright: ignore[reportMissingImports]
+
+    from tablassert.cli import distill_export
+
+    corpus: Path = _corpus(tmp_path)  # two records + one outcome under <tmp>/distill
+    train: Path = tmp_path / "train.ndjson"
+    distill_weigh(distill_dir=corpus, out=train)
+    hf_dataset: Path = tmp_path / "hf-dataset"
+
+    distill_export(distill_dir=tmp_path, out=hf_dataset)  # the weighed directory IS the export input
+
+    dataset = load_from_disk(str(hf_dataset))
+    assert len(dataset) == 2  # both weighed rows; the manifest and the raw corpus directory were not loaded
+    assert "weight" in dataset.column_names
+    assert "selected" in dataset.column_names
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["distill", "hf-dataset", "train.ndjson", "train.ndjson.manifest.json"]

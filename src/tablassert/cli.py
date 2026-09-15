@@ -5,8 +5,10 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
@@ -1377,30 +1379,89 @@ def distill_export(
 ) -> None:
     """Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset.
 
-    Loads every ``*.ndjson`` under ``--distill-dir`` (the ChatML records written by ``tablassert
-    agent --distill``) with ``datasets.load_dataset("json", ...)`` and writes the result with
-    ``save_to_disk`` to ``--out``. Requires the ``distill`` extra (``pip install
-    "tablassert[distill]"``). The raw NDJSON also loads directly in Unsloth Studio — this export
-    is only needed for ``datasets``-native workflows.
+    Loads every RECORD ``*.ndjson`` under ``--distill-dir`` (the ChatML records written by
+    ``tablassert agent --distill``; outcome files are recognized by their content and skipped),
+    normalizes the whole corpus to one uniform key set, and hands that single file to
+    ``datasets.load_dataset("json", ...)`` whose result is written with ``save_to_disk`` to
+    ``--out``. Requires the ``distill`` extra (``pip install "tablassert[distill]"``). The raw
+    NDJSON also loads directly in Unsloth Studio — this export is only needed for
+    ``datasets``-native workflows.
+
+    Why not pass the corpus straight to ``load_dataset``: it infers ``features`` from the first
+    block of the FIRST file only and raises ``CastError`` when a later file carries a column the
+    inferred schema lacks — an append-only corpus spanning schema versions (a v1 line without
+    ``run_id`` next to a v2 line) would be unexportable. Unioning the keys and re-emitting every
+    row with an explicit ``null`` for an absent key makes the inferred schema correct by
+    construction, so a v1-only corpus keeps exporting too. A column whose Python type varies
+    across rows fails loud instead (exit 2), because ``datasets`` would otherwise silently
+    JSON-encode that column into a string — a type demotion that corrupts the corpus without an
+    error.
 
     Args:
         distill_dir: Directory holding the recorded ``*.ndjson`` files (default output of
             ``tablassert agent --distill`` is ``<state-dir>/distill``).
         out: Destination directory for the ``save_to_disk`` dataset.
     """
+    from tablassert.distill_reward import detect_type_conflicts, is_outcome_file, iter_record_files, normalize_rows, read_ndjson, write_ndjson
+
+    def fail(message: str) -> NoReturn:
+        """Print one actionable user error and use the CLI's documented exit status."""
+        print(f"tablassert distill-export: {message}", file=sys.stderr)
+        raise SystemExit(2)
+
     # Input validation precedes the extras preflight: a missing directory is the user's typo, an
-    # absent extra is their environment, and the typo is the faster loop to close first.
-    files: list[Path] = sorted(distill_dir.glob("*.ndjson"))
+    # absent extra is their environment, and the typo is the faster loop to close first. Every
+    # check below is pure stdlib (via distill_reward), so it all fires in the base environment
+    # too — the partition, normalization and type-conflict rejection never depend on `datasets`.
+    files: list[Path] = iter_record_files(distill_dir)
     if not files:
         print(f"tablassert distill-export: no .ndjson records under {distill_dir} — run tablassert agent --distill first.", file=sys.stderr)
         raise SystemExit(2)
+    # Content-based partition (a renamed or relocated outcomes file is still recognized); only
+    # the record half is loaded, so outcomes and records never mix into one table.
+    outcome_files: list[Path] = [path for path in files if is_outcome_file(path)]
+    record_files: list[Path] = [path for path in files if path not in outcome_files]
+    if not record_files:
+        fail(
+            f"only outcome files under {distill_dir}; distill-export loads records only — "
+            "record the corpus with tablassert agent --distill, or point --distill-dir at its records"
+        )
+    try:
+        rows: list[dict[str, Any]] = [row for path in record_files for row in read_ndjson(path)]
+    except (OSError, ValueError) as exc:
+        fail(str(exc))
+    if not rows:
+        # An empty record corpus would otherwise surface as a bare StopIteration from inside
+        # load_dataset's JSON reader (it cannot infer a schema from zero rows).
+        fail(f"record files under {distill_dir} contain no records; nothing to export")
+    # Normalize BEFORE loading: normalize_rows unions every row's keys (union_keys, first-appearance
+    # order) and projects each row onto that union with an explicit None for absent keys, so the
+    # single file handed to load_dataset has one uniform key set across every block — first-block
+    # inference is exactly what must not be trusted on an append-only corpus (see the docstring).
+    normalized: list[dict[str, Any]] = normalize_rows(rows)
+    conflicts: dict[str, set[str]] = detect_type_conflicts(normalized)
+    conflicting: list[tuple[str, str]] = [(key, ", ".join(sorted(types))) for key, types in conflicts.items() if len(types) > 1]
+    if conflicting:
+        listed: str = "; ".join(f"{key!r} is {types}" for key, types in conflicting)
+        fail(
+            f"type conflict: {listed}; datasets would silently JSON-encode a varying-type column "
+            "into a string — keep each column to one non-null type and re-export"
+        )
     extras.require("distill", required_by="tablassert distill-export")
     from datasets import load_dataset  # local import keeps the CLI import-light  # pyright: ignore[reportMissingImports]
 
-    dataset: object = load_dataset("json", data_files=[str(path) for path in files], split="train")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    dataset.save_to_disk(str(out))  # pyright: ignore[reportAttributeAccessIssue]
-    print(f"tablassert distill-export: {len(dataset)} record(s) from {len(files)} file(s) -> {out}")  # pyright: ignore[reportArgumentType]
+    # The single uniform file passed to load_dataset lives OUTSIDE --distill-dir (nothing is ever
+    # written into the append-only corpus) and is removed whether or not the export succeeds.
+    workspace: Path = Path(tempfile.mkdtemp(prefix="tablassert-distill-export-"))
+    try:
+        uniform: Path = workspace / "normalized.ndjson"
+        write_ndjson(uniform, normalized)
+        dataset: object = load_dataset("json", data_files=[str(uniform)], split="train")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        dataset.save_to_disk(str(out))  # pyright: ignore[reportAttributeAccessIssue]
+        print(f"tablassert distill-export: {len(dataset)} record(s) from {len(record_files)} file(s) -> {out}")  # pyright: ignore[reportArgumentType]
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
 
 
 class PrebuiltFullmapUnavailable(Exception):
