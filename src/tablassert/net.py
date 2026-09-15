@@ -69,6 +69,17 @@ DEFAULT_RETRY_AFTER_CAP: float = 60.0
 DEFAULT_TIMEOUT: int = 120
 """Per-request socket timeout in seconds for :func:`http_get_text` / :func:`http_get_bytes`."""
 
+DEFAULT_FETCH_CONCURRENCY: int = 8
+"""Worker-pool size for one article's file downloads.
+
+WHY 8: a PMC article ships ~10-15 supplementary files and the fleet's constraint was the LOCAL
+resolver, not the server. Eight in-flight requests collapse a 15-file article into two waves of
+round trips (instead of fifteen serial ones) without re-creating the DNS stampede that produced
+the ``EAI_NONAME`` flood this module exists to absorb: 16 fleet workers x 8 files = 128 lookups
+in the same instant is still comfortably below a healthy resolver's capacity, and each lookup is
+now retry-hardened anyway.
+"""
+
 USER_AGENT: str = "tablassert"
 """``User-Agent`` sent by every request this module makes (unchanged from the pre-seam HTTP calls)."""
 
