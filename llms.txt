@@ -57,7 +57,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Progress](src/tablassert/progress.py): pipeline progress reporting and validation formatting.
 - [Quality Control](src/tablassert/qc.py): exact, fuzzy, abbreviation, and SapBERT validation stages.
 - [RIG Helpers](src/tablassert/rig.py): Resource Ingest Guide normalization and serialization helpers.
-- [Run Cache](src/tablassert/runcache.py): content-addressed op digests.
+- [Run Cache](src/tablassert/runcache.py): content-addressed op digests, worth-caching guards, and the ephemeral run cache.
 - [Graph Study](src/tablassert/study.py): assertions over final KGX NDJSON.
 - [Utilities](src/tablassert/utils.py): hashing, storage path constants, and filesystem helpers.
 - [Package Init](src/tablassert/__init__.py): public package import surface and compiled-extension bootstrap.
