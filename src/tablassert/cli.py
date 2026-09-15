@@ -23,7 +23,7 @@ from urllib.request import Request, urlopen
 
 import cyclopts
 
-from tablassert import extras
+from tablassert import extras, net
 from tablassert._lazy import LazyModule
 from tablassert.errors import BabelDownloadError, GraphValidationError, SectionValidationError
 from tablassert.log import cat
@@ -560,15 +560,19 @@ def download_babel_file(filename: str, url: str, destination: Path, retries: int
             download_logger.info("Downloaded {url} -> {path}", url=url, path=final_path)
             return final_path
         except (HTTPError, OSError, URLError) as e:
-            # HTTPError subclasses URLError, so it is matched in this single clause and
-            # checked first for the fail-fast case. Non-retryable 4xx (e.g. a 404 from a
-            # mistyped --version) fail fast instead of burning every attempt; 408/429 are
-            # transient and fall through to backoff like 5xx and other network errors.
-            if isinstance(e, HTTPError) and e.code not in (408, 429) and 400 <= e.code < 500:
+            # The transient/permanent table is single-sourced from tablassert.net: a permanent
+            # failure (e.g. a 404 from a mistyped --version) fails fast instead of burning every
+            # attempt, while 408/425/429, every 5xx, and all socket/DNS/TLS errors fall through to
+            # backoff. HTTPError subclasses URLError, so this one clause matches all three.
+            if not net.is_transient(e):
                 raise BabelDownloadError(url, attempt, e) from e
             last_error = e
+            # str(e), never the exception OBJECT: the loguru sink (log.py) runs with enqueue=True, which
+            # pickles every bound kwarg to the writer process; HTTPError cannot unpickle there, so the
+            # OBJECT form silently drops every retry warning line (observed as repeated
+            # "TypeError: HTTPError.__init__() missing 5 required positional arguments" logging errors).
             download_logger.warning(
-                "Download attempt {attempt}/{retries} failed for {url}: {error}", attempt=attempt, retries=retries, url=url, error=e
+                "Download attempt {attempt}/{retries} failed for {url}: {error}", attempt=attempt, retries=retries, url=url, error=str(e)
             )
             # Exponential backoff (5, 10, 20, ... capped at 60s) only when another attempt
             # remains — no dead sleep after the final failed attempt before raising.

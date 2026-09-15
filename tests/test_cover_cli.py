@@ -281,6 +281,78 @@ def test_download_babel_file_retries_transient_http_error(tmp_path: Path, monkey
     assert sleeps == [5, 10]  # exponential backoff, skipped after the final attempt
 
 
+def test_download_babel_file_retries_http_425(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PIN the one intentional behavior delta: HTTP 425 Too Early is now RETRIED, not failed fast.
+
+    WHY: ``download_babel_file``'s inline predicate used to be
+    ``e.code not in (408, 429) and 400 <= e.code < 500``, which silently omitted 425 -- a status RFC 9110
+    defines as "the server is unwilling to risk processing this request, try again", i.e. transient by
+    definition. Replacing that predicate with ``not net.is_transient(e)`` single-sources the table and
+    picks 425 up for free. This test exists so the delta is a documented decision rather than a silent
+    side effect of the refactor; everything else about the download path (Range resume, streaming,
+    progress, ``retries=5``, the ``min(60, 5 * 2 ** (attempt - 1))`` schedule) is unchanged.
+    """
+    sleeps: list[float] = []
+    monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+
+    attempts: list[int] = []
+
+    def _425(request: Any, timeout: int) -> None:
+        attempts.append(1)
+        raise HTTPError("https://example.com/f.gz", 425, "Too Early", Message(), None)
+
+    monkeypatch.setattr(cli, "urlopen", _425)
+    with pytest.raises(BabelDownloadError):
+        download_babel_file("f.gz", "https://example.com/f.gz", tmp_path, retries=3)
+    assert len(attempts) == 3  # every attempt was used: 425 is classified transient
+    assert sleeps == [5, 10]  # the unchanged exponential schedule, skipped after the final attempt
+
+
+def test_download_babel_file_retries_bare_network_errno(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare mid-stream ``OSError`` with a NETWORK errno keeps the 5-attempt guarantee.
+
+    WHY: ``stream_copy``'s ``response.read()`` raises the raw socket ``OSError`` unwrapped, so the inline
+    predicate sees only the errno. Tier-2 review demonstrated that a type-only transient table narrowed
+    this path from 5 attempts to 1 (a silent regression of the downloader's core guarantee), which is
+    exactly the class of silent-behavior change this PR exists to eliminate.
+    """
+    sleeps: list[float] = []
+    monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+    attempts: list[int] = []
+
+    def _unreachable(request: Any, timeout: int) -> None:
+        attempts.append(1)
+        raise OSError(101, "Network is unreachable")
+
+    monkeypatch.setattr(cli, "urlopen", _unreachable)
+    with pytest.raises(BabelDownloadError):
+        download_babel_file("f.gz", "https://example.com/f.gz", tmp_path, retries=3)
+    assert len(attempts) == 3, "ENETUNREACH must be retried like any other transient failure"
+    assert sleeps == [5, 10]
+
+
+def test_download_babel_file_fails_fast_on_local_errno(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare ``OSError`` with a LOCAL errno (ENOSPC) still fails fast on the first attempt.
+
+    WHY: retrying a full disk cannot succeed; burning five attempts and ~95 s of backoff on it would only
+    delay the operator's real fix. This is the other half of the errno split the single-sourced table
+    makes auditable.
+    """
+    sleeps: list[float] = []
+    monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+    attempts: list[int] = []
+
+    def _nospc(request: Any, timeout: int) -> None:
+        attempts.append(1)
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(cli, "urlopen", _nospc)
+    with pytest.raises(BabelDownloadError):
+        download_babel_file("f.gz", "https://example.com/f.gz", tmp_path, retries=3)
+    assert len(attempts) == 1, "ENOSPC must fail fast"
+    assert sleeps == [], "no backoff on a permanent failure"
+
+
 def test_download_babel_file_zero_retries_raises_without_attempt(tmp_path: Path) -> None:
     """Cover the defensive ``or RuntimeError("no attempts made")`` operand on cli.py:440.
 

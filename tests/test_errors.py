@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import socket
 from pathlib import Path
+from urllib.error import URLError
 
 from tablassert.errors import (
     DOCS_URL,
     BabelDownloadError,
     GraphValidationError,
+    NetworkTransientError,
     QcRuntimeMissingError,
     RewardConfigError,
     SectionValidationError,
@@ -55,6 +58,28 @@ def test_babel_download_error_code_and_docs_url() -> None:
     err: BabelDownloadError = BabelDownloadError("https://stars.renci.org/var/babel_outputs/x.gz", 5, RuntimeError("network down"))
     assert err.code == "babel-download-failed"
     assert str(err).endswith(DOCS_URL + "babel-download-failed")
+
+
+def test_network_transient_error_code_and_docs_url() -> None:
+    """Guard: an exhausted retry budget on a TRANSIENT failure carries a stable slug and a docs link.
+
+    The `network-transient` code is what lets a fleet consumer requeue an article WITHOUT keyword-matching
+    `notes`. A 16-worker run over 42,981 PMC articles recorded 2,194 DNS-shaped failures (2,031 x
+    `[Errno -2] Name or service not known`) as `status=SKIPPED` with notes byte-identical in shape to a
+    legitimate not-open-access skip, so 87.5% of the failures were indistinguishable from the 7,002 real
+    skips. The message must also name the target, the attempt count, and the last error, and state plainly
+    that the failure is retryable later.
+    """
+    last: URLError = URLError(socket.gaierror(-2, "Name or service not known"))
+    err: NetworkTransientError = NetworkTransientError("https://pmc-oa-opendata.s3.amazonaws.com/PMC11708054.xml", 4, last)
+    assert err.code == "network-transient"
+    assert str(err).endswith(DOCS_URL + "network-transient")
+    assert err.target == "https://pmc-oa-opendata.s3.amazonaws.com/PMC11708054.xml"
+    assert err.attempts == 4
+    assert err.last_error is last
+    assert "4 attempts" in str(err)
+    assert "Name or service not known" in str(err)
+    assert "retryable later" in str(err)
 
 
 def test_source_file_error_carries_config_section_and_path() -> None:
