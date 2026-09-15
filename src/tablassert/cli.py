@@ -23,12 +23,15 @@ from tablassert.errors import BabelDownloadError, GraphValidationError, SectionV
 from tablassert.log import cat
 
 if TYPE_CHECKING:
+    import polars as pl
     import pydantic
 
     from tablassert.lib import Tcode
     from tablassert.models import Graph
     from tablassert.progress import PipelineProgress
+    from tablassert.runcache import PlanEntry, RunCache, RunPlan
 else:
+    pl = LazyModule("polars")
     pydantic = LazyModule("pydantic")
 
 # Pipeline completion events (BUILD, VALIDATE).
@@ -177,6 +180,72 @@ def _load_graph(configuration_file: Path) -> Graph:
         raise GraphValidationError(configuration_file, flatten_pydantic_error(e)) from e
 
 
+def _run_cache_resume(cache: RunCache, entry: PlanEntry) -> tuple[int, pl.LazyFrame] | None:
+    """Build ``compile_subgraph``'s ``resume`` argument for one planned section.
+
+    Args:
+        cache: This build's open run cache.
+        entry: The section's planned role (:class:`tablassert.runcache.PlanEntry`).
+
+    Returns:
+        ``(prefix_len, snapshot)`` for a consumer of a shared prefix, ``None`` for a producer and
+        for an ungrouped section — both start from their own first op.
+
+    Raises:
+        RunCacheError: ``runcache-missing-snapshot`` when a planned consumer's snapshot is not in
+            the cache at execution time. The plan runs every producer before its consumers, so a
+            miss means the plan and the execution disagree; recomputing the prefix would hide that
+            as a merely slower build, and the snapshot's absence would stay unexplained.
+    """
+    from tablassert.runcache import RunCacheError
+
+    if entry.resume_digest is None or entry.prefix_len is None:
+        return None
+    snapshot: pl.LazyFrame | None = cache.load(entry.resume_digest)
+    if snapshot is None:
+        raise RunCacheError(
+            f"run cache holds no snapshot for digest {entry.resume_digest}, which the build plan assigned to an "
+            "earlier section as its producer; the plan and the execution order disagree, so this section cannot "
+            "resume the shared prefix it was planned to read",
+            code="runcache-missing-snapshot",
+        )
+    return (entry.prefix_len, snapshot)
+
+
+def _run_cache_snapshot(cache: RunCache, entry: PlanEntry) -> Callable[[int, pl.LazyFrame], None] | None:
+    """Build ``compile_subgraph``'s ``snapshot`` callback for one planned section.
+
+    ``compile_subgraph`` offers EVERY checkpoint of the op list; only the one the plan assigned to
+    this producer is stored. The producer keeps its in-memory accumulator for its own final write,
+    while consumers read the one stored snapshot, so the shared prefix is materialized once for
+    consumers rather than recomputed in each one.
+
+    Args:
+        cache: This build's open run cache.
+        entry: The section's planned role (:class:`tablassert.runcache.PlanEntry`).
+
+    Returns:
+        The store callback for a producer, ``None`` for a consumer and for an ungrouped section:
+        neither owns a digest, and a stray store would trip ``runcache-duplicate-store``.
+    """
+    if entry.produce_digest is None or entry.prefix_len is None:
+        return None
+    digest: str = entry.produce_digest
+    prefix_len: int = entry.prefix_len
+
+    def snapshot(position: int, lf: pl.LazyFrame) -> None:
+        """Store this producer's assigned checkpoint.
+
+        Args:
+            position: Prefix length ``compile_subgraph`` just finished (1-based op count).
+            lf: Frame that ``ops[:position]`` produced.
+        """
+        if position == prefix_len:
+            cache.store(digest, lf)
+
+    return snapshot
+
+
 def build_pipeline(
     configuration_file: Path, progress: PipelineProgress, release: bool = False, qc: bool = False, log: bool = False, head: bool = False
 ) -> None:
@@ -214,6 +283,7 @@ def build_graph_pipeline(
     from tablassert.fullmap import fullmap_db_path
     from tablassert.lib import Tcode, compile_graph, compile_subgraph
     from tablassert.progress import flatten_pydantic_error, format_section_compact
+    from tablassert.runcache import RunCache, plan_run
 
     # Stage 1/6: load tables.
     progress.stage("Loading Tables")
@@ -295,12 +365,49 @@ def build_graph_pipeline(
     # Stage 5/6: build subgraphs.
     progress.stage("Building Subgraphs")
     start, advance, sub_step = progress.section_loop(n, "Subgraph")
-    subgraphs: list[Path] = []
-    for x, op in zip(tcode, instructions, strict=True):
-        start(format_section_compact(x))
-        # on_phase drives the per-op sub-step indicator (load → filter → resolve → write ...).
-        subgraphs.append(op if isinstance(op, Path) else compile_subgraph(op, on_phase=sub_step))
-        advance()
+    # `collect` quick-exits a section whose store parquet already exists to a Path: it has no op
+    # list, so those sections are separated out BEFORE planning. `plan_run` indexes its entries by
+    # position in the list it is handed (see its Args), so planning the unfiltered list would apply
+    # every role to the wrong section.
+    pending: list[tuple[int, Tcode, list[tuple[Callable, tuple[Any, ...]]]]] = [
+        (index, x, op) for index, (x, op) in enumerate(zip(tcode, instructions, strict=True)) if not isinstance(op, Path)
+    ]
+    plan: RunPlan = plan_run([op for _, _, op in pending])
+    subgraphs: list[Path]
+    if plan.shares:
+        # Sections sharing a checkpointed prefix run in the planned order — every producer before
+        # its consumers — inside ONE ephemeral cache whose directory `__exit__` deletes when this
+        # block ends, including when a section raises inside it.
+        results: dict[int, Path] = {}
+        for index, (x, op) in enumerate(zip(tcode, instructions, strict=True)):
+            if isinstance(op, Path):
+                # Already built: keep the quick-exit path and tick it in place, as before.
+                results[index] = op
+                start(format_section_compact(x))
+                advance()
+        with RunCache() as cache:
+            for planned in plan.execution_order:
+                section_index, x, op = pending[planned]
+                entry: PlanEntry = plan.entries[planned]
+                start(format_section_compact(x))
+                # on_phase drives the per-op sub-step indicator (cache → resolve → write ...);
+                # resume/snapshot are the producer/consumer seams the plan assigned this section.
+                results[section_index] = compile_subgraph(
+                    op, on_phase=sub_step, resume=_run_cache_resume(cache, entry), snapshot=_run_cache_snapshot(cache, entry)
+                )
+                advance()
+        # Execution order changed only WHEN sections ran: reassemble by ORIGINAL section index so
+        # `compile_graph` sees the same subgraph sequence as an unplanned build.
+        subgraphs = [results[index] for index in range(n)]
+    else:
+        # Zero sharing: no snapshot could pay for itself, so no cache (and no temp directory) is
+        # created and every section runs its full op list in the original order.
+        subgraphs = []
+        for x, op in zip(tcode, instructions, strict=True):
+            start(format_section_compact(x))
+            # on_phase drives the per-op sub-step indicator (load → filter → resolve → write ...).
+            subgraphs.append(op if isinstance(op, Path) else compile_subgraph(op, on_phase=sub_step))
+            advance()
 
     # Stage 6/6: compile graph.
     progress.stage("Compiling Graph")

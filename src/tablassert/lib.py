@@ -1438,6 +1438,16 @@ PHASE_AWARE: frozenset[Callable] = frozenset({resolve_batch, fullmap_audit})
 
 UNKNOWN_PHASE: str = "transform"
 
+CACHE_PHASE: str = "cache"
+"""Phase tag fired once for a section resumed from a run-cache snapshot.
+
+It stands in for the phase tags of the skipped prefix ops (load → filter → clean → resolve …), so
+progress shows a resumed section reading a sibling's snapshot instead of claiming to redo work it
+never did. It is a label and nothing else: ``PHASE_OF``/``PHASE_AWARE`` are keyed on op callables,
+so no lookup ever needs ``CACHE_PHASE``, and ``PipelineProgress.section_loop``'s ``sub_step``
+renders any string it is handed.
+"""
+
 _VALUE_PROVENANCE_COLS: frozenset[str] = frozenset({"knowledge_level", "agent_type", "sheet_name"})
 
 
@@ -1462,7 +1472,13 @@ def _phase_of(fn: Callable, args: tuple[Any, ...]) -> str:
     return PHASE_OF.get(fn, UNKNOWN_PHASE)
 
 
-def compile_subgraph(tcode: list[tuple[Callable, tuple[Any]]], *, on_phase: Callable[[str], None] | None = None) -> Path:
+def compile_subgraph(
+    tcode: list[tuple[Callable, tuple[Any]]],
+    *,
+    on_phase: Callable[[str], None] | None = None,
+    resume: tuple[int, pl.LazyFrame] | None = None,
+    snapshot: Callable[[int, pl.LazyFrame], None] | None = None,
+) -> Path:
     """Execute a Tcode operation list to build a subgraph parquet.
 
     Args:
@@ -1470,13 +1486,64 @@ def compile_subgraph(tcode: list[tuple[Callable, tuple[Any]]], *, on_phase: Call
         on_phase: Optional callback fired when the phase label changes, and
             forwarded into phase-aware ops (``resolve_batch``/``fullmap_audit``)
             so they can emit fine-grained sub-phases; used to drive progress UX.
+        resume: ``(prefix_len, frame)`` seeding the accumulator with ``frame`` — a snapshot of
+            what ``tcode[:prefix_len]`` produced — and skipping those first ``prefix_len`` ops,
+            with ``on_phase(CACHE_PHASE)`` fired once in place of their phase tags. ``None`` (the
+            default) runs every op from the first, i.e. the historical behavior.
+        snapshot: Called as ``snapshot(position, frame)`` right after the op at each checkpoint
+            position (``runcache.checkpoints(tcode)``) has run, with the frame ``tcode[:position]``
+            produced. ``None`` (the default) checkpoints nothing and never consults the cost guards.
 
     Returns:
         Path to the written subgraph parquet.
+
+    Notes:
+        ``resume``'s ``prefix_len`` must be ``< len(tcode)``: a section always replays its own
+        final write op, which ``runcache.checkpoints`` guarantees by never selecting ``len(ops)``
+        for a write-final list, so a resumed tail is never empty and the return is always the
+        written ``Path``.
+
+        The two new parameters are keyword-only and default to ``None`` so every existing call
+        site — and ``agent.py``'s ``_reduce_ops`` mirror, which does not use the run cache —
+        keeps its exact behavior. ``runcache`` is imported lazily inside the body because it
+        imports this module at module level (``OP_COST`` is keyed on the real op callables); a
+        top-level import here would be circular.
     """
+    if not tcode:
+        from tablassert.runcache import RunCacheError
+
+        raise RunCacheError(
+            "invalid run-cache resume: an empty subgraph instruction list has no final write operation", code="runcache-invalid-resume"
+        )
+    if resume is not None:
+        prefix_len: int = resume[0]
+        if not 0 <= prefix_len < len(tcode):
+            from tablassert.runcache import RunCacheError
+
+            raise RunCacheError(
+                f"invalid run-cache resume: prefix_len={prefix_len} must satisfy 0 <= prefix_len < {len(tcode)} "
+                "so the resumed tail contains the final write operation",
+                code="runcache-invalid-resume",
+            )
+
+    checkpoint_positions: frozenset[int] = frozenset()
+    if snapshot is not None:
+        # Lazy and conditional: runcache imports lib at module level (OP_COST is keyed on the real
+        # op callables), so a top-level import here would be a cycle — and the default path, which
+        # checkpoints nothing, must not pay for the import at all.
+        from tablassert.runcache import checkpoints
+
+        checkpoint_positions = frozenset(checkpoints(tcode))
     last_phase: str | None = None
     acc: pl.LazyFrame | Path | None = None
-    for op in tcode:
+    skip: int = 0
+    if resume is not None:
+        skip, acc = resume
+        if on_phase is not None:
+            on_phase(CACHE_PHASE)
+    for position, op in enumerate(tcode):
+        if position < skip:
+            continue
         fn: Callable = op[0]
         args: tuple[Any, ...] = op[1]
         if on_phase is not None:
@@ -1488,6 +1555,10 @@ def compile_subgraph(tcode: list[tuple[Callable, tuple[Any]]], *, on_phase: Call
             acc = fn(acc, *args, on_phase=on_phase) if acc is not None else fn(*args, on_phase=on_phase)  # pyright: ignore
         else:
             acc = fn(acc, *args) if acc is not None else fn(*args)  # pyright: ignore
+        if snapshot is not None and position + 1 in checkpoint_positions:
+            # A checkpoint never lands on a write op (runcache.WRITE_OPS), so acc is the frame
+            # tcode[:position + 1] produced, never the Path a final to_store returned.
+            snapshot(position + 1, acc)  # pyright: ignore[reportArgumentType]
     return acc  # pyright: ignore
 
 

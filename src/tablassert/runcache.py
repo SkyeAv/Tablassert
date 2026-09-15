@@ -71,7 +71,14 @@ LABEL_FREE: dict[Callable, tuple[int, ...]] = {
     ),
 }
 
-RunCacheErrorCode = Literal["runcache-unserializable-arg", "runcache-duplicate-store", "runcache-bad-digest", "runcache-closed"]
+RunCacheErrorCode = Literal[
+    "runcache-unserializable-arg",
+    "runcache-invalid-resume",
+    "runcache-duplicate-store",
+    "runcache-bad-digest",
+    "runcache-closed",
+    "runcache-missing-snapshot",
+]
 """Stable kebab-case slugs for run-cache failures, appended to the docs URL on ``str()``."""
 
 
@@ -86,7 +93,9 @@ class RunCacheError(RuntimeError):
     invisible until a build produced wrong data: an unsupported type hashed by a lossy fallback
     mis-keys every downstream digest; a second frame stored under one digest means two different
     prefixes claim the same content address; a store or load against a closed cache would either
-    write into a deleted directory or report a false miss.
+    write into a deleted directory or report a false miss; and a snapshot a build plan assigned to
+    an earlier producer being absent when its consumer asks for it means the plan and the execution
+    order disagree (``runcache-missing-snapshot``, raised by the caller that walks the plan).
     """
 
     def __init__(self, message: str, *, code: RunCacheErrorCode) -> None:
