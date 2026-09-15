@@ -1316,7 +1316,7 @@ extracted beside <code>--output</code> entirely in the Rust extension: it stream
 (the multi-GB decompressed tar is never materialized on disk) with the GIL released, extracts into a
 temp directory on the output's filesystem, and, before renaming anything into place, validates the
 bundle against the same contract a <code>--force</code> build must satisfy: the <code>meta</code> schema tag is exactly
-<code>tablassert.fullmap.v5</code>, a <code>build_id</code> is recorded, the shard files are exactly the set the primary
+<code>tablassert.fullmap.v6</code>, a <code>build_id</code> is recorded, the shard files are exactly the set the primary
 advertises (no gaps, no extras), every shard's <code>build_id</code> equals the primary's, and the primary's
 <code>META.taxon_allowlist</code> identity equals the one the built-in allowlist would record. Only a bundle that
 passes is atomically renamed into place (primary → <code>--output</code>, shards beside it); any failure raises
@@ -1486,7 +1486,7 @@ they hold six tables (see <code>rust/src/fullmap.rs</code>):</p>
 </tr>
 <tr>
 <td><code>meta</code></td>
-<td>Schema version tag (<code>tablassert.fullmap.v5</code>), the shard count (<code>shards</code>), the BABEL <code>source_version</code> used to build the file, and the allowlist identity (<code>taxon_allowlist</code>) recorded for every <code>build-fullmap</code> output; absent only in databases built unfiltered through the lower-level surfaces (the Rust API, or <code>build_fullmap_pipeline</code>'s <code>taxon_allowlist=None</code> default) (primary file)</td>
+<td>Schema version tag (<code>tablassert.fullmap.v6</code>), the shard count (<code>shards</code>), the BABEL <code>source_version</code> used to build the file, and the allowlist identity (<code>taxon_allowlist</code>) recorded for every <code>build-fullmap</code> output; absent only in databases built unfiltered through the lower-level surfaces (the Rust API, or <code>build_fullmap_pipeline</code>'s <code>taxon_allowlist=None</code> default) (primary file)</td>
 </tr>
 </tbody>
 </table>
@@ -1496,8 +1496,8 @@ resolved primary path.</p>
 <code>shards</code> count to open exactly that many shard files, and fan the query terms out across the shards in
 parallel (releasing the GIL, one reader per non-empty shard, re-merged into input order); a mismatched or
 missing tag raises rather than silently reading incompatible data. Databases built under the older
-<code>v1</code>/<code>v2</code>/<code>v3</code>/<code>v4</code> schemas are rejected: there is no automatic schema migration, so a schema bump
-(including the v3→v4 move to sharded files and the v4→v5 move to the redb 4 engine) requires rebuilding
+<code>v1</code>/<code>v2</code>/<code>v3</code>/<code>v4</code>/<code>v5</code> schemas are rejected: there is no automatic schema migration, so a schema bump
+(including the v3→v4 move to sharded files, the v4→v5 move to the redb 4 engine, and the v5→v6 move to normalized level-one keys) requires rebuilding
 via <code>tablassert build-fullmap</code>.</p>
 <p>Readers open every fullmap file READ-ONLY with a SHARED file lock (redb ≥ 3 <code>ReadOnlyDatabase</code>), so any
 number of processes can run lookups against the same fullmap concurrently; only a <code>build-fullmap</code> rebuild

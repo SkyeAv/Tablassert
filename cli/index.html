@@ -1713,7 +1713,7 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 directory is the <strong>installed Tablassert package version</strong>, never hardcoded), verifies it against the
 published <code>sha256sum.txt</code>, and extracts it beside <code>--output</code> in the Rust extension, streaming zstd →
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
-primary + shards against the force-build contract (exact <code>v5</code> schema, a recorded <code>build_id</code>, the exact
+primary + shards against the force-build contract (exact <code>v6</code> schema, a recorded <code>build_id</code>, the exact
 shard set, per-shard <code>build_id</code> equality, and a <code>META.taxon_allowlist</code> identity matching the built-in
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a

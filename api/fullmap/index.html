@@ -1440,7 +1440,7 @@ dropped as well.</p>
 <p><strong><code>tag: str</code> (default: <code>"_two"</code>)</strong></p>
 <p>Suffix appended to <code>col</code> to locate the <code>level_two</code> output column.</p>
 <p><code>resolve()</code> expects the LazyFrame to already have two NLP columns applied upstream:
-- <code>col</code>: the <code>level_one</code> output (whitespace stripped, lowercased)
+- <code>col</code>: the canonical <code>level_one</code> output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)
 - <code>col + tag</code>: the <code>level_two</code> output (non-word characters removed via <code>\W+</code>)</p>
 <p>The default <code>"_two"</code> matches <code>level_two</code>'s default tag.</p>
 <h3 id="return-value">Return Value<a class="headerlink" href="#return-value" title="Permanent link">&para;</a></h3>
@@ -1501,8 +1501,8 @@ dropped as well.</p>
 <p><strong>Ranks matches</strong> by:</p>
 </li>
 <li>Category priority (if <code>prioritize</code> specified)</li>
-<li>Preferred-name exactness (case-insensitive exact match of normalized term to preferred name)</li>
-<li>NLP level (exact case match preferred over normalized)</li>
+<li>Preferred-name exactness (raw exact match first, then normalized level-one match)</li>
+<li>NLP level (level one preferred over level two)</li>
 <li>
 <p>Category frequency (if <code>column_context=True</code>)</p>
 </li>
@@ -1561,7 +1561,7 @@ dropped as well.</p>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">db</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/fullmap/data/fullmap.redb&quot;</span><span class="p">)</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">LazyFrame</span><span class="p">({</span><span class="s2">&quot;gene&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;TP53&quot;</span><span class="p">,</span> <span class="s2">&quot;BRCA1&quot;</span><span class="p">,</span> <span class="s2">&quot;EGFR&quot;</span><span class="p">,</span> <span class="s2">&quot;KRAS&quot;</span><span class="p">]})</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_one</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># lowercase + strip</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_one</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># canonical tokenize, stem, deduplicate, and sort</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_two</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># remove non-word chars → &quot;gene_two&quot; column</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">result</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">lf</span><span class="o">=</span><span class="n">lf</span><span class="p">,</span> <span class="n">col</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span> <span class="n">taxon</span><span class="o">=</span><span class="s2">&quot;9606&quot;</span><span class="p">,</span>
@@ -1569,10 +1569,14 @@ dropped as well.</p>
 <a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="s2">&quot;gene_name&quot;</span><span class="p">,</span> <span class="s2">&quot;gene_category&quot;</span><span class="p">]))</span>
 </code></pre></div>
 <h3 id="nlp-processing-levels">NLP Processing Levels<a class="headerlink" href="#nlp-processing-levels" title="Permanent link">&para;</a></h3>
-<p><code>resolve()</code> requires that <code>level_one</code> and <code>level_two</code> have been applied to the LazyFrame before calling it:</p>
+<p><code>resolve()</code> requires that <code>level_one</code> and <code>level_two</code> have been applied to the LazyFrame before calling it. Level one is the canonical key used by the fullmap build and query paths:</p>
 <p><strong><code>level_one</code> output</strong> (column: <code>col</code>):
-- Whitespace stripped, lowercased
-- Queried first; preferred for acronyms and gene symbols</p>
+- Cleans surrounding matching quotes and whitespace, then applies Unicode lowercase.
+- Splits on whitespace, stems only tokens made entirely of ASCII letters with the English Porter2 stemmer, and passes digit-bearing, punctuation-bearing, and non-ASCII tokens through unchanged after lowercasing.
+- Removes duplicate tokens, sorts the remaining tokens by their UTF-8 byte values, and joins them with one ASCII space.
+- Preserves nulls in Python LazyFrame columns; empty and whitespace-only values become the empty string.
+- Is queried first; preferred-name ranking compares these normalized forms, so a fullmap database built with different level-one keys cannot be reused.</p>
+<p>Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.</p>
 <p><strong><code>level_two</code> output</strong> (column: <code>col + "_two"</code>):
 - All non-word characters removed (<code>\W+</code> → <code>""</code>) from the <code>level_one</code> result
 - Used as fallback when <code>level_one</code> produces no match
