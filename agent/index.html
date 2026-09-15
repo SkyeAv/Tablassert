@@ -725,7 +725,18 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="PMC-AWS data source">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-resilience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network resilience
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network resilience">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1382,7 +1393,18 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="PMC-AWS data source">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-resilience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network resilience
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network resilience">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1769,6 +1791,75 @@ bundles were <strong>deprecated and removed (Aug 2026)</strong>. The PMC website
 <p>Only the <strong>open-access subset</strong> of PMC (~half) is available here. Articles are <strong>CC-BY</strong>: cite the
 source and DOI (e.g. PMC11708054 → <a href="https://doi.org/10.1128/mbio.01679-24">10.1128/mbio.01679-24</a>).</p>
 </div>
+<h2 id="network-resilience">Network resilience<a class="headerlink" href="#network-resilience" title="Permanent link">&para;</a></h2>
+<p>Every network call the agent makes — the PMC-AWS object listing, article metadata, and file downloads
+— routes through one stdlib-only seam, <code>tablassert.net</code>, which classifies each failure as transient
+(worth retrying) or permanent (fail fast) and retries the transient ones with bounded jittered
+backoff. The fleet run that motivated this lost 2,194 of 2,507 queue failures (87.5%) to DNS-shaped
+errors (<code>[Errno -2] Name or service not known</code>): single-attempt fetches turned a recoverable
+resolver blip into a terminal <code>SKIPPED</code> for the whole article.</p>
+<table>
+<thead>
+<tr>
+<th>Transient (retried)</th>
+<th>Permanent (fail fast)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DNS failures (<code>URLError</code> wrapping <code>socket.gaierror</code>, bare <code>gaierror</code>)</td>
+<td><code>ValueError</code> / <code>TypeError</code> / <code>KeyError</code> (malformed id, listing, JSON)</td>
+</tr>
+<tr>
+<td>Connection loss (<code>ConnectionError</code>, <code>ssl.SSLError</code>, <code>http.client.HTTPException</code>)</td>
+<td><code>PermissionError</code> (metadata not CC-licensed), <code>FileNotFoundError</code> (no OA versions / no table files)</td>
+</tr>
+<tr>
+<td>Timeouts (<code>TimeoutError</code>; <code>socket.timeout</code> <em>is</em> <code>TimeoutError</code> on Python 3.10+)</td>
+<td>Any 4xx except 408 / 425 / 429</td>
+</tr>
+<tr>
+<td>HTTP 408 / 425 / 429 and every 5xx</td>
+<td>A bare <code>OSError</code> with a local errno (<code>ENOSPC</code>, <code>EACCES</code>, <code>ENOENT</code>)</td>
+</tr>
+<tr>
+<td>A bare <code>OSError</code> with a network errno (<code>ECONNRESET</code>, <code>EPIPE</code>, <code>ENETUNREACH</code>, <code>EMFILE</code>, …)</td>
+<td></td>
+</tr>
+<tr>
+<td>Rate-limit / quota errors from optional libraries (<code>openai</code>, <code>litellm</code>, <code>httpx</code>), matched by exception <strong>name</strong> — never imported — or by a <code>rate limit</code> / <code>429</code> / <code>too many requests</code> message token; a <code>(reset after …)</code> hint then sets the wait, not the classification</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The HTTP retry budget is 4 attempts per call, sleeping 1.0 s before the second attempt and doubling
+per attempt up to 20.0 s, with the <strong>sum</strong> of sleeps inside one call capped at 60.0 s. When the
+failure carries a <code>Retry-After</code> header (or a <code>(reset after 90s)</code> quota hint in its message), the
+longer of that hint and the jittered doubling step is slept — the hint overrides the schedule only
+when it is longer, capped at 60 s. The worst case for one HTTP round
+trip is therefore 4 x 120 s timeout + 60 s backoff = 540 s before the call raises for good; the
+article is then <code>SKIPPED</code> with <code>error_code: network-transient</code> (see
+<a href="#workspace-layout-target-graph-and-checkpoint-rerun">checkpoint / rerun</a>) and can be requeued.</p>
+<p>Article file downloads are idempotent, atomic, and bounded-parallel: a file that already exists
+non-empty is skipped <strong>without any request</strong> (a torn zero-length file re-downloads), each download
+writes a <code>.part</code> sibling that is atomically <code>os.replace</code>d into place on completion — and removed
+even on <code>KeyboardInterrupt</code>, so no half-written file survives — and up to 8 files fetch concurrently
+by default, with results collected in submission order. <code>concurrency &lt; 1</code> fails before any network
+call is made.</p>
+<p><strong>Exactly one retry layer exists for LLM calls.</strong> Smolagents' own rate-limit retryer is disabled
+(<code>retry=False</code>) and the OpenAI client's transport retries are off (<code>max_retries: 0</code>); the shared
+seam retries transient LLM failures — DNS, timeouts, 429, 5xx — with the same 4 attempts but a
+45-second per-call backoff budget. LiteLLM's internal backend retry is not exposed by its
+constructor and remains outside this control.</p>
+<p><strong>Worst-case wall clock.</strong> The fleet forensic run recorded ~13–18 HTTP round trips per article
+(3 sequential listing/metadata calls plus one per downloaded file). At the per-call worst case of
+540 s (which includes the 120 s socket timeout on each attempt, not just the backoff), three serial
+calls plus ceil(15/8) = 2 parallel download waves bound the fetch phase at 5 x 540 s = 2,700 s =
+45 min; the LLM layer adds at most 29 logical calls x 45 s = 1,305 s ~
+21.8 min. Together that is ~67 min of the 90-minute per-article budget, leaving ~23 min for the
+real work of deriving, building, and auditing configs — and a fully-down article never hangs a
+worker: every call either succeeds, retries within budget, or raises, and an exhausted article is
+skipped with <code>network-transient</code> for requeue.</p>
 <h3 id="local-payloads-non-open-access-articles">Local payloads (non-open-access articles)<a class="headerlink" href="#local-payloads-non-open-access-articles" title="Permanent link">&para;</a></h3>
 <p>Only the open-access subset of PMC is fetchable from the bucket. To run the <strong>same</strong> derive/build/improve
 pipeline on an article you already hold locally (e.g. a non-open-access paper), pass <code>--local</code>:</p>
@@ -1919,6 +2010,18 @@ endpoint; neither is required):</p>
   the threshold turns that measurement into a terminal gate. See
   <a href="#biolink-validity">Biolink validity</a> below.</li>
 </ul>
+<p>Both LLM-facing prompts are hard-bounded so a pathological article cannot outgrow the model's
+context window. The reflexion prompt caps its three interpolated blocks — current config at 8,000
+chars (<code>MAX_PROMPT_CONFIG_CHARS</code>), coverage report at 8,000 chars (<code>COVERAGE_PROMPT_CHARS</code>),
+article/table context at 40,000 chars (<code>MAX_PROMPT_CONTEXT_CHARS</code>) — and the judge prompt
+serializes the compact audit report bounded at 8,000 chars (<code>MAX_PROMPT_REPORT_CHARS</code>). Every
+<code>unresolved</code> term list keeps only its first 20 entries (<code>UNRESOLVED_CAP</code>) plus a visible <code>+N more</code>
+marker and an <code>unresolved_count</code> naming the original length, so truncation is never silent and the
+scale signal survives; the worst-case prompt is ~58,000 chars, about 15,000 tokens. The fleet distill
+telemetry that motivated this recorded reflexion prompts of 1.6M and 2.3M characters (689,241 and
+524,336 input tokens) — past every model's window, failing outright after paying for the
+serialization. Compaction happens only at prompt serialization: <code>map_coverage</code>, <code>build_and_audit</code>,
+and the supervisor's deterministic proposer still see the full uncapped reports.</p>
 <h3 id="distilling-a-fine-tuning-dataset-distill">Distilling a fine-tuning dataset (<code>--distill</code>)<a class="headerlink" href="#distilling-a-fine-tuning-dataset-distill" title="Permanent link">&para;</a></h3>
 <p><code>--distill</code> (short: <code>-d</code>, <code>-dt</code>) records <strong>every LLM call of the run</strong> — the inner agent's
 multi-turn conversations, plus the judge and reflexion calls when those gates are enabled — as one
@@ -2156,6 +2259,18 @@ can only shrink a config or leave it alone, never corrupt it: any failure writes
 uncompacted config and the status is unaffected. Each record tracks <code>config_chars</code> — the character
 count of what was actually written to <code>configs/&lt;pmc_id&gt;.yaml</code> — in <code>state.json</code>, so size deltas are
 auditable per article.</p>
+<p>Each record also carries <code>error_code</code> — the stable kebab-case <code>code</code> of the exception that caused a
+<code>SKIPPED</code> record, or <code>null</code> for a deterministic gate, an uncoded error, or a pre-field <code>state.json</code>.
+It describes the <strong>most recent attempt</strong>: starting an attempt clears it, so a later <code>MAPPED</code> result
+cannot retain a stale transient code. Consumers should inspect it only when <code>status == "SKIPPED"</code>.
+<code>network-transient</code> and <code>llm-transient</code> mean requeue the article; the CLI emits the latter through one
+bounded retry layer for the inner agent, reflexion, and judge. Smolagents' retryer and OpenAI's client
+retryer are disabled; LiteLLM's internal retry setting is not exposed by <code>LiteLLMModel.__init__</code>.
+The worst case is 29 logical calls per article (20 agent + 3 reflexion + 6 judge) x 45 seconds =
+1,305 seconds (about 21.8 minutes), leaving the rest of the 90-minute timeout for real work. Other
+codes are terminal for that payload. Switch on <code>error_code</code> rather than keyword-matching <code>notes</code>;
+<code>status</code> remains <code>SKIPPED</code> and the <code>SKIPPED: &lt;error&gt;</code> prefix remains for older consumers. The
+supervisor also writes one <code>ERROR</code> log line for every catch-all skip.</p>
 <p>A result is appended to the target graph only when it is <code>MAPPED</code> or <code>BUILT_UNMEASURED</code>. <code>SKIPPED</code>
 articles never append. If the same PMC is processed again, its old table entry is replaced and the new
 absolute config path is appended. Requested PMCs are deliberately processed again even when <code>state.json</code>
