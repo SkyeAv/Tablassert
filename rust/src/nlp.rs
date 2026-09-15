@@ -121,6 +121,7 @@ mod tests {
     use super::{normalize_l1, normalize_terms};
     use pyo3::prelude::*;
     use std::borrow::Cow;
+    use std::time::Instant;
 
     #[test]
     fn single_token_normalizes_to_itself() {
@@ -255,6 +256,64 @@ mod tests {
                 .extract()
                 .unwrap();
             assert!(empty.is_empty());
+        });
+    }
+
+    #[test]
+    fn normalize_terms_performance_one_million_terms() {
+        // WHY: level-one normalization is a hot path for large tabular inputs;
+        // this absolute two-second ceiling protects the rayon batch/core path
+        // from regressing to serial work. The seeded, multi-token workload is
+        // generated before timing and uses only stable ASCII terms, so the gate
+        // is independent of locale, network, and optional Python dependencies.
+        let vocabulary = [
+            "Aspirin",
+            "genes",
+            "inhibiting",
+            "tnf-alpha",
+            "oral",
+            "tablets",
+            "alpha",
+            "51",
+        ];
+        let mut seed = 5005_u64;
+        let terms: Vec<String> = (0..1_000_000)
+            .map(|_| {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let first = vocabulary[(seed % vocabulary.len() as u64) as usize];
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let second = vocabulary[(seed % vocabulary.len() as u64) as usize];
+                format!("{first} {second}")
+            })
+            .collect();
+
+        let first_term = terms[0].clone();
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            let func = pyo3::wrap_pyfunction!(normalize_terms, py).unwrap();
+            let warmup: Vec<String> = func
+                .call1((terms[..1024].to_vec(),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(warmup.len(), 1024);
+
+            let started = Instant::now();
+            let output: Vec<String> = func.call1((terms,)).unwrap().extract().unwrap();
+            let elapsed = started.elapsed();
+
+            println!(
+                "normalize_terms took {:.3}s for 1,000,000 terms",
+                elapsed.as_secs_f64()
+            );
+            assert_eq!(output.len(), 1_000_000);
+            assert!(output.iter().all(|term| !term.is_empty()));
+            assert_eq!(output[0], normalize_l1(&first_term));
+            assert!(
+                elapsed.as_secs_f64() <= 2.0,
+                "normalize_terms took {:.3}s for 1,000,000 terms",
+                elapsed.as_secs_f64()
+            );
         });
     }
 }
