@@ -45,7 +45,7 @@ EXTRA_FOR_MODULE: Final[dict[str, str]] = {module: extra for extra, packages in 
 # What each extra unlocks, phrased to follow "required by ...".
 FEATURES: Final[dict[str, str]] = {
     "rt": "the runtime-compatible polars build",
-    "aria2": "the bundled aria2c downloader (build-fullmap --aria2c)",
+    "aria2": "the bundled aria2c downloader (used automatically by build-fullmap when installed)",
     "qc": "the QC audit",
     "agent": "the tablassert agent",
     "optimize": "GEPA prompt optimization (tablassert agent --optimize)",

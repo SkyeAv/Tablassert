@@ -125,7 +125,6 @@ tablassert build-fullmap [ARGS]
 | `--output`, `-o` | Path | No | `./fullmap/data/fullmap.redb` | Path to write the redb file (prebuilt extraction or build output) |
 | `--cache`, `-c` | Path | No | `./fullmap/downloads` | Directory for downloaded BABEL files when building from scratch (`classes/`, `synonyms/`) |
 | `--version`, `-v` | str | No | `2026jul22` | BABEL snapshot date to fetch (a RENCI stamp, **not** Tablassert's version) |
-| `--aria2c`, `-a` | Flag | No | `False` | Opt into the bundled `aria2c` binary from the `[aria2]` extra for resumable segmented downloads (the prebuilt archive **or** BABEL files); fails loud (exit 2, before any download starts) if the extra is missing or unsupported on the current platform, and on a non-zero aria2c exit |
 | `--force`, `-f` | Flag | No | `False` | Skip the prebuilt download and always rebuild from BABEL outputs |
 
 ```bash
@@ -133,8 +132,9 @@ tablassert build-fullmap [ARGS]
 tablassert build-fullmap --output /data/fullmap/fullmap.redb
 # Force a from-scratch rebuild from BABEL outputs (e.g. after a BABEL snapshot bump)
 tablassert build-fullmap --force --output /data/fullmap/fullmap.redb
-# Accelerate either download with bundled aria2c (`pip install "tablassert[aria2]"`; the multi-GB prebuilt is the ideal aria2 use case)
-tablassert build-fullmap --aria2c --output /data/fullmap/fullmap.redb
+# Install the [aria2] extra and the bundled aria2c is used automatically for either download (the multi-GB prebuilt is the ideal aria2 use case)
+pip install "tablassert[aria2]"
+tablassert build-fullmap --output /data/fullmap/fullmap.redb
 ```
 
 Every one of those invocations produces a database filtered by the checked-in
@@ -151,6 +151,15 @@ shard set, per-shard `build_id` equality, and a `META.taxon_allowlist` identity 
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
 warning — an archive published without the current filter is never installed.
+
+The downloader is chosen automatically — there is no flag to pass: with the optional `[aria2]` extra
+installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), both the prebuilt archive
+and the BABEL files download through the bundled aria2c binary with resumable segmented downloads;
+without the extra, Tablassert's Python downloader is used. The extra ships no macOS wheels, so a
+normal macOS install resolves to the Python downloader. The choice is resolved once per run, after
+the reuse short-circuit, and is announced on stderr as well as logged either way (a run that reuses
+an existing database downloads nothing and stays silent); a failing aria2c download fails loud
+rather than being silently rescued by the Python downloader.
 
 A database already present at `--output` is reused only when it carries that same allowlist identity;
 an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
