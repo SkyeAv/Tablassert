@@ -1,11 +1,14 @@
-"""Tests for ``tablassert.runcache``: op digests, worth-caching guards, and the ephemeral run cache.
+"""Tests for ``tablassert.runcache``: op digests, worth-caching guards, planner, and the run cache.
 
-The first half pins the pure layers — content-addressed hashing (:func:`prefix_digest`) and the
-cost guards (:func:`checkpoints`). The second half pins :class:`RunCache`, the one piece that
+The first part pins the pure layers — content-addressed hashing (:func:`prefix_digest`) and the
+cost guards (:func:`checkpoints`). The second part pins :class:`RunCache`, the one piece that
 touches the filesystem: its snapshots must round-trip a frame exactly, its directory must be
 deleted when the build ends (including when it ends in an exception), its counters must be
 exact, and every way it could be misused must fail loudly instead of degrading into a silent
-recompute or a false miss.
+recompute or a false miss. The last part pins :func:`plan_run`, the pure planner that turns a
+build's per-section op lists into a :class:`RunPlan`: which sections share a checkpointed prefix,
+which one snapshots it, and what order the sections must run in for that snapshot to exist before
+anything tries to load it.
 
 The op-list shapes here mirror what ``Tcode.collect`` actually stores (see
 ``src/tablassert/lib.py``'s ``_source_ops``/``_node_ops`` and the ``(resolve_batch, (specs, db,
@@ -17,7 +20,10 @@ the stored args because ``compile_subgraph`` pipes it through ``reduce``.
 from __future__ import annotations
 
 import operator
+import os
+import random
 import tempfile
+import time
 from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
@@ -40,13 +46,16 @@ from tablassert.runcache import (
     MIN_PREFIX_COST,
     MIN_PREFIX_OPS,
     OP_COST,
+    PlanEntry,
     RunCache,
     RunCacheError,
     RunCacheStats,
+    RunPlan,
     canonical,
     checkpoints,
     op_cost,
     op_repr,
+    plan_run,
     prefix_digest,
 )
 
@@ -592,3 +601,406 @@ def test_run_cache_rejects_a_digest_that_is_not_one_safe_filename() -> None:
                 cache.load(digest)
         assert cache.stats() == RunCacheStats()
         assert list(cache.directory.iterdir()) == []
+
+
+# --- Shared-prefix planner -------------------------------------------------------------------
+
+
+def _load_ops(source: str) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """The ``csv`` + ``pick`` prologue (cost 2 + 1), which alone never reaches ``MIN_PREFIX_COST``.
+
+    ``source`` is the only knob: two sections reading the SAME table share these ops verbatim,
+    which is the realistic origin of a shared prefix in one graph's config.
+    """
+    return [(lib.csv, (Path(f"data/{source}.tsv"), "\t")), (lib.pick, ([1, 2, 3],))]
+
+
+def _encode_ops(col: str) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """The ``coerce_columns`` + ``column`` encode step (cost 3 + 1); cumulative 7, still sub-floor."""
+    return [(lib.coerce_columns, ()), (lib.column, (f"{col}_pre_resolution", col))]
+
+
+def _shared_resolve_ops(col: str = "subject") -> list[tuple[Callable, tuple[Any, ...]]]:
+    """One ``resolve_batch`` op (cost 60) — the step that carries a prefix over ``MIN_PREFIX_COST``.
+
+    The label slots (positions 3 and 4) are held FIXED here so a planner test never has to reason
+    about masking and content at once; ``test_prefix_digest_excludes_label_args_for_resolve_batch_and_fullmap_audit``
+    already pins that differing labels digest equal.
+    """
+    return [(resolve_batch, ([ResolveSpec(col=col)], Path("data/fullmap.redb"), True, "aaaabbbb", "study-a.toml", True, "_two"))]
+
+
+def _write_ops(name: str) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """A section-specific final ``to_store`` — the tail is where one config's sections differ.
+
+    Ending on a write matters to the fixtures: ``checkpoints`` never selects ``len(ops)`` for a
+    write-final list, so each section's deepest checkpoint is its shared head, not its own output.
+    """
+    return [(lib.to_store, (Path(f".tablassert/store/{name}.parquet"), name))]
+
+
+def _deep_head() -> list[tuple[Callable, tuple[Any, ...]]]:
+    """The six-op expensive head that sibling sections repeat verbatim (cumulative cost 97).
+
+    csv(2) + pick(1) + coerce_columns(3) + column(1) + resolve_batch(60) + fullmap_audit(30).
+    Cumulative cost crosses ``MIN_PREFIX_COST`` only at the ``resolve_batch`` (k=5), so a section
+    built from this head plus a trailing write checkpoints at ``[5, 6]`` — a SHALLOW and a DEEP
+    candidate, which is what lets the deepest-wins rule be asserted rather than assumed.
+    """
+    return [*_load_ops("gwas"), *_encode_ops("subject"), *_shared_resolve_ops(), *_audit_ops("aaaabbbb", "study-a.toml")]
+
+
+def _shallow_head(source: str, col: str) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """A three-op head (csv + pick + resolve_batch, cost 63) that clears the cost floor at k=3.
+
+    Distinct ``(source, col)`` pairs give distinct digests, so two of these make an independent
+    group of their own rather than joining the deep one.
+    """
+    return [*_load_ops(source), *_shared_resolve_ops(col)]
+
+
+def _two_group_sections() -> list[list[tuple[Callable, tuple[Any, ...]]]]:
+    """Six sections: a deep three-member group, a shallow two-member group, and one loner.
+
+    Indices are deliberately interleaved (deep at 0/2/5, shallow at 3/4, ungrouped at 1) so an
+    implementation that planned by adjacency, or that left sections in config order, cannot pass
+    the execution-order assertions below.
+    """
+    return [
+        [*_deep_head(), *_write_ops("deep-0")],
+        [*_shallow_head("loner", "object"), *_write_ops("loner-1")],
+        [*_deep_head(), *_write_ops("deep-2")],
+        [*_shallow_head("cohort", "subject"), *_write_ops("shallow-3")],
+        [*_shallow_head("cohort", "subject"), *_write_ops("shallow-4")],
+        [*_deep_head(), *_write_ops("deep-5")],
+    ]
+
+
+def _forbid(name: str) -> Callable[..., None]:
+    """Build a stand-in that fails the test if the planner ever consults a clock or entropy source."""
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise AssertionError(f"plan_run consulted {name}; the planner must be pure (no I/O, no clock, no randomness)")
+
+    return _boom
+
+
+def test_plan_groups_sections_sharing_deepest_prefix() -> None:
+    """Sections sharing several checkpointed prefixes group on the DEEPEST one; a cheap sharer stays out.
+
+    Two fixtures in one, because the rule has two halves. Sections 0 and 1 repeat the same
+    six-op head, so both the k=5 and the k=6 prefix digests occur for two sections: the plan must
+    pick k=6, since the longest shared run is the most recomputation avoided per snapshot and the
+    shorter prefix is already inside it. Section 2 shares only the ``csv`` + ``pick`` prologue
+    with them — genuinely shared instructions, but cost 3 sits below ``MIN_PREFIX_COST``, so it
+    produces no checkpoint at all and must stay ungrouped rather than drag the group down to a
+    prefix too cheap to be worth snapshotting.
+    """
+    deep: list[tuple[Callable, tuple[Any, ...]]] = _deep_head()
+    deep_digest: str = prefix_digest(deep)
+    shallow_digest: str = prefix_digest(deep[:5])
+    assert deep_digest != shallow_digest
+    cheap: list[tuple[Callable, tuple[Any, ...]]] = [*_load_ops("gwas"), (lib.value, ("predicate", "increases")), *_write_ops("cheap-2")]
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = [[*deep, *_write_ops("deep-0")], [*_deep_head(), *_write_ops("deep-1")], cheap]
+    # The deep sections have BOTH prefixes to choose from; the cheap one has none to offer.
+    assert checkpoints(op_lists[0]) == [5, 6] == checkpoints(op_lists[1])
+    assert checkpoints(cheap) == []
+    # Section 2 really does open with the same instructions as the group — the guard, not a
+    # digest mismatch, is what keeps it out.
+    assert prefix_digest(cheap[:2]) == prefix_digest(deep[:2])
+
+    plan: RunPlan = plan_run(op_lists)
+    assert plan.shares is True
+    assert plan.execution_order == [0, 1, 2]
+    assert plan.entries[0] == PlanEntry(resume_digest=None, prefix_len=len(deep), produce_digest=deep_digest)
+    assert plan.entries[1] == PlanEntry(resume_digest=deep_digest, prefix_len=len(deep), produce_digest=None)
+    assert plan.entries[2] == PlanEntry()
+    # Deepest wins: no entry keys on the shallower shared prefix.
+    assert all(entry.resume_digest != shallow_digest and entry.produce_digest != shallow_digest for entry in plan.entries)
+
+
+def test_plan_execution_order_runs_producer_first() -> None:
+    """Each group has exactly ONE producer, and it runs before every consumer of its digest.
+
+    The reorder exists only to make this true: a consumer that ran first would miss, recompute the
+    expensive prefix, and leave the snapshot it should have read unwritten — the cache would cost
+    a write and save nothing. Two groups (deep 0/2/5, shallow 3/4) plus an ungrouped loner at 1
+    pin the per-group invariants AND the block structure: grouped sections first, deeper group
+    before shallower, original index within a group, ungrouped last in original relative order.
+    """
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = _two_group_sections()
+    deep_digest: str = prefix_digest(_deep_head())
+    shallow_digest: str = prefix_digest(_shallow_head("cohort", "subject"))
+    assert deep_digest != shallow_digest
+
+    plan: RunPlan = plan_run(op_lists)
+    assert plan.shares is True
+    assert plan.execution_order == [0, 2, 5, 3, 4, 1]
+
+    positions: dict[int, int] = {section: position for position, section in enumerate(plan.execution_order)}
+    for digest, members, depth in ((deep_digest, (0, 2, 5), len(_deep_head())), (shallow_digest, (3, 4), len(_shallow_head("cohort", "subject")))):
+        producers: list[int] = [index for index in members if plan.entries[index].produce_digest == digest]
+        consumers: list[int] = [index for index in members if plan.entries[index].resume_digest == digest]
+        # Exactly one writer per digest (RunCache.store rejects a second) and one reader per rest.
+        assert len(producers) == 1
+        producer: int = producers[0]
+        assert sorted(consumers) == sorted(m for m in members if m != producer)
+        assert len(consumers) == len(members) - 1
+        assert positions[producer] < min(positions[consumer] for consumer in consumers)
+        for index in members:
+            entry: PlanEntry = plan.entries[index]
+            assert entry.prefix_len == depth
+            # A section is either the writer or a reader of its group's digest, never both.
+            assert (entry.produce_digest is None) != (entry.resume_digest is None)
+        assert plan.entries[producer].resume_digest is None
+
+    # The loner shares nothing: no snapshot to write, nothing to resume, full op list replayed.
+    assert plan.entries[1] == PlanEntry()
+    assert len({entry.produce_digest for entry in plan.entries if entry.produce_digest is not None}) == 2
+
+
+def test_plan_preserves_original_order_without_sharing() -> None:
+    """A zero-sharing build plans EMPTY: identity order, all-``None`` entries, ``shares`` False.
+
+    The downstream contract this pins: an empty plan must be recognizable so the executor skips
+    both the reorder and creating a ``RunCache`` entirely. Reordering a build that cannot hit a
+    snapshot would change section timing and progress reporting for nothing, and an open cache
+    directory for a build with nothing to store is pure overhead. Each section here DOES have
+    checkpoints — the emptiness comes from nothing being shared, not from trivial op lists — and
+    the no-sections degenerate case plans empty too.
+    """
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = [
+        [*_shallow_head(f"table-{index}", col), *_write_ops(f"section-{index}")] for index, col in enumerate(("subject", "object", "gene", "disease"))
+    ]
+    # Every section is expensive enough to checkpoint on its own; no digest repeats across them.
+    assert all(checkpoints(ops) for ops in op_lists)
+    digests: list[str] = [prefix_digest(ops) for ops in op_lists]
+    assert len(set(digests)) == len(digests)
+
+    plan: RunPlan = plan_run(op_lists)
+    assert plan.shares is False
+    assert plan.execution_order == list(range(len(op_lists))) == [0, 1, 2, 3]
+    assert len(plan.entries) == len(op_lists)
+    assert all(entry == PlanEntry() for entry in plan.entries)
+    assert all(entry.resume_digest is None and entry.produce_digest is None and entry.prefix_len is None for entry in plan.entries)
+
+    empty: RunPlan = plan_run([])
+    assert empty == RunPlan()
+    assert empty.shares is False
+    assert empty.execution_order == [] == list(range(0))
+    assert empty.entries == []
+
+
+def test_plan_is_deterministic_for_identical_input() -> None:
+    """The same build always plans identically — no clock, no entropy, no identity dependence.
+
+    A plan decides the order sections run in and which digest each one stores or loads, so any
+    nondeterminism would show up as a build that is fast today and silently slow tomorrow, or as
+    a consumer looking up a digest its producer never wrote. Three probes: replanning the SAME
+    lists, replanning freshly rebuilt equal-but-independent instances (new ``Path``/``ResolveSpec``
+    objects, so nothing may key on ``id()`` or ``hash()``), and replanning with two same-group
+    sections swapped — equivalent input whose plan must be byte-identical, because roles are
+    positional (the lowest index in a group always produces). A fourth probe replaces
+    ``time``/``random``/``os.urandom`` with failures to prove purity by construction.
+    """
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = _two_group_sections()
+    deep_digest: str = prefix_digest(_deep_head())
+    first: RunPlan = plan_run(op_lists)
+    assert plan_run(op_lists) == first
+    assert first.execution_order == [0, 2, 5, 3, 4, 1]
+    assert first.entries[0].produce_digest == deep_digest
+
+    rebuilt: list[list[tuple[Callable, tuple[Any, ...]]]] = _two_group_sections()
+    assert all(rebuilt[index] == op_lists[index] for index in range(len(op_lists)))
+    assert plan_run(rebuilt) == first
+
+    # Swap two members of the deep group: the input list is reordered but equivalent, and the
+    # resulting plan is IDENTICAL (not merely isomorphic) because entries are keyed by position.
+    swapped: list[list[tuple[Callable, tuple[Any, ...]]]] = list(op_lists)
+    swapped[0], swapped[2] = swapped[2], swapped[0]
+    assert swapped != op_lists
+    assert plan_run(swapped) == first
+
+    # Digests are stable across every call above, so the group key cannot drift between builds.
+    assert prefix_digest(_deep_head()) == deep_digest == first.entries[2].resume_digest
+
+    # Scoped context, not the bare constructor: these patches must be undone the moment the
+    # probe finishes, or a raising time.time()/os.urandom() leaks into every later test.
+    with pytest.MonkeyPatch.context() as probe:
+        for module, attribute in ((time, "time"), (time, "monotonic"), (random, "random"), (os, "urandom")):
+            probe.setattr(module, attribute, _forbid(f"{module.__name__}.{attribute}"))
+        assert plan_run(op_lists) == first
+
+
+def test_plan_orders_deeper_group_before_shallower_group() -> None:
+    """Two distinct groups run deeper-first, and equal depths fall back to the digest, not the index.
+
+    Deeper-first is what maximizes reuse: the longest shared prefix is the most expensive
+    recomputation avoided, so it is materialized while every one of its consumers is still
+    pending. Depth must dominate the original index — a config whose cheap sections happen to be
+    listed first still runs the expensive shared head first. When two groups are equally deep the
+    digest breaks the tie, because the alternative (dict or set iteration order) varies with
+    Python's per-process string hash seed and would make one build's execution order
+    unreproducible.
+    """
+    deep: list[tuple[Callable, tuple[Any, ...]]] = _deep_head()
+    shallow: list[tuple[Callable, tuple[Any, ...]]] = _shallow_head("cohort", "subject")
+    assert len(deep) > len(shallow)
+    # The SHALLOW group owns the lower original indices, so identity order would put it first.
+    by_depth: list[list[tuple[Callable, tuple[Any, ...]]]] = [
+        [*shallow, *_write_ops("shallow-0")],
+        [*_shallow_head("cohort", "subject"), *_write_ops("shallow-1")],
+        [*deep, *_write_ops("deep-2")],
+        [*_deep_head(), *_write_ops("deep-3")],
+    ]
+    deeper_first: RunPlan = plan_run(by_depth)
+    assert deeper_first.execution_order == [2, 3, 0, 1]
+    assert deeper_first.entries[2].produce_digest == prefix_digest(deep)
+    assert deeper_first.entries[0].produce_digest == prefix_digest(shallow)
+    deep_len: int | None = deeper_first.entries[2].prefix_len
+    shallow_len: int | None = deeper_first.entries[0].prefix_len
+    assert deep_len == len(deep)
+    assert shallow_len == len(shallow)
+    assert deep_len is not None
+    assert shallow_len is not None
+    assert deep_len > shallow_len
+
+    # Equal depth: the ascending digest decides, whichever way the indices happen to fall.
+    head_x: list[tuple[Callable, tuple[Any, ...]]] = _shallow_head("x-table", "subject")
+    head_y: list[tuple[Callable, tuple[Any, ...]]] = _shallow_head("y-table", "object")
+    digest_x: str = prefix_digest(head_x)
+    digest_y: str = prefix_digest(head_y)
+    assert digest_x != digest_y
+    same_depth: list[list[tuple[Callable, tuple[Any, ...]]]] = [
+        [*head_x, *_write_ops("x-0")],
+        [*_shallow_head("x-table", "subject"), *_write_ops("x-1")],
+        [*head_y, *_write_ops("y-2")],
+        [*_shallow_head("y-table", "object"), *_write_ops("y-3")],
+    ]
+    plan: RunPlan = plan_run(same_depth)
+    leading: list[int] = [0, 1] if digest_x < digest_y else [2, 3]
+    trailing: list[int] = [2, 3] if digest_x < digest_y else [0, 1]
+    assert plan.execution_order == [*leading, *trailing]
+    assert sorted(digest for digest in (digest_x, digest_y)) == [
+        plan.entries[plan.execution_order[0]].produce_digest,
+        plan.entries[plan.execution_order[2]].produce_digest,
+    ]
+
+
+def test_plan_does_not_group_a_shared_prefix_below_the_worth_caching_guard() -> None:
+    """Guards beat sharing: two sections may share a prefix that is never checkpointed, and stay ungrouped.
+
+    Sharing alone is not a reason to snapshot — writing and re-scanning an intermediate frame
+    costs more than recomputing a prefix that never reached ``MIN_PREFIX_COST`` or
+    ``MIN_PREFIX_OPS``. Both floors get a case: (a) two sections sharing an identical
+    ``csv`` + ``pick`` prologue (cost 3) and (b) two sharing a single expensive ``resolve_batch``
+    (cost 60, but one op, and the only longer prefix ends on their own write). In each the shared
+    digest demonstrably exists — asserted, not assumed — yet ``checkpoints`` yields nothing, so
+    the plan must stay empty. The contrast at the end proves the guard is the ONLY thing holding
+    them apart: one more op over the cost floor and the same sections group immediately.
+    """
+    prologue: list[tuple[Callable, tuple[Any, ...]]] = _load_ops("gwas")
+    cheap_a: list[tuple[Callable, tuple[Any, ...]]] = [*prologue, (lib.value, ("predicate", "increases")), *_write_ops("cheap-a")]
+    cheap_b: list[tuple[Callable, tuple[Any, ...]]] = [*_load_ops("gwas"), (lib.value, ("predicate", "decreases")), *_write_ops("cheap-b")]
+    assert prefix_digest(cheap_a[:2]) == prefix_digest(cheap_b[:2])  # genuinely shared instructions
+    assert checkpoints(cheap_a) == [] == checkpoints(cheap_b)  # ... below the cost floor
+
+    lone_resolve: list[tuple[Callable, tuple[Any, ...]]] = _shared_resolve_ops()
+    assert op_cost(resolve_batch) >= MIN_PREFIX_COST
+    short_c: list[tuple[Callable, tuple[Any, ...]]] = [*lone_resolve, *_write_ops("short-c")]
+    short_d: list[tuple[Callable, tuple[Any, ...]]] = [*_shared_resolve_ops(), *_write_ops("short-d")]
+    assert prefix_digest(short_c[:1]) == prefix_digest(short_d[:1])  # genuinely shared, and expensive
+    assert checkpoints(short_c) == [] == checkpoints(short_d)  # ... below the length floor
+
+    for op_lists in ([cheap_a, cheap_b], [short_c, short_d], [cheap_a, cheap_b, short_c, short_d]):
+        plan: RunPlan = plan_run(op_lists)
+        assert plan.shares is False
+        assert plan.execution_order == list(range(len(op_lists)))
+        assert all(entry == PlanEntry() for entry in plan.entries)
+
+    # Contrast: cross the cost floor with the same shared prologue and the pair groups at once.
+    over_floor_a: list[tuple[Callable, tuple[Any, ...]]] = [*prologue, *lone_resolve, *_write_ops("cheap-a")]
+    over_floor_b: list[tuple[Callable, tuple[Any, ...]]] = [*_load_ops("gwas"), *_shared_resolve_ops(), *_write_ops("cheap-b")]
+    grouped: RunPlan = plan_run([over_floor_a, over_floor_b])
+    assert grouped.shares is True
+    assert grouped.entries[0].produce_digest == prefix_digest(over_floor_a[:3]) == grouped.entries[1].resume_digest
+
+
+def test_plan_prunes_a_lone_shallower_sharer_to_ungrouped() -> None:
+    """A section whose peers all went deeper is PRUNED to ungrouped, never left a lone producer.
+
+    WHY: a cache group must have a producer AND at least one consumer — a snapshot no consumer
+    ever loads pays one parquet write plus rescan for zero reuse. Sections 0 and 1 checkpoint the
+    k=5 and k=6 prefixes while section 2 checkpoints only k=5; the k=5 digest occurs for THREE
+    sections so it passes the sharing count, but 0 and 1 are assigned the deeper k=6 and section 2
+    ends up the sole member of the k=5 group. The prune must leave it fully ungrouped (nothing to
+    produce, nothing to resume, no prefix length), drop it into the ungrouped tail of the execution
+    order keeping its relative position, and disturb the surviving 0/1 group not at all.
+    """
+    deep: list[tuple[Callable, tuple[Any, ...]]] = _deep_head()
+    deep_digest: str = prefix_digest(deep)
+    shallow_digest: str = prefix_digest(deep[:5])
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = [
+        [*deep, *_write_ops("deep-0")],
+        [*_deep_head(), *_write_ops("deep-1")],
+        [*deep[:5], *_write_ops("shallow-2")],
+    ]
+    assert checkpoints(op_lists[0]) == [5, 6] == checkpoints(op_lists[1])
+    assert checkpoints(op_lists[2]) == [5]
+    # The k=5 digest genuinely occurs for three sections: qualification passes, so it is the
+    # post-assignment prune — not the sharing count — that removes section 2.
+    assert sum(1 for ops in op_lists if 5 in checkpoints(ops) and prefix_digest(ops[:5]) == shallow_digest) == 3
+
+    plan: RunPlan = plan_run(op_lists)
+    assert plan.shares is True
+    # The surviving group is unaffected: one producer, one consumer, same depth-6 digest.
+    assert plan.entries[0] == PlanEntry(prefix_len=6, produce_digest=deep_digest)
+    assert plan.entries[1] == PlanEntry(resume_digest=deep_digest, prefix_len=6)
+    # The pruned section is fully ungrouped.
+    assert plan.entries[2] == PlanEntry()
+    assert plan.entries[2].resume_digest is None
+    assert plan.entries[2].produce_digest is None
+    assert plan.entries[2].prefix_len is None
+    # Grouped block first, pruned section in the ungrouped tail keeping relative order.
+    assert plan.execution_order == [0, 1, 2]
+    # The pruned digest appears nowhere in the plan: nobody writes it, nobody reads it.
+    assert all(shallow_digest not in (entry.produce_digest, entry.resume_digest) for entry in plan.entries)
+
+
+def test_plan_keeps_a_two_member_group_when_peers_defect_deeper() -> None:
+    """Negative regression: pruning must not over-remove — a group that keeps TWO members survives.
+
+    The prune fires only below ``MIN_GROUP_SECTIONS`` after deepest assignment. Prefix digests
+    nest — any section sharing another's depth-6 prefix necessarily shares its depth-5 prefix —
+    so a deeper group always poaches at least two members from the shallower digest's pool, and
+    the minimal fixture for "the shallow group loses members but stays valid" is four sections:
+    0 and 1 defect to the shared k=6 digest while 2 and 3 stay on the k=5 digest all four
+    produced. The k=5 group loses half its pool yet still has a producer and a consumer, so it
+    must be planned exactly as before the prune existed. An implementation that pruned by
+    digest-time counts, or cascaded the prune, would wrongly ungroup 2 and 3 and forfeit a real
+    snapshot reuse.
+    """
+    deep: list[tuple[Callable, tuple[Any, ...]]] = _deep_head()
+    deep_digest: str = prefix_digest(deep)
+    shallow_digest: str = prefix_digest(deep[:5])
+    op_lists: list[list[tuple[Callable, tuple[Any, ...]]]] = [
+        [*deep, *_write_ops("deep-0")],
+        [*_deep_head(), *_write_ops("deep-1")],
+        [*deep[:5], *_write_ops("shallow-2")],
+        [*_deep_head()[:5], *_write_ops("shallow-3")],
+    ]
+    assert checkpoints(op_lists[0]) == [5, 6] == checkpoints(op_lists[1])
+    assert checkpoints(op_lists[2]) == [5] == checkpoints(op_lists[3])
+    # All four sections produce the k=5 digest; only 0 and 1 produce (and are assigned) the k=6 one.
+    assert sum(1 for ops in op_lists if 5 in checkpoints(ops) and prefix_digest(ops[:5]) == shallow_digest) == 4
+    assert sum(1 for ops in op_lists if 6 in checkpoints(ops)) == 2
+
+    plan: RunPlan = plan_run(op_lists)
+    assert plan.shares is True
+    # Deeper group first (original index within), then the surviving shallower group.
+    assert plan.execution_order == [0, 1, 2, 3]
+    assert plan.entries[0] == PlanEntry(prefix_len=6, produce_digest=deep_digest)
+    assert plan.entries[1] == PlanEntry(resume_digest=deep_digest, prefix_len=6)
+    # The k=5 group keeps exactly one producer and one consumer — nothing was over-removed.
+    assert plan.entries[2] == PlanEntry(prefix_len=5, produce_digest=shallow_digest)
+    assert plan.entries[3] == PlanEntry(resume_digest=shallow_digest, prefix_len=5)

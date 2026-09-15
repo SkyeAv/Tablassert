@@ -1,18 +1,25 @@
-"""Content-addressed op digests, worth-caching guards, and the ephemeral run cache for TCode.
+"""Content-addressed op digests, worth-caching guards, the shared-prefix planner, and the run cache.
 
 TCode compiles every config section to an ordered list of ``(callable, args)`` ops that
 :class:`tablassert.lib.compile_subgraph` reduces over a LazyFrame. This module turns such an op
 list into a stable digest (:func:`prefix_digest`) so caching keys on the pipeline's *semantics*
 rather than file paths or timestamps, prices each op (:data:`OP_COST`) so only prefixes worth
-snapshotting are checkpointed (:func:`checkpoints`), and materializes those checkpoints for the
-duration of a single build (:class:`RunCache`).
+snapshotting are checkpointed (:func:`checkpoints`), plans a whole build's sections so those
+checkpoints are actually reused (:func:`plan_run`), and materializes them for the duration of a
+single build (:class:`RunCache`).
 
-Two layers, deliberately split:
+Three layers, deliberately split:
 
 - The digest and guard layers are pure: no I/O, no clock, no global mutable state. Identical op
   lists always digest identically, and any argument that could change the output frame changes
   the digest. Arguments that only feed log lines (section label / config name) are masked so two
   sections with identical transformations but different log labels share one cache entry.
+- The planner (:func:`plan_run`) is pure as well, and looks across sections rather than within
+  one: given every section's op list it returns a :class:`RunPlan` saying which sections share a
+  checkpointed prefix, which member of each group snapshots it, and the execution order that runs
+  every producer before its consumers. It decides only WHEN sections run — the caller still
+  reassembles their outputs by original section index, so a plan cannot change what a build
+  produces, and an empty plan leaves both the order and the cache untouched.
 - :class:`RunCache` is the only I/O here, and it is *ephemeral by design*: snapshots live in a
   temp directory deleted when the build ends — including when it ends in an exception. It is a
   separate layer from the persistent section store (``.tablassert/store``, xxh64-keyed, see
@@ -23,7 +30,7 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -344,6 +351,217 @@ def checkpoints(ops: list[tuple[Callable, tuple[Any, ...]]]) -> list[int]:
             continue
         selected.append(prefix_len)
     return selected
+
+
+# --- Shared-prefix planner ------------------------------------------------------------------
+#
+# ``checkpoints`` prices ONE section's op list in isolation; this is where a whole build's
+# sections are looked at together. Sections of one graph routinely repeat the same opening run —
+# the same source table, the same encoding, the same ``resolve_batch`` — because a config's
+# sections differ in their TAIL (predicate, provenance, write target) far more often than in their
+# load/encode/resolve head. Recomputing that head once per section is exactly the cost the run
+# cache exists to remove, and a cache alone does not remove it: a consumer only hits a snapshot
+# that ALREADY EXISTS when it looks, and sections run in config order by default. Hence a plan,
+# computed up front from every section's op list:
+#
+# - Group sections by the content address of the DEEPEST checkpointed prefix that at least one
+#   other section shares (:data:`MIN_GROUP_SECTIONS`) — sharing is what makes a snapshot pay off,
+#   and deepest-first is what makes it pay off most. Because peers can defect to a deeper group,
+#   a group whose members survive the deepest assignment number fewer than two is pruned back to
+#   ungrouped: a snapshot without a consumer is pure cost (see :func:`plan_run`).
+# - Order execution so each group's PRODUCER (the member that runs first) computes and snapshots
+#   the shared prefix before any consumer asks for it, with deeper groups earlier so the most
+#   expensive shared run is materialized while it is still reusable.
+#
+# The reorder is invisible in the build's output: sections are independent (each writes its own
+# parquet), and the caller reassembles results by ORIGINAL section index, so execution order
+# changes only WHEN work happens, never what the graph contains. Everything below stays pure — no
+# I/O, no clock, no randomness, no mutation or retention of the caller's op lists — so one build
+# always plans identically and a plan is safe to log, compare, or cache.
+
+MIN_GROUP_SECTIONS: int = 2
+"""Smallest number of sections sharing a prefix digest for it to become a cache group.
+
+Two is both the user-visible rule ("two or more sections call the same set of instructions in a
+row") and the break-even point: a snapshot costs one write plus one rescan, and with a single
+section there is no second reader to amortize that against — so an unshared checkpoint is never
+grouped, however expensive it looks.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class PlanEntry:
+    """One section's cache role, indexed by ORIGINAL section index (see :class:`RunPlan`).
+
+    Attributes:
+        resume_digest: Content address (:func:`prefix_digest`) of the shared prefix this section
+            loads via :meth:`RunCache.load` instead of recomputing. ``None`` for a producer and
+            for an ungrouped section, both of which start from their own first op.
+        prefix_len: Number of leading ops the digest covers, i.e. the ``k`` of ``ops[:k]`` — so a
+            consumer replays only ``ops[prefix_len:]`` after a hit and a producer snapshots
+            exactly the frame ``ops[:prefix_len]`` produced. ``None`` only when ungrouped.
+        produce_digest: Content address this section snapshots with :meth:`RunCache.store` once
+            its prefix has run. Set for the FIRST-EXECUTED member of a group only, so each digest
+            has exactly one writer and ``store`` never sees the same key twice (which it rejects
+            as ``runcache-duplicate-store``).
+
+    An all-``None`` entry — ``PlanEntry()`` — is the ungrouped case: the section shares no
+    checkpointed prefix worth caching and runs its full op list untouched.
+    """
+
+    resume_digest: str | None = None
+    prefix_len: int | None = None
+    produce_digest: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RunPlan:
+    """A whole build's cache plan: which section runs when, and who writes each snapshot.
+
+    Attributes:
+        execution_order: Original section indices in the order to run them — grouped sections
+            first (deeper groups before shallower ones, digest then original index breaking
+            ties), then every ungrouped section in its original relative order. The identity
+            ``list(range(n))`` when nothing is shared, so a plan that cannot help never reorders
+            a build.
+        entries: One :class:`PlanEntry` per section, indexed by ORIGINAL section index rather than
+            by position in ``execution_order``: the caller reassembles subgraph paths in original
+            order, so a section's role must be looked up by the index the rest of the pipeline
+            already uses.
+    """
+
+    execution_order: list[int] = field(default_factory=list)
+    entries: list[PlanEntry] = field(default_factory=list)
+
+    @property
+    def shares(self: RunPlan) -> bool:
+        """Whether any group was formed at all — the cheap "is this plan empty?" gate.
+
+        Callers check this before creating a :class:`RunCache` or reordering a build: with no
+        shared prefix there is nothing to snapshot and nothing to gain, so the zero-sharing case
+        must be recognizable without walking the entries by hand. ``False`` implies
+        ``execution_order`` is the identity and every entry is the all-``None`` default.
+
+        Returns:
+            ``True`` when at least one section produces or resumes a shared prefix.
+        """
+        return any(entry.produce_digest is not None or entry.resume_digest is not None for entry in self.entries)
+
+
+def _order_key(index: int, assignment: tuple[str, int] | None) -> tuple[int, int, str, int]:
+    """Total, deterministic sort key for one section's place in :attr:`RunPlan.execution_order`.
+
+    Args:
+        index: The section's original index.
+        assignment: Its ``(digest, prefix_len)`` group assignment, or ``None`` when ungrouped.
+
+    Returns:
+        ``(0, -prefix_len, digest, index)`` for a grouped section, ``(1, index, "", 0)`` for an
+        ungrouped one. The leading slot puts the grouped block first; the negated length runs
+        deeper groups earlier; the digest separates DISTINCT groups of equal depth so their
+        relative order cannot depend on dict or set iteration order (which Python randomizes per
+        process for strings); the trailing index keeps a group's members in original order — which
+        is what makes its producer the lowest-indexed member. The ungrouped key pads the unused
+        slots because one list must hold both shapes for ``sort`` to compare them.
+    """
+    if assignment is None:
+        return (1, index, "", 0)
+    digest, prefix_len = assignment
+    return (0, -prefix_len, digest, index)
+
+
+def plan_run(op_lists: list[list[tuple[Callable, tuple[Any, ...]]]]) -> RunPlan:
+    """Plan one build's execution order and snapshot roles from every section's op list.
+
+    Four pure passes over ``op_lists``:
+
+    1. Digest each section's :func:`checkpoints` prefixes — ``prefix_digest(ops[:k])`` per
+       checkpoint ``k``, so plan keys are byte-identical to the keys :class:`RunCache` stores
+       under (a planner-invented key would miss every snapshot).
+    2. Keep the digests at least :data:`MIN_GROUP_SECTIONS` sections produced, and assign each
+       such section its DEEPEST one: the longest shared run is the most recomputation avoided per
+       snapshot, and a shallower shared prefix of it needs no snapshot of its own.
+    3. Prune any assignment whose group ended up with fewer than :data:`MIN_GROUP_SECTIONS`
+       members. The step-2 count is taken at DIGEST time, so a section can pass it and still lose
+       every peer to a deeper group — leaving it the sole member of its group: it would snapshot
+       a prefix no consumer ever loads, paying one write for zero reuse. A cache group must have
+       a producer AND at least one consumer, so the survivor becomes ungrouped instead.
+    4. Order and role-assign: grouped sections first (deeper groups earlier, original index within
+       a group), ungrouped sections after them in original order; the first-executed member of
+       each group produces its digest, the rest resume it. Producer-before-consumer is the whole
+       point of the reorder — a consumer that ran first would miss and recompute.
+
+    A zero-sharing build plans empty: identity ``execution_order``, every entry ``PlanEntry()``,
+    and :attr:`RunPlan.shares` ``False``, so the caller can skip both the cache and the reorder.
+
+    Args:
+        op_lists: Cleaned ``(callable, args)`` op lists in original section order, exactly as
+            ``Tcode.collect`` returned them (sections that short-circuited to an existing store
+            path are the caller's to drop first, so indices stay aligned with the caller's
+            section list). Only read — never mutated, never retained past the call.
+
+    Returns:
+        A :class:`RunPlan` with ``entries`` indexed by position in ``op_lists`` and
+        ``execution_order`` listing those same positions in the order to run them.
+
+    Raises:
+        RunCacheError: Propagated from :func:`prefix_digest` for an op argument that cannot be
+            canonically serialized. Planning runs before any section does, so an unsupported
+            argument fails the build here, loudly, rather than mis-keying a snapshot later.
+    """
+    # (1) Checkpoint digests per section, ascending by prefix length (checkpoints() is ascending).
+    section_checkpoints: list[list[tuple[int, str]]] = [
+        [(prefix_len, prefix_digest(ops[:prefix_len])) for prefix_len in checkpoints(ops)] for ops in op_lists
+    ]
+    sections_per_digest: dict[str, int] = {}
+    for digests in section_checkpoints:
+        # Count SECTIONS, not occurrences: dict.fromkeys dedupes one section's digests in
+        # insertion order (deterministic, unlike iterating a set of hashes) so a single section
+        # can never qualify its own prefix as "shared".
+        for digest in dict.fromkeys(candidate for _, candidate in digests):
+            sections_per_digest[digest] = sections_per_digest.get(digest, 0) + 1
+
+    # (2) Deepest shared checkpoint per section; sections with none stay ungrouped.
+    assignments: dict[int, tuple[str, int]] = {}
+    for index, digests in enumerate(section_checkpoints):
+        for prefix_len, digest in reversed(digests):
+            if sections_per_digest.get(digest, 0) >= MIN_GROUP_SECTIONS:
+                assignments[index] = (digest, prefix_len)
+                break
+
+    # (3) Prune groups that deepest-assignment left with fewer than MIN_GROUP_SECTIONS members: a
+    # digest can pass the sharing count in (2) — several sections HAVE it — and still lose every
+    # assigned peer to a deeper group, and the survivor would then snapshot a prefix no consumer
+    # ever loads (one write plus one rescan spent to save nothing). One pass suffices, no fixpoint:
+    # each section holds exactly one assignment, so deleting the lone member of a size-1 group
+    # cannot change any other group's membership, and every group that reached this pass with
+    # >= MIN_GROUP_SECTIONS members keeps all of them. Pruned sections become ungrouped rather
+    # than falling back to a shallower digest — the plan's roles must derive from one assignment
+    # per section, and a fallback group would itself need re-pruning against the same rule.
+    members_per_digest: dict[str, int] = {}
+    for digest, _ in assignments.values():
+        members_per_digest[digest] = members_per_digest.get(digest, 0) + 1
+    assignments = {index: assignment for index, assignment in assignments.items() if members_per_digest[assignment[0]] >= MIN_GROUP_SECTIONS}
+
+    # (4) Execution order, then roles: walking that order makes the first member seen for a
+    # digest the producer and every later one a consumer of the snapshot it wrote.
+    keyed: list[tuple[tuple[int, int, str, int], int]] = [(_order_key(index, assignments.get(index)), index) for index in range(len(op_lists))]
+    keyed.sort(key=lambda item: item[0])
+    execution_order: list[int] = [index for _, index in keyed]
+    entries: list[PlanEntry] = [PlanEntry() for _ in op_lists]
+    produced: set[str] = set()
+    for index in execution_order:
+        assignment: tuple[str, int] | None = assignments.get(index)
+        if assignment is None:
+            continue
+        digest, prefix_len = assignment
+        entries[index] = (
+            PlanEntry(prefix_len=prefix_len, produce_digest=digest)
+            if digest not in produced
+            else PlanEntry(resume_digest=digest, prefix_len=prefix_len)
+        )
+        produced.add(digest)
+    return RunPlan(execution_order=execution_order, entries=entries)
 
 
 # --- Ephemeral run-scoped cache -------------------------------------------------------------
