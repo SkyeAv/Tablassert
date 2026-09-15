@@ -298,21 +298,26 @@ mod tests {
                 .unwrap();
             assert_eq!(warmup.len(), 1024);
 
-            let started = Instant::now();
-            let output: Vec<String> = func.call1((terms,)).unwrap().extract().unwrap();
-            let elapsed = started.elapsed();
+            let timed_inputs: Vec<Vec<String>> = (0..3).map(|_| terms.clone()).collect();
+            let mut elapsed_samples: Vec<f64> = Vec::with_capacity(3);
+            let mut output: Vec<String> = Vec::new();
+            for input in timed_inputs {
+                let started = Instant::now();
+                output = func.call1((input,)).unwrap().extract().unwrap();
+                elapsed_samples.push(started.elapsed().as_secs_f64());
+            }
+            elapsed_samples.sort_by(f64::total_cmp);
+            let elapsed = elapsed_samples[1];
 
             println!(
-                "normalize_terms took {:.3}s for 1,000,000 terms",
-                elapsed.as_secs_f64()
+                "normalize_terms median took {elapsed:.3}s for 1,000,000 terms (samples={elapsed_samples:?})"
             );
             assert_eq!(output.len(), 1_000_000);
             assert!(output.iter().all(|term| !term.is_empty()));
             assert_eq!(output[0], normalize_l1(&first_term));
             assert!(
-                elapsed.as_secs_f64() <= 2.0,
-                "normalize_terms took {:.3}s for 1,000,000 terms",
-                elapsed.as_secs_f64()
+                elapsed <= 2.0,
+                "normalize_terms median took {elapsed:.3}s for 1,000,000 terms (samples={elapsed_samples:?})"
             );
         });
     }

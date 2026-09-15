@@ -15,6 +15,8 @@ fn normalize_l1_matches_shared_golden_fixture() {
         let (raw, expected) = line
             .split_once('\t')
             .unwrap_or_else(|| panic!("fixture line {} is not TSV", line_number + 2));
+        let raw = raw.strip_prefix("@EMPTY").map_or(raw, |_| "");
+        let expected = expected.strip_prefix("@EMPTY").map_or(expected, |_| "");
         assert_eq!(
             tablassert_rs::normalize_l1(raw),
             expected,

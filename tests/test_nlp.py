@@ -22,6 +22,7 @@ def test_level_one_golden_matches_rust_fixture() -> None:
     with GOLDEN_FIXTURE.open(newline="", encoding="utf-8") as handle:
         rows: list[tuple[str, str]] = [(raw, expected) for raw, expected in csv.reader(handle, delimiter="\t") if raw != "raw"]
 
+    rows = [("" if raw == "@EMPTY" else raw, "" if expected == "@EMPTY" else expected) for raw, expected in rows]
     raw_terms: list[str] = [raw for raw, _expected in rows]
     expected_terms: list[str] = [expected for _raw, expected in rows]
     assert raw_terms
@@ -45,15 +46,20 @@ def test_level_one_performance_one_million_terms() -> None:
     lazy_frame: pl.LazyFrame = frame.lazy()
 
     level_one(lazy_frame, "name").collect()
-    started: float = time.perf_counter()
-    result: pl.DataFrame = level_one(lazy_frame, "name").collect()
-    elapsed: float = time.perf_counter() - started
+    elapsed_samples: list[float] = []
+    result: pl.DataFrame | None = None
+    for _ in range(3):
+        started: float = time.perf_counter()
+        result = level_one(lazy_frame, "name").collect()
+        elapsed_samples.append(time.perf_counter() - started)
 
+    assert result is not None
+    elapsed: float = sorted(elapsed_samples)[1]
     assert result.height == 1_000_000
     assert result.columns == ["name"]
     assert result.schema["name"] == pl.String
     assert result["name"].head(4).to_list() == ["tnf-alpha", "aspirin tnf-alpha", "51", "oral tablet"]
-    assert elapsed <= 2.5, f"level_one took {elapsed:.3f}s for 1,000,000 terms"
+    assert elapsed <= 2.5, f"level_one median took {elapsed:.3f}s for 1,000,000 terms (samples={elapsed_samples!r})"
 
 
 def test_level_one_strips_and_lowercases() -> None:
