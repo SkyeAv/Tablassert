@@ -156,7 +156,9 @@ for row in result:
 
 ### NLP Processing
 
-`resolve_many()` applies `level_one` (strip + lowercase → column `{col}`) and `level_two` (remove `\W+` → column `{col}_two`) before resolution. Level one (case-insensitive exact) is preferred; level two is the fallback for terms with punctuation or special characters.
+`resolve_many()` applies the same level-one normalizer used to build and query the fullmap, writing its result to `{col}`, then applies `level_two` to write `{col}_two`. Level one cleans surrounding quotes and whitespace, lowercases with Unicode rules, tokenizes on whitespace, stems only all-ASCII-alphabetic tokens with English Porter2, passes digit- and punctuation-bearing tokens through, removes duplicate tokens, sorts tokens by UTF-8 byte value, and joins them with one space. Nulls remain null in Python LazyFrame columns; empty values remain empty. Level one is preferred; level two is the fallback for terms with punctuation or special characters.
+
+The resolver requires a schema-v6 fullmap. Existing schema-v5 databases are rejected and must be rebuilt. Preferred-name ranking compares normalized forms under the same level-one rules.
 
 ### Error Handling
 

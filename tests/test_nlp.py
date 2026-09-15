@@ -1,11 +1,33 @@
 from __future__ import annotations
 
+import csv
 import random
 import time
+from pathlib import Path
 
 import polars as pl
 
 from tablassert.nlp import level_one, level_two
+
+GOLDEN_FIXTURE: Path = Path(__file__).resolve().parents[1] / "rust" / "tests" / "fixtures" / "nlp_golden.tsv"
+
+
+def test_level_one_golden_matches_rust_fixture() -> None:
+    """The Python Rust-normalizer path agrees with the shared golden fixture.
+
+    WHY: Rust fullmap keys and Python query terms must remain byte-for-byte
+    equivalent; reading one fixture from both integration suites prevents the
+    two sides from silently acquiring different normalization contracts.
+    """
+    with GOLDEN_FIXTURE.open(newline="", encoding="utf-8") as handle:
+        rows: list[tuple[str, str]] = [(raw, expected) for raw, expected in csv.reader(handle, delimiter="\t") if raw != "raw"]
+
+    raw_terms: list[str] = [raw for raw, _expected in rows]
+    expected_terms: list[str] = [expected for _raw, expected in rows]
+    assert raw_terms
+    frame: pl.LazyFrame = pl.DataFrame({"name": raw_terms}).lazy()
+    result: pl.DataFrame = level_one(frame, "name").collect()
+    assert result["name"].to_list() == expected_terms
 
 
 def test_level_one_performance_one_million_terms() -> None:

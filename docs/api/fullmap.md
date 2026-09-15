@@ -186,11 +186,16 @@ print(result.select(["gene", "gene_name", "gene_category"]))
 
 ### NLP Processing Levels
 
-`resolve()` requires that `level_one` and `level_two` have been applied to the LazyFrame before calling it:
+`resolve()` requires that `level_one` and `level_two` have been applied to the LazyFrame before calling it. Level one is the canonical key used by the fullmap build and query paths:
 
 **`level_one` output** (column: `col`):
-- Whitespace stripped, lowercased
-- Queried first; preferred for acronyms and gene symbols
+- Cleans surrounding matching quotes and whitespace, then applies Unicode lowercase.
+- Splits on whitespace, stems only tokens made entirely of ASCII letters with the English Porter2 stemmer, and passes digit-bearing, punctuation-bearing, and non-ASCII tokens through unchanged after lowercasing.
+- Removes duplicate tokens, sorts the remaining tokens by their UTF-8 byte values, and joins them with one ASCII space.
+- Preserves nulls in Python LazyFrame columns; empty and whitespace-only values become the empty string.
+- Is queried first; preferred-name ranking compares these normalized forms, so a fullmap database built with different level-one keys cannot be reused.
+
+Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.
 
 **`level_two` output** (column: `col + "_two"`):
 - All non-word characters removed (`\W+` → `""`) from the `level_one` result
