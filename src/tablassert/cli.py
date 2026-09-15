@@ -586,19 +586,33 @@ def _resolve_aria2_binary() -> str:
 
 
 def aria2_unavailable_detail() -> str:
-    """Explain how to get a working ``aria2c``, accounting for the platform.
+    """Explain how to get a working ``aria2c``, accounting for the platform and install state.
 
     macOS gets DIFFERENT advice on purpose: the ``aria2`` distribution publishes no macOS
-    wheels, so pointing a mac user at the extra sends them to a dead end. This branch is
-    reached only from ``download_babel_file_aria2c``'s ImportError path — an ``[aria2]``
-    install whose ``aria2c`` module cannot be imported — which raises ``BabelDownloadError``
-    loudly. NOTHING takes over: the prebuilt fallback re-enters the same helper with
-    ``aria2c=True`` and fails the same way, so the honest fix is to remove the broken
-    install, which is what actually restores the Python downloader.
+    wheels, so pointing a mac user at the extra sends them to a dead end. This helper is
+    reached only from ``download_babel_file_aria2c``'s ImportError path, which
+    :func:`_resolve_aria2_binary` raises for BOTH an absent module and a module that imports
+    but exposes no ``ARIA2C`` (a shadowed ``aria2c``) — hence "cannot be resolved", never
+    "unimportable". That path raises ``BabelDownloadError`` loudly and NOTHING rescues to the
+    Python downloader: the prebuilt fallback re-enters this same helper with ``aria2c=True``
+    and fails the same way whenever it gets that far, while a warm download cache returns
+    before the resolver ever runs and ``--force`` skips the prebuilt attempt entirely — so
+    those two never reach it at all. The honest fix is therefore to repair or remove the
+    broken install, which is what actually restores the Python downloader.
     """
     if sys.platform == "darwin":
         return (
-            "the [aria2] extra ships no macOS wheels and this install's aria2c is unimportable — uninstall it to fall back to the Python downloader"
+            "the [aria2] extra ships no macOS wheels and this install's aria2c cannot be resolved "
+            "(missing, or lacking ARIA2C) — uninstall it to fall back to the Python downloader"
+        )
+    if extras.is_installed("aria2"):
+        # The CLI reaches this helper only after its own extras.is_installed("aria2") probe said
+        # yes, so "install the [aria2] extra" is a dead end there (pip reports
+        # already-satisfied): name the broken install instead. Library callers that reach it
+        # with a genuinely absent extra still get the install hint below.
+        return (
+            "the [aria2] extra is installed but its aria2c cannot be resolved (missing, or lacking ARIA2C) "
+            f"— reinstall or uninstall it: {extras.install_command('aria2')}"
         )
     return f"install the [aria2] extra: {extras.install_command('aria2')}"
 
@@ -1473,13 +1487,15 @@ def build_fullmap(
     # Announced on stderr in ADDITION to the log record: loguru's console sink only exists
     # inside run() below, and file logging needs the optional [log] extra, so the info line
     # alone would never reach a normal terminal. stderr follows the reuse short-circuit's
-    # precedent above — and, like it, stays silent on a no-op run.
-    if use_aria2c:
-        download_logger.info("the [aria2] extra is installed; using the bundled aria2c for downloads")
-        print("tablassert build-fullmap: using the bundled aria2c from the [aria2] extra for downloads", file=sys.stderr)
-    else:
-        download_logger.info("the [aria2] extra is not installed; using the Python downloader")
-        print("tablassert build-fullmap: the [aria2] extra is not installed; using the Python downloader", file=sys.stderr)
+    # precedent above — and, like it, stays silent on a no-op run. Both outputs derive from the
+    # ONE string below, so the log record and the stderr line cannot drift apart.
+    choice: str = (
+        "the [aria2] extra is installed; using the bundled aria2c for downloads"
+        if use_aria2c
+        else "the [aria2] extra is not installed; using the Python downloader"
+    )
+    download_logger.info(choice)
+    print(f"tablassert build-fullmap: {choice}", file=sys.stderr)
     if not force:
         try:
             run(2, fetch_prebuilt_fullmap, output, version=version, aria2c=use_aria2c, taxon_allowlist=allowlist_ids)

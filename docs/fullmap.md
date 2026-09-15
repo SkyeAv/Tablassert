@@ -91,10 +91,11 @@ The build is a parallel, **memory-bounded** pipeline executed by the Rust extens
     multi-threaded allocation from bloating resident memory.
 
     - **Download**: files come from `https://stars.renci.org/var/babel_outputs` via resumable,
-      range-request downloads; cached files are reused. When the `[aria2]` extra is installed, only this
-      stage uses the bundled `aria2c` binary from that extra, with aria2's segmented
-      HTTP downloads and retry/resume control files while suppressing aria2's own progress UI so
-      Tablassert's progress bar stays clean.
+      range-request downloads; cached files are reused. When the `[aria2]` extra is installed, only
+      this stage of the from-scratch pipeline uses the bundled `aria2c` binary from that extra (the
+      prebuilt archive download above uses it too), with aria2's segmented HTTP downloads and
+      retry/resume control files while suppressing aria2's own progress UI so Tablassert's progress
+      bar stays clean.
       The progress detail remains file-level (`aria2c downloading`) rather than byte-level in that mode.
     - **Equivalents index**: class files parse in parallel into sorted on-disk runs, k-way merged into a
       single memory-mapped CURIE→equivalents index; only a compact `(hash, offset)` index lives in RAM,

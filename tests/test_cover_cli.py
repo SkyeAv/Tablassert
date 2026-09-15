@@ -260,40 +260,71 @@ def test_resolve_aria2_binary_missing_export_raises_importerror(monkeypatch: pyt
         cli._resolve_aria2_binary()
 
 
-def test_download_babel_file_aria2c_missing_extra_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The aria2c helper fails loud when the ``[aria2]`` extra is unavailable.
+@pytest.mark.parametrize(
+    ("absent", "expected_fragment", "banned_fragment"),
+    [
+        (("aria2",), 'install the [aria2] extra: pip install "tablassert[aria2]"', "is installed but"),
+        ((), "the [aria2] extra is installed but its aria2c cannot be resolved (missing, or lacking ARIA2C)", "install the [aria2] extra:"),
+    ],
+    ids=["extra-absent", "extra-present-but-broken"],
+)
+def test_download_babel_file_aria2c_unresolved_aria2c_hint_matches_the_install_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, absent: tuple[str, ...], expected_fragment: str, banned_fragment: str
+) -> None:
+    """The non-macOS hint names the fix for THIS install state, and stays loud either way.
 
     Why: downloader selection is automatic now, so there is no flag to opt in with — this
-    fires when the RESOLVED choice is aria2c but the extra cannot be imported. The error
-    must carry the install command (and must never name the removed ``--aria2c`` flag),
-    because nothing silently takes over: the Python downloader is not retried.
+    fires when the RESOLVED choice is aria2c but ``aria2c`` cannot be resolved. Two distinct
+    states reach it and they need OPPOSITE advice, so both are pinned:
+
+    - a genuinely absent extra (a library caller, or a partial install): the install hint is
+      the actionable fix and must appear verbatim, quoted brackets and all;
+    - the extra PRESENT but broken — the only state the CLI can reach, since ``build_fullmap``
+      selects aria2c precisely because ``extras.is_installed("aria2")`` was true, and
+      ``_resolve_aria2_binary`` also turns a module that imports but lacks ``ARIA2C`` (a
+      shadowed ``aria2c``) into ImportError. Telling that user to install the extra is a dead
+      end (pip reports already-satisfied), so the message must name the broken install and
+      suggest reinstall/uninstall instead.
+
+    Both states keep the loudness contract: a ``BabelDownloadError`` propagates, aria2c is
+    never launched, the Python downloader is never retried, and the removed ``--aria2c`` flag
+    is never named.
     """
 
-    def _missing_extra() -> str:
+    def _unresolvable_binary() -> str:
         raise ImportError("No module named 'aria2c'")
 
     def _run_must_not_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        raise AssertionError("subprocess.run must not run when the [aria2] extra is missing")
+        raise AssertionError("subprocess.run must not run when aria2c cannot be resolved")
 
-    monkeypatch.setattr(cli, "_resolve_aria2_binary", _missing_extra)
+    monkeypatch.setattr(cli, "_resolve_aria2_binary", _unresolvable_binary)
     monkeypatch.setattr(cli.sys, "platform", "linux")
     monkeypatch.setattr(cli.subprocess, "run", _run_must_not_run)
+    monkeypatch.setattr(extras, "missing", lambda extra: absent)
     with pytest.raises(BabelDownloadError) as excinfo:
         download_babel_file_aria2c("f.gz", "https://example.com/f.gz", tmp_path)
+    message = str(excinfo.value)
+    assert expected_fragment in message
+    assert banned_fragment not in message  # the other state's wording must not leak in
     # Quoted: unquoted brackets glob in zsh, so the command as printed must be runnable as-is.
-    assert 'pip install "tablassert[aria2]"' in str(excinfo.value)
+    assert 'pip install "tablassert[aria2]"' in message
+    assert "takes over" not in message  # the error is loud; no downloader silently replaces it
+    assert "--aria2c" not in message
 
 
 def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The unsupported macOS path names the broken install and the loud failure — no takeover.
 
     Why: with downloader selection automatic, this fires only when the ``[aria2]`` extra is
-    somehow importable-but-broken on macOS. Nothing takes over there: the ImportError becomes
-    a ``BabelDownloadError`` that propagates, and the prebuilt fallback re-enters this same
-    helper with ``aria2c=True`` and dies the same way. So the message must tell the user to
-    UNINSTALL the dead extra (the only thing that actually restores the Python downloader),
-    must not claim a downloader takeover that never happens, and must never name a flag that
-    no longer exists.
+    somehow present-but-unresolvable on macOS (a source build, or a shadowed ``aria2c`` module
+    lacking ``ARIA2C`` — ``_resolve_aria2_binary`` turns both into ImportError, so the message
+    says "cannot be resolved", not "unimportable"). Nothing takes over there: the ImportError
+    becomes a ``BabelDownloadError`` that propagates, and the prebuilt fallback re-enters this
+    same helper with ``aria2c=True`` and dies the same way WHENEVER it gets that far (a warm
+    download cache returns before the resolver runs, and ``--force`` skips the prebuilt attempt
+    entirely). So the message must tell the user to UNINSTALL the dead extra (the only thing
+    that actually restores the Python downloader), must not claim a downloader takeover that
+    never happens, and must never name a flag that no longer exists.
     """
 
     def _missing_extra() -> str:
@@ -309,6 +340,9 @@ def test_download_babel_file_aria2c_missing_extra_on_macos_raises_platform_hint(
         download_babel_file_aria2c("f.gz", "https://example.com/f.gz", tmp_path)
     message = str(excinfo.value)
     assert "no macOS wheels" in message
+    assert "cannot be resolved" in message  # covers a missing module AND a missing ARIA2C export
+    assert "lacking ARIA2C" in message
+    assert "unimportable" not in message  # the too-narrow wording this message must not regress to
     assert "uninstall" in message  # the actionable macOS fix: drop the extra that cannot work
     assert "Python downloader" in message  # named as what uninstalling restores, not as a takeover
     assert "takes over" not in message  # the error is loud; no downloader silently replaces it
@@ -474,7 +508,7 @@ class _RecordingDownloadLogger:
             (),
             True,
             "the [aria2] extra is installed; using the bundled aria2c for downloads",
-            "tablassert build-fullmap: using the bundled aria2c from the [aria2] extra for downloads",
+            "tablassert build-fullmap: the [aria2] extra is installed; using the bundled aria2c for downloads",
         ),
         (
             ("aria2",),
@@ -504,9 +538,13 @@ def test_build_fullmap_logs_and_announces_the_resolved_downloader_choice_once(
     - the download dispatch must follow the choice end-to-end (the rejected downloader must
       not run at all), for the prebuilt archive as well as the ``aria2c`` keyword threading;
     - exactly ONE ``download_logger.info`` line names the choice, and it fires FIRST — before
-      any download. The filter keys on ``"[aria2] extra"`` because the positive wording ends
-      "…for downloads" and contains no "downloader" substring, so a ``"downloader" in m``
-      filter would silently pass with zero matches on the installed-extra side;
+      any download. The filter keys on ``"[aria2] extra"`` because that is the one substring
+      BOTH wordings share: the installed-extra line ends "…for downloads" and contains no
+      "downloader" substring, so a ``"downloader" in m`` filter would match only the
+      absent-extra side and drop the installed-extra line altogether. That would not pass
+      silently — ``choice_lines`` would come back empty, so the equality below fails and the
+      ordering check raises IndexError — but it would stop counting the positive side of this
+      parametrization, which is exactly what the filter must not do;
     - the same choice is ALSO printed to stderr. The log record alone is invisible in a
       normal terminal run: loguru's console sink exists only inside ``run()``, which starts
       after this line, and file logging needs the optional ``[log]`` extra. stderr follows

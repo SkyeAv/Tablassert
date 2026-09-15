@@ -1998,12 +1998,76 @@ def test_llms_contains_no_retired_config_labels() -> None:
 # CHANGELOG.md is excluded on purpose: history legitimately names retired flags when it
 # retires them.
 
-# Entries are literal substrings no live doc may contain. `--aria2c` is the retired long flag
-# itself; its short twin `-a` is far too generic to grep raw (prose and unrelated flags match),
-# so it is guarded in the docs/cli.md option-table CELL shape instead -- `| `-a`` for a
-# short-flag-only cell and `, `-a`` for the `| `--long`, `-a` |` pairing -- which is how a stale
-# row for the removed flag would necessarily appear.
-RETIRED_CLI_FLAGS: frozenset[str] = frozenset({"--aria2c", "| `-a`", ", `-a`"})
+# Entries are literal substrings no live doc may contain, each paired with whether the match is
+# GLOBAL or scoped to the retired flag's own command. `--aria2c` is the retired long flag itself
+# -- unique to the removed flag, and readers meet it in prose and copy-paste examples as well as
+# in tables, so it stays global. Its short twin `-a` is far too generic to grep raw (prose and
+# unrelated flags match), so it is guarded in the docs/cli.md option-table CELL shape instead --
+# `| `-a`` for a short-flag-only cell and `, `-a`` for the `| `--long`, `-a` |` pairing -- which
+# is how a stale row for the removed flag would necessarily appear. Those cell shapes are SCOPED
+# to `build-fullmap` because `-a` is a plausible future short flag on ANOTHER command, and an
+# unscoped match would fail such a row with a misleading "retired flag" message against
+# documentation that is perfectly correct.
+#
+# The scope is the command's SECTION plus any line naming the command, and the section half is
+# load-bearing: an option-table row never repeats its command's name, so a line-only filter could
+# never match a real stale row and the guard would be vacuous. All three non-vacuity properties
+# are pinned by the tests below the guard.
+RETIRED_FLAG_COMMAND: str = "build-fullmap"
+CLI_DOC: Path = DOCS / "cli.md"
+RETIRED_CLI_FLAG_PATTERNS: tuple[tuple[str, bool], ...] = (("--aria2c", False), ("| `-a`", True), (", `-a`", True))
+
+
+def _command_sections(text: str, command: str) -> list[str]:
+    """Return the section bodies of ``text`` whose heading names ``command``.
+
+    A section runs from its heading to the next heading of the same or higher level -- the rule
+    :func:`_section_range` applies -- so an option table documented under ``## build-fullmap``
+    belongs to that command even though its rows never repeat the command name.
+
+    Args:
+        text: Full Markdown source.
+        command: Heading text (without its leading hashes) a section must have to be selected.
+
+    Returns:
+        The matching section bodies, in document order; empty when the page documents no such
+        command, which makes a scoped pattern unmatchable THERE by design.
+    """
+    headings: list[re.Match[str]] = list(HEADING.finditer(text))
+    sections: list[str] = []
+    for index, match in enumerate(headings):
+        if match.group(2) != command:
+            continue
+        level: int = len(match.group(1))
+        end: int = len(text)
+        for later in headings[index + 1 :]:
+            if len(later.group(1)) <= level:
+                end = later.start()
+                break
+        sections.append(text[match.end() : end])
+    return sections
+
+
+def _mentions_retired_flag(text: str, pattern: str, *, command_scoped: bool) -> bool:
+    """Return whether ``text`` still carries one retired-flag ``pattern``.
+
+    Args:
+        text: One live documentation surface, verbatim.
+        pattern: A literal retired-flag pattern -- the long flag itself, or the option-table
+            cell shape of the too-generic short ``-a``.
+        command_scoped: When true, match only where :data:`RETIRED_FLAG_COMMAND` is in scope --
+            inside one of its sections, or on a line naming it. See
+            :data:`RETIRED_CLI_FLAG_PATTERNS` for why the short-flag cell shapes need this.
+
+    Returns:
+        Whether the pattern appears where it is banned.
+    """
+    if not command_scoped:
+        return pattern in text
+    return any(
+        pattern in region
+        for region in (*_command_sections(text, RETIRED_FLAG_COMMAND), *(line for line in text.splitlines() if RETIRED_FLAG_COMMAND in line))
+    )
 
 
 def _live_doc_surfaces() -> list[Path]:
@@ -2019,9 +2083,9 @@ def _live_doc_surfaces() -> list[Path]:
     return [*_markdown_pages(), ROOT / "CONTRIBUTING.md", LLMS_TXT]
 
 
-@pytest.mark.parametrize("flag", sorted(RETIRED_CLI_FLAGS))
+@pytest.mark.parametrize(("pattern", "command_scoped"), RETIRED_CLI_FLAG_PATTERNS, ids=[entry[0] for entry in RETIRED_CLI_FLAG_PATTERNS])
 @pytest.mark.parametrize("page", _live_doc_surfaces(), ids=lambda page: str(page.relative_to(ROOT)))
-def test_live_docs_mention_no_retired_cli_flags(page: Path, flag: str) -> None:
+def test_live_docs_mention_no_retired_cli_flags(page: Path, pattern: str, command_scoped: bool) -> None:
     """No live documentation surface mentions a retired CLI flag.
 
     ``build-fullmap --aria2c`` / ``-a`` was removed -- the downloader is now selected
@@ -2032,13 +2096,110 @@ def test_live_docs_mention_no_retired_cli_flags(page: Path, flag: str) -> None:
 
     Args:
         page: One live documentation surface.
-        flag: One retired-flag pattern -- a flag, or the option-table cell shape of the
-            too-generic short ``-a`` -- that must not appear on any live surface.
+        pattern: One retired-flag pattern -- the flag itself, or the option-table cell shape of
+            the too-generic short ``-a`` -- that must not appear on any live surface.
+        command_scoped: Whether ``pattern`` is banned only where ``build-fullmap`` is in scope
+            (the short-flag cell shapes) or globally (the long flag).
     """
     text: str = page.read_text(encoding="utf-8")
-    assert flag not in text, (
-        f"{page.relative_to(ROOT)} still mentions the retired flag pattern {flag}; live docs are the source of truth readers copy from, "
+    assert not _mentions_retired_flag(text, pattern, command_scoped=command_scoped), (
+        f"{page.relative_to(ROOT)} still mentions the retired flag pattern {pattern}; live docs are the source of truth readers copy from, "
         "and a retired flag silently misleads them into an unknown-option parse error (only CHANGELOG.md history may name it)"
+    )
+
+
+def test_retired_flag_guard_fires_on_an_injected_stale_build_fullmap_row(tmp_path: Path) -> None:
+    """The retired-flag guard is not vacuous: every pattern fires on the stale shapes it exists for.
+
+    Why: a matcher that never fires passes every page forever, so scoping the short-flag cell
+    shapes could silently disable the guard while the suite stayed green. Each pattern is
+    therefore run against a SCRATCH page under ``tmp_path`` carrying the exact shapes a stale
+    ``build-fullmap --aria2c`` / ``-a`` row would take in docs/cli.md -- an option table under
+    the command's own heading, plus a copy-paste example. The injection lives only in this test
+    run's temp directory; no checked-in document is touched.
+    """
+    stale: Path = tmp_path / "stale-cli.md"
+    stale.write_text(
+        "\n".join(
+            [
+                "# CLI Reference",
+                "",
+                "## build-fullmap",
+                "",
+                "| Option | Type | Required | Default | Description |",
+                "| --- | --- | --- | --- | --- |",
+                "| `-a` | Flag | No | `False` | Download through the bundled aria2c binary |",
+                "| `--aria2c`, `-a` | Flag | No | `False` | Download through the bundled aria2c binary |",
+                "",
+                "```bash",
+                "tablassert build-fullmap --aria2c --output /data/fullmap/fullmap.redb",
+                "```",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    text: str = stale.read_text(encoding="utf-8")
+    for stale_pattern, scoped in RETIRED_CLI_FLAG_PATTERNS:
+        assert _mentions_retired_flag(text, stale_pattern, command_scoped=scoped), (
+            f"pattern {stale_pattern!r} did not fire on a scratch page carrying the stale row shape it exists to catch -- the guard is vacuous"
+        )
+
+
+def test_retired_flag_guard_spares_a_legitimate_short_flag_on_another_command(tmp_path: Path) -> None:
+    """The scoping is real: a legitimate ``-a`` on ANOTHER command's row is no false positive.
+
+    Why: this is the failure the scoping exists to prevent -- `-a` is generic enough that a
+    future short flag on, say, ``agent`` produces an option-table cell indistinguishable from
+    the retired one, and an unscoped guard would fail that correct row with a misleading
+    "retired flag" message. The same scratch page also proves the scoping did not blunt the long
+    flag: ``--aria2c`` stays GLOBAL, so it still fires outside any ``build-fullmap`` section.
+    """
+    legitimate: Path = tmp_path / "legitimate-cli.md"
+    legitimate.write_text(
+        "\n".join(
+            [
+                "# CLI Reference",
+                "",
+                "## agent",
+                "",
+                "| Option | Type | Required | Default | Description |",
+                "| --- | --- | --- | --- | --- |",
+                "| `--ask`, `-a` | Flag | No | `False` | Ask before applying a migration |",
+                "| `-a` | Flag | No | `False` | Ask before applying a migration |",
+                "",
+                "## build-fullmap",
+                "",
+                "The downloader is chosen automatically; there is no flag to pass.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    text: str = legitimate.read_text(encoding="utf-8")
+    for legit_pattern, scoped in RETIRED_CLI_FLAG_PATTERNS:
+        assert not _mentions_retired_flag(text, legit_pattern, command_scoped=scoped), (
+            f"pattern {legit_pattern!r} fired on another command's legitimate short flag -- the scoping that prevents that false positive is broken"
+        )
+        if not scoped:
+            assert _mentions_retired_flag(f"{text}\nRetired: tablassert agent --aria2c\n", legit_pattern, command_scoped=False), (
+                f"pattern {legit_pattern!r} must stay GLOBAL: it has to fire outside any build-fullmap section too"
+            )
+
+
+def test_retired_short_flag_guard_is_anchored_to_a_real_build_fullmap_section() -> None:
+    """The scoped short-flag guard has a real section to inspect in the published CLI reference.
+
+    Why: a scoped matcher whose scope never exists is vacuous -- it would pass forever while a
+    stale ``-a`` row shipped. This pins that docs/cli.md really does carry a
+    ``## build-fullmap`` section (the surface where a stale option row would necessarily
+    reappear) and that the section still holds that command's live option table.
+    """
+    sections: list[str] = _command_sections(CLI_DOC.read_text(encoding="utf-8"), RETIRED_FLAG_COMMAND)
+    assert sections, (
+        f"{CLI_DOC.relative_to(ROOT)} no longer holds a '## {RETIRED_FLAG_COMMAND}' section; "
+        "the scoped short-flag guard would be vacuous on the page a stale row would reappear on"
+    )
+    assert any("`--output`, `-o`" in section for section in sections), (
+        f"{CLI_DOC.relative_to(ROOT)}'s '## {RETIRED_FLAG_COMMAND}' section no longer holds the option table the short-flag guard is scoped to"
     )
 
 
