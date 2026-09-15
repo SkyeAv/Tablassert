@@ -696,6 +696,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#distill-weigh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        distill-weigh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-fullmap" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1262,6 +1273,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#distill-weigh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        distill-weigh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-fullmap" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1349,7 +1371,7 @@
 
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
 <p>Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The <code>tablassert</code> app
-exposes <strong>six subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>validate</code>,
+exposes <strong>seven subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>distill-weigh</code>, <code>validate</code>,
 and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
 for the live surface.</p>
 <h2 id="command-index">Command index<a class="headerlink" href="#command-index" title="Permanent link">&para;</a></h2>
@@ -1376,6 +1398,10 @@ for the live surface.</p>
 <tr>
 <td><a href="#distill-export"><code>distill-export</code></a></td>
 <td>Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset</td>
+</tr>
+<tr>
+<td><a href="#distill-weigh"><code>distill-weigh</code></a></td>
+<td>Join distillation records to outcomes and prepare LoRA-SFT training rows</td>
 </tr>
 <tr>
 <td><a href="#validate"><code>validate</code></a></td>
@@ -1618,6 +1644,23 @@ page lists the flags; see
 <code>[distill]</code> extra (<code>pip install "tablassert[distill]"</code>, pulls <code>datasets</code>). The raw NDJSON already
 loads directly in Unsloth Studio and via <code>datasets.load_dataset("json", ...)</code> — this export is
 only needed for <code>datasets</code>-native workflows.</p>
+<p>Outcome files are skipped: export recognizes <code>outcomes.ndjson</code> by its <strong>content</strong> (a first line
+whose <code>record_type</code> is <code>outcome</code>), not its name, and loads only the record files — a directory
+holding nothing else exits 2 with a message that says so. A directory with no <code>*.ndjson</code> at all
+still fails with the original empty-directory error. Keep derived training output (e.g.
+<code>distill-weigh</code>'s <code>train.ndjson</code>) in a separate directory: export loads every record <code>*.ndjson</code>
+under its input directory, so a weighed file placed there would be loaded as if it were raw
+corpus.</p>
+<p>The corpus is schema-normalized before loading: export reads every record file, unions the keys
+seen anywhere in the corpus, and re-emits every row with an explicit <code>null</code> for absent keys into
+one uniform temporary file (outside the input directory) that is what actually gets passed to
+<code>load_dataset</code>. <code>datasets</code> otherwise infers its schema from the <strong>first block of the first file
+only</strong> and dies with a <code>CastError</code> the moment a later file carries a column that block lacked —
+which an append-only corpus spanning schema versions (v1 rows without <code>run_id</code> next to v2 rows)
+would always trigger. Normalization makes the schema correct by construction, so a v1-only
+corpus still exports. A column whose type varies across rows (say <code>"2"</code> in one line and <code>2</code> in
+another) is <strong>rejected</strong> with exit 2 naming the column and the types: <code>datasets</code> would otherwise
+silently JSON-encode that column into a string, corrupting the corpus without an error.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>tablassert<span class="w"> </span>distill-export<span class="w"> </span>--distill-dir<span class="w"> </span>.tablassert/agent/distill<span class="w"> </span>--out<span class="w"> </span>./hf-dataset
 </code></pre></div>
 <table>
@@ -1647,6 +1690,112 @@ only needed for <code>datasets</code>-native workflows.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="distill-weigh">distill-weigh<a class="headerlink" href="#distill-weigh" title="Permanent link">&para;</a></h2>
+<p>Join <code>agent --distill</code> records to their sibling outcomes, compute deterministic reward weights, and
+write one flat training row per input record for LoRA/QLoRA supervised fine-tuning. This is data
+selection, not RLHF: no reward model or online trainer is involved. Keep the output outside the
+input directory because <code>distill-export</code> loads every <code>*.ndjson</code> in its directory.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>tablassert<span class="w"> </span>distill-weigh<span class="w"> </span>--distill-dir<span class="w"> </span>.tablassert/agent/distill<span class="w"> </span>--out<span class="w"> </span>./training/train.ndjson
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Then optionally convert the weighed rows to a Hugging Face dataset:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>tablassert<span class="w"> </span>distill-export<span class="w"> </span>--distill-dir<span class="w"> </span>./training<span class="w"> </span>--out<span class="w"> </span>./hf-dataset
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--distill-dir</code>, <code>-dd</code></td>
+<td>Path</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>Input directory containing record and outcome <code>*.ndjson</code> files</td>
+</tr>
+<tr>
+<td><code>--out</code>, <code>-o</code></td>
+<td>Path</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>Training NDJSON destination; must be outside <code>--distill-dir</code></td>
+</tr>
+<tr>
+<td><code>--policy</code>, <code>-p</code></td>
+<td>string (<code>threshold</code>, <code>best-of-n</code>, or <code>replication</code>)</td>
+<td>No</td>
+<td><code>threshold</code></td>
+<td>Selection policy; validated at runtime</td>
+</tr>
+<tr>
+<td><code>--threshold</code>, <code>-t</code></td>
+<td>float</td>
+<td>No</td>
+<td><code>0.75</code></td>
+<td>Minimum weight for the <code>threshold</code> policy</td>
+</tr>
+<tr>
+<td><code>--top-n</code>, <code>-tn</code></td>
+<td>int</td>
+<td>No</td>
+<td><code>2</code></td>
+<td>Number retained per <code>pmc_id</code> group for <code>best-of-n</code></td>
+</tr>
+<tr>
+<td><code>--replication-k</code>, <code>-rk</code></td>
+<td>int</td>
+<td>No</td>
+<td><code>2</code></td>
+<td>Replication slope for <code>replication</code>, bounded to 0–3</td>
+</tr>
+<tr>
+<td><code>--reward-config</code>, <code>-rc</code></td>
+<td>Path</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>YAML/JSON reward configuration override</td>
+</tr>
+<tr>
+<td><code>--edge-ref</code></td>
+<td>float</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>Breadth reference override; otherwise the corpus median</td>
+</tr>
+<tr>
+<td><code>--purpose</code></td>
+<td>str</td>
+<td>No</td>
+<td><code>agent</code></td>
+<td>Keep this purpose, or use literal <code>all</code> to disable filtering</td>
+</tr>
+<tr>
+<td><code>--final-call-only</code></td>
+<td>bool flag</td>
+<td>No</td>
+<td><code>False</code></td>
+<td>Keep only the highest <code>call_index</code> per run</td>
+</tr>
+<tr>
+<td><code>--manifest</code></td>
+<td>Path</td>
+<td>No</td>
+<td><code>&lt;out&gt;.manifest.json</code></td>
+<td>Reproducibility manifest destination</td>
+</tr>
+</tbody>
+</table>
+<p>The manifest JSON records the resolved reward configuration, resolved <code>edge_ref</code> and its source, join
+statistics, selected/unmatched counts, and nested <code>distinct</code> diversity counters for <code>pmc_id</code> and
+<code>config_yaml_sha256</code> before and after selection. Source paths are resolved absolute paths for portable
+provenance. Malformed input, missing records/outcomes, invalid policies or knobs, unmatched records,
+and an output inside the input directory fail with exit 2 and an actionable message. A corpus without a
+comparable build emits a warning and records a null <code>edge_ref</code>; its breadth contribution is 0.0. Replicas
+are counts on rows, not physical row duplication.</p>
 <hr />
 <h2 id="build-fullmap">build-fullmap<a class="headerlink" href="#build-fullmap" title="Permanent link">&para;</a></h2>
 <p>Use this to obtain the embedded <code>fullmap.redb</code> entity-resolution database. Every database this
@@ -1654,7 +1803,7 @@ command installs is filtered by the built-in <strong>top-100 experimental-taxon 
 flag for it. By default it first tries to <strong>download a prebuilt database</strong> published for this
 Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL exports instead (download class
 + synonym files, then build a single redb).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
 </code></pre></div>
 <table>
 <thead>
@@ -1697,13 +1846,13 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Default: download the prebuilt fullmap.tar.zst for this version and extract it (fast)</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># Force a from-scratch rebuild from BABEL outputs (e.g. after a BABEL snapshot bump)</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--force<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Install the [aria2] extra and the bundled aria2c is used automatically for either download (the multi-GB prebuilt is the ideal aria2 use case)</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Default: download the prebuilt fullmap.tar.zst for this version and extract it (fast)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># Force a from-scratch rebuild from BABEL outputs (e.g. after a BABEL snapshot bump)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--force<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># Install the [aria2] extra and the bundled aria2c is used automatically for either download (the multi-GB prebuilt is the ideal aria2 use case)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
 </code></pre></div>
 <p>Every one of those invocations produces a database filtered by the checked-in
 <code>src/tablassert/data/experimental_taxa.yaml</code> allowlist and records that filter as a
@@ -1737,7 +1886,7 @@ OOMs. There is no flag to tune.</p>
 <h2 id="build-kg">build-kg<a class="headerlink" href="#build-kg" title="Permanent link">&para;</a></h2>
 <p>Use this to build a KGX NDJSON knowledge graph (nodes, edges, and a Resource Ingest Guide) from a
 YAML configuration file.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>GRAPH-CONFIGURATION-FILE<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>GRAPH-CONFIGURATION-FILE<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
 </code></pre></div>
 <p>The positional <code>GRAPH-CONFIGURATION-FILE</code> (also <code>--configuration-file</code>, <code>-f</code>) is a <strong>graph</strong> YAML.</p>
 <table>
@@ -1788,7 +1937,7 @@ YAML configuration file.</p>
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
 </code></pre></div>
 <p>The parallel fullmap reads behind entity resolution are automatic: large lookup batches (≥ 1024
 terms) fan out across the record-shard files on all available CPU threads (redb readers share-lock,
@@ -1817,8 +1966,8 @@ Subgraphs the detail line also shows the per-section phase (<code>load</code>, <
 <p>Use this to validate a configuration against a schema without running the build, ideal for CI and
 pre-commit hooks. The required <code>--schema</code> flag selects which schema to validate against (the kind is
 no longer sniffed from the YAML).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>graph
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>table
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>graph
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>table
 </code></pre></div>
 <table>
 <thead>
@@ -1849,8 +1998,8 @@ no longer sniffed from the YAML).</p>
 </table>
 <p>Exits non-zero on any schema error. See <a href="../configuration/table/">Table Configuration</a> and
 <a href="../configuration/graph/">Graph Configuration</a>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>table-config.yaml<span class="w"> </span>--schema<span class="w"> </span>table
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>graph.yaml<span class="w"> </span>--schema<span class="w"> </span>graph
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>table-config.yaml<span class="w"> </span>--schema<span class="w"> </span>table
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>graph.yaml<span class="w"> </span>--schema<span class="w"> </span>graph
 </code></pre></div>
 <hr />
 <h2 id="validate-kgx">validate-kgx<a class="headerlink" href="#validate-kgx" title="Permanent link">&para;</a></h2>
@@ -1859,7 +2008,7 @@ no longer sniffed from the YAML).</p>
 and edge is constructed as the Biolink Pydantic class named by its own <code>category</code>, the same classes
 <a href="https://github.com/NCATSTranslator/translator-ingests"><code>NCATSTranslator/translator-ingests</code></a> builds
 when it ingests your files.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson
 </code></pre></div>
 <table>
 <thead>
@@ -1897,10 +2046,10 @@ when it ingests your files.</p>
 </table>
 <p>Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
 rather than a million:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>biolink-model 4.4.4
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>nodes: 424141/424141 valid (0 failures)
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>edges: 2000085/2000085 valid (0 failures)
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>KGX output is Biolink-compliant.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>biolink-model 4.4.4
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>nodes: 424141/424141 valid (0 failures)
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>edges: 2000085/2000085 valid (0 failures)
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>KGX output is Biolink-compliant.
 </code></pre></div>
 <p>Exits non-zero when any record fails, so it can gate a release in CI. A missing or misspelled path is
 reported as <code>file not found</code> and also exits non-zero: a file that was never read must never count as
@@ -1911,7 +2060,7 @@ so they are counted separately as <em>pending</em> rather than treated as defect
 from the installed package, so a field leaves it the moment a <code>biolink-model</code> release declares
 it, as <code>effect_size</code> / <code>effect_type</code> did when 4.4.4 shipped
 <a href="https://github.com/biolink/biolink-model/pull/1774">#1774</a>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model support)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model support)
 </code></pre></div>
 <p>The strict count is what <code>ok</code> and the exit code use; the pending count is what
 <a href="#agent"><code>tablassert agent</code></a> optimizes against, so a deliberate gap never reads as a modelling error.</p>

@@ -1922,21 +1922,125 @@ endpoint; neither is required):</p>
 <h3 id="distilling-a-fine-tuning-dataset-distill">Distilling a fine-tuning dataset (<code>--distill</code>)<a class="headerlink" href="#distilling-a-fine-tuning-dataset-distill" title="Permanent link">&para;</a></h3>
 <p><code>--distill</code> (short: <code>-d</code>, <code>-dt</code>) records <strong>every LLM call of the run</strong> — the inner agent's
 multi-turn conversations, plus the judge and reflexion calls when those gates are enabled — as one
-ChatML JSON object per line, appended to <code>&lt;state-dir&gt;/distill/records.ndjson</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}],</span><span class="w"> </span><span class="nt">&quot;purpose&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;model_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pmc_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PMC11708054&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;call_index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;token_usage&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;input_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;output_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">}}</span>
+ChatML JSON object per line, appended to <code>&lt;state-dir&gt;/distill/records.ndjson</code>. Every record line
+carries the same canonical 13-key v2 set, with an explicit <code>null</code> where a value is unknown, so a
+key never first appears partway down an append-only file:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="nt">&quot;record_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;record&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3d4e5f6:PMC11708054&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;timestamp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;purpose&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;agent&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;call_index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}],</span><span class="w"> </span><span class="nt">&quot;token_usage&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;input_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">512</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;output_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">128</span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;input_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">512</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;output_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">128</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;n_messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;pmc_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PMC11708054&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;model_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}</span>
 </code></pre></div>
-<p>The file is <strong>append-only</strong>: every <code>--distill</code> invocation keeps adding to the same dataset, so a
-corpus accumulates over many batches. The <code>messages</code> column is plain ChatML, which Unsloth Studio
-auto-detects on JSONL upload (no column mapping needed); the metadata columns (<code>purpose</code>,
-<code>pmc_id</code>, <code>call_index</code>, <code>timestamp</code>, <code>token_usage</code>) ride along for filtering — e.g. join on
-<code>pmc_id</code> against <code>state.json</code> to keep only <code>MAPPED</code> runs, or keep each run's highest <code>call_index</code>
-for the most complete conversation. Recording is zero-dependency and never breaks a run: a failed
-write is logged, not raised. <code>--distill</code> is not supported with <code>--optimize</code> (the GEPA path
-bypasses the recording seam).</p>
-<p>To convert the NDJSON into an on-disk Hugging Face dataset, use
-<a href="../cli/#distill-export"><code>tablassert distill-export</code></a> (requires the <code>[distill]</code> extra):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>tablassert<span class="w"> </span>distill-export<span class="w"> </span>--distill-dir<span class="w"> </span>.tablassert/agent/distill<span class="w"> </span>--out<span class="w"> </span>./hf-dataset
+<p>Alongside the records, the supervisor appends <strong>one outcome line per run</strong> to a sibling
+<code>outcomes.ndjson</code> in the same directory: the terminal status, the build/audit figures, the
+tool-call tallies, the gate thresholds, and the package versions — the full 35-key outcome set,
+schema-uniform with explicit nulls in the same way (abbreviated here):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;record_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;outcome&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;schema_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;a1b2c3d4e5f6:PMC11708054&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run_status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;MAPPED&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;ok&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;measured&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;head&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coverage_pct&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.86</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;biolink_valid_pct&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;demoted_edge_pct&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.02</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;edge_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">412</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;tool_calls&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;total&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;failed&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;wrong&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;redundant&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">}}</span>
 </code></pre></div>
+<p><code>run_id</code> (<code>&lt;invocation-id&gt;:&lt;pmc-id&gt;</code>) is the join key between the two files. They are separate
+because the two halves exist at different times: a record is appended the moment each model call
+completes, mid-run, while the outcome — build verdict, coverage, Biolink validity, demoted-edge
+fraction — is only known once the supervisor has decided the run's terminal status, so it is
+written exactly once, at the end of the run. Both files are <strong>append-only</strong> and never rewritten in
+place: a corpus accumulates over many batches, and retuning a weight never requires re-recording
+it. The <code>messages</code> column is plain ChatML, which Unsloth Studio auto-detects on JSONL upload (no
+column mapping needed). Recording is zero-dependency and never breaks a run: a failed write is
+logged, not raised. <code>--distill</code> is not supported with <code>--optimize</code> (the GEPA path bypasses the
+recording seam).</p>
+<p><strong>Weighing.</strong> <a href="../cli/#distill-weigh"><code>tablassert distill-weigh</code></a> joins the two files on <code>run_id</code>,
+computes a deterministic reward weight per record, applies a selection policy, and writes one flat
+training row per input record plus a reproducibility manifest. Flags: <code>--distill-dir</code>/<code>-dd</code> and
+<code>--out</code>/<code>-o</code> (both required), <code>--policy</code>/<code>-p</code> (default <code>threshold</code>), <code>--threshold</code>/<code>-t</code> (<code>0.75</code>),
+<code>--top-n</code>/<code>-tn</code> (<code>2</code>), <code>--replication-k</code>/<code>-rk</code> (<code>2</code>), <code>--reward-config</code>/<code>-rc</code> (a YAML/JSON policy
+override), <code>--edge-ref</code> (a breadth-reference override), <code>--purpose</code> (default <code>agent</code>; the literal
+<code>all</code> disables filtering), <code>--final-call-only</code> (keep only each run's highest <code>call_index</code> — the
+most complete conversation), and <code>--manifest</code> (default <code>&lt;out&gt;.manifest.json</code>). Keep <code>--out</code>
+<strong>outside</strong> <code>--distill-dir</code>: <a href="../cli/#distill-export"><code>tablassert distill-export</code></a> loads every
+<code>*.ndjson</code> in its input directory, so a weighed file placed there would be re-ingested as raw
+corpus. The weigh → export composition (export requires the <code>[distill]</code> extra):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>distill-weigh<span class="w"> </span>--distill-dir<span class="w"> </span>.tablassert/agent/distill<span class="w"> </span>--out<span class="w"> </span>./training/train.ndjson
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>tablassert<span class="w"> </span>distill-export<span class="w"> </span>--distill-dir<span class="w"> </span>./training<span class="w"> </span>--out<span class="w"> </span>./hf-dataset
+</code></pre></div>
+<p><strong>The reward</strong> is a deterministic function of the captured outcome — same outcome in, same weight
+out — and it is <strong>tunable policy with documented defaults</strong>, not a law: every knob is a
+<code>RewardConfig</code> field overridable via <code>--reward-config</code>, and retuning never touches the corpus. The
+defaults are Tablassert's own policy (they mirror the shape of the supervisor's quality score with
+its two degenerate terms replaced), not a borrowed standard. Five additive terms whose
+coefficients sum to 1.00:</p>
+<ul>
+<li><code>coverage_pct</code> — completeness / entity-resolution success — <strong>0.40</strong></li>
+<li><code>biolink_valid_pct</code> — semantic validity of the built edges — <strong>0.28</strong></li>
+<li><code>specificity = 1 - demoted_edge_pct</code> — predicate specificity vs generic fallback — <strong>0.17</strong></li>
+<li><code>cleanliness = 1 - (failed + wrong) / total tool calls</code> — tool-call correctness — <strong>0.07</strong></li>
+<li><code>breadth = clamp(log1p(edge_count) / log1p(edge_ref), 0, 1)</code> — non-degeneracy — <strong>0.08</strong></li>
+</ul>
+<p>The hard gates then apply <strong>multiplicatively</strong>, never additively: <code>ok is not True</code>, <code>head is
+True</code>, or a <code>SKIPPED</code>/<code>FAILED</code> status zero the row outright; <code>BUILT_UNMEASURED</code> (or coverage never
+measured) floors the row at <code>unmeasured_weight</code> (default <code>0.0</code>) — the record is kept, just not
+selectable. On top of the raw score, two farming penalties multiply: <code>demoted_edge_pct &gt; 0.50</code>
+scales by <strong>0.5</strong> (generic-predicate farming), and a redundant tool-call share above <strong>0.30</strong>
+scales by <strong>0.7</strong>. The breadth reference <code>edge_ref</code> defaults to the <strong>corpus median</strong> edge count
+over comparable builds (head builds and failed builds excluded, deduplicated to the last outcome
+per run id); <code>--edge-ref</code> or the config file pins it instead, and a corpus with no comparable
+build warns and lets breadth contribute 0.0. The reward reads only deterministic fields — never
+the judge score, <code>qc_pass_rate</code>, or <code>provenance_ok</code>, which are recorded as metadata only.</p>
+<p><strong>Selection policies.</strong> All three are computed at weigh time (re-recording is never needed) and
+annotate every row with the same five keys (<code>weight</code>, <code>selected</code>, <code>replicas</code>, <code>policy</code>,
+<code>threshold</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>What it does</th>
+<th>Prefer when</th>
+<th>Caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>threshold</code> (default)</td>
+<td><code>selected = weight &gt;= --threshold</code> (0.75); each selected row counts once</td>
+<td>The zero-code path — the only selection TRL consumes with no trainer code</td>
+<td>A miscalibrated corpus can empty the selection; the manifest's <code>selected_count</code> makes that visible</td>
+</tr>
+<tr>
+<td><code>best-of-n</code></td>
+<td>Groups by <code>pmc_id</code>, ranks each group by weight (ties: fewer attempts, fewer failed tool calls, earlier call), keeps the top <code>--top-n</code> (2)</td>
+<td>Several attempts per article: keep the best trajectory per prompt while preserving distinct paths</td>
+<td><strong>No weight floor</strong>: a prompt whose every trajectory weighs 0.0 still contributes its top-ranked row, so gated-failed trajectories can be selected — the manifest's <code>selected_zero_weight</code> exposes this</td>
+</tr>
+<tr>
+<td><code>replication</code></td>
+<td><code>selected = weight &gt; 0</code>; <code>replicas</code> scales from 1 to <code>1 + --replication-k</code> (default 2, capped at 3) across the selected rows' weight spread</td>
+<td>Soft importance weighting with no custom loss code</td>
+<td><code>replicas</code> is a <strong>count on one row</strong>, never physical duplication — the training sampler must expand the rows</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The goal is LoRA/QLoRA supervised fine-tuning — explicitly not RLHF.</strong> There is no reward model,
+no PPO/GRPO, and no online RL anywhere in this pipeline; the reward is a deterministic scoring
+function used for data selection. The weight drives row filtering, ranking, and replication
+because TRL's <code>SFTConfig</code> has <strong>no per-example sample-weight column</strong> — selection and replication
+are the only zero-code weighting mechanisms an SFT trainer offers.</p>
+<p>Consumption caveats that are easy to get wrong:</p>
+<ul>
+<li><code>SFTConfig.max_length</code> defaults to <strong>1024</strong> with <code>truncation_mode="keep_start"</code>: long multi-turn
+  agent trajectories are silently truncated, and TRL then <strong>drops</strong> examples left fully masked.
+  Size it from the recorded <code>n_messages</code>/<code>tokens_total</code> metadata — set <code>max_length=None</code> or to at
+  least the corpus's p99.</li>
+<li><code>assistant_only_loss=True</code> trains on the assistant (agent) turns only — usually what you want
+  for a config-authoring agent.</li>
+<li><code>packing=True</code> makes any effective weight <strong>token-proportional rather than row-proportional</strong>
+  and destroys per-example identity, which quietly undermines replication.</li>
+<li>Extra metadata columns (every <code>outcome_*</code> column, <code>weight</code>, <code>selected</code>, and friends) are
+  <strong>ignored</strong> by TRL, not fatal — safe to keep them in the file.</li>
+</ul>
+<p>Honest limitations. SFT on curated optimal trajectories stabilizes output <strong>format and schema
+compliance</strong> — for a YAML-config-writing agent whose supervisor is deterministic Python, that is
+the honest deliverable of a LoRA. It is <strong>not</strong> evidence-backed for out-of-distribution
+generalization (Chu et al., arXiv:2501.17161, App. C.1); do not promise OOD gains. Two
+reward-hacking caveats: <code>demoted_edge_pct</code> gating exists because coverage can be <strong>farmed with a
+generic predicate</strong> — a predicate the derived association class forbids never raises, it silently
+demotes the edge, so a config can map perfectly while emitting bare <code>biolink:Association</code> edges —
+and over-hard selection is a measured Goodhart risk (Gao et al., arXiv:2210.10760). Hold out a
+differently-scored validation set rather than trusting the same weight that selected the training
+rows.</p>
 <h3 id="biolink-validity">Biolink validity<a class="headerlink" href="#biolink-validity" title="Permanent link">&para;</a></h3>
 <p>Coverage answers <em>did the terms resolve?</em> It says nothing about whether the resulting records are
 consumable. The agent therefore validates <strong>its own output</strong>: after each build, <code>build_and_audit</code>
@@ -1987,9 +2091,9 @@ proposer applies it automatically when handed the audit report.</p>
 <p>The prompt now carries a <strong>generated legal-predicate table</strong> for the category pairs the agent meets in
 practice, rendered at import from the installed <code>biolink-model</code> (via <code>lib.predicate_options</code>) so it
 cannot drift from the model the build validates against:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>- Gene ~ Disease -&gt; GeneToDiseaseAssociation: affects, associated_with, contributes_to
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>- SequenceVariant ~ Gene -&gt; VariantToGeneAssociation: condition_associated_with_gene, …
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>- any predicate is safe for: Gene~Gene, Gene~Pathway, ChemicalEntity~Disease, …
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>- Gene ~ Disease -&gt; GeneToDiseaseAssociation: affects, associated_with, contributes_to
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>- SequenceVariant ~ Gene -&gt; VariantToGeneAssociation: condition_associated_with_gene, …
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>- any predicate is safe for: Gene~Gene, Gene~Pathway, ChemicalEntity~Disease, …
 </code></pre></div>
 <ul>
 <li>An annotation like <code>supporting_study_size</code> or <code>sample_size</code> names study-level metadata.
@@ -2030,15 +2134,15 @@ all sections, with <code>section_coverages</code> recorded for visibility.</p>
 <code>name</code>, <code>version</code>, complete <code>rig:</code>, and artifact metadata drive every one-table audit. The agent does
 <strong>not</strong> create an aggregate graph under <code>state_dir</code>; <code>state_dir</code> remains only the checkpoint and working
 artifact directory (default <code>.tablassert/agent</code>, override with <code>--state-dir</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>project/graph.yaml                       # caller-owned aggregate graph, updated in place
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>.tablassert/agent/                       # checkpoint/artifact workspace
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  state.json                             # supervisor checkpoint (atomic)
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  configs/&lt;pmc_id&gt;.yaml                  # accepted generated table config (absolute source.local)
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>  configs/&lt;pmc_id&gt;.derived.yaml          # initial generated config
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  downloads/&lt;pmc_id&gt;/&lt;prefix&gt;/...        # fetched PMC payload; stable across runs
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>  builds/&lt;pmc_id&gt;/table.yaml             # temporary one-table audit input
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  builds/&lt;pmc_id&gt;/artifacts/             # &lt;graph-name&gt;_&lt;graph-version&gt;.{nodes,edges}.ndjson + RIG
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>  builds/&lt;pmc_id&gt;/.tablassert/store/      # temporary parquet cache
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>project/graph.yaml                       # caller-owned aggregate graph, updated in place
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>.tablassert/agent/                       # checkpoint/artifact workspace
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>  state.json                             # supervisor checkpoint (atomic)
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>  configs/&lt;pmc_id&gt;.yaml                  # accepted generated table config (absolute source.local)
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>  configs/&lt;pmc_id&gt;.derived.yaml          # initial generated config
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  downloads/&lt;pmc_id&gt;/&lt;prefix&gt;/...        # fetched PMC payload; stable across runs
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>  builds/&lt;pmc_id&gt;/table.yaml             # temporary one-table audit input
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  builds/&lt;pmc_id&gt;/artifacts/             # &lt;graph-name&gt;_&lt;graph-version&gt;.{nodes,edges}.ndjson + RIG
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>  builds/&lt;pmc_id&gt;/.tablassert/store/      # temporary parquet cache
 </code></pre></div>
 <p>Only newly generated agent table configs are normalized: every section's <code>source.local</code> is written as
 an absolute local/data-lake path, and the graph's new <code>tables</code> entry is an absolute path. Existing
@@ -2061,9 +2165,9 @@ metrics. A failed rerun does not replace the prior successful config.</p>
 already present in the target graph. The temporary audit inherits the target graph's semantic metadata
 and graph identity but writes physical artifacts to an isolated per-article workspace. Build the complete
 aggregate explicitly after the agent finishes:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span>--state-dir<span class="w"> </span>.tablassert/agent
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># inspect graph.yaml, then build every existing + generated table together</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./graph.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span>--state-dir<span class="w"> </span>.tablassert/agent
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># inspect graph.yaml, then build every existing + generated table together</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./graph.yaml
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Absolute paths are intentional</p>
@@ -2227,15 +2331,15 @@ run fast while the strong model does the thinking; without <code>--task-model</c
 both. GEPA runs its candidate evaluations with its library default parallelism; the coverage-scoring
 builds stay serialized on the process-wide <code>_GEPA_BUILD_LOCK</code> (<code>agent.py</code>, since <code>os.chdir</code> is
 process-global), so extra parallelism does not speed up the expensive build/coverage step.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># optimize the agent prompt over a dataset of examples, writing the result to a file</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span>--optimize<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>--dataset<span class="w"> </span>examples/gepa-dataset.yaml<span class="w"> </span>--task-model<span class="w"> </span>qwen-flash<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>--max-metric-calls<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span>--instructions-out<span class="w"> </span>.tablassert/agent/optimized_instructions.yaml
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># later, run the supervisor with the optimized prompt</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">  </span>--instructions-file<span class="w"> </span>.tablassert/agent/optimized_instructions.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># optimize the agent prompt over a dataset of examples, writing the result to a file</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span>--optimize<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--dataset<span class="w"> </span>examples/gepa-dataset.yaml<span class="w"> </span>--task-model<span class="w"> </span>qwen-flash<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span>--max-metric-calls<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span>--instructions-out<span class="w"> </span>.tablassert/agent/optimized_instructions.yaml
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># later, run the supervisor with the optimized prompt</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC11708054<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">  </span>--instructions-file<span class="w"> </span>.tablassert/agent/optimized_instructions.yaml
 </code></pre></div>
 <p><code>--dataset</code> is a YAML/JSON list of examples. Each example carries <code>table_summary</code> and
 <code>coverage_feedback</code> (the program inputs); it MAY also carry:</p>
@@ -2272,38 +2376,38 @@ PMC10766526-shaped disease x system workbook plus three configs: the improved-ag
 (multi-section, correct <code>sheet</code> + <code>row_slice</code>, <code>explode_by</code>/<code>prioritize</code> breadth, paired
 <code>effect_size</code> + <code>effect_type</code> annotations), a strictly richer reference (all three sheets), and an
 intentionally-impoverished single-section no-<code>explode_by</code> negative control that MUST fail the gate:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py<span class="w"> </span>-q
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py<span class="w"> </span>-q
 </code></pre></div>
 <p><strong>Real runbook (PMC10766526):</strong> run the agent over the downloaded payload, build one-table graphs
 for the agent config and the already-converted v12 reference config, and compare the
 <code>&lt;name&gt;_&lt;version&gt;.edges.ndjson</code> line counts from <code>rig.artifact_base_path</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># 1. Run the agent OFFLINE against a local payload (no PMC-AWS fetch)</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC10766526<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>--local<span class="w"> </span><span class="nv">PMC10766526</span><span class="o">=</span>./downloads/PMC10766526
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># accepted config: .tablassert/agent/configs/PMC10766526.yaml</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="c1"># 2. Build each as a one-table graph (same fullmap, same graph name/version conventions)</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./agent_graph.yaml<span class="w">       </span><span class="c1"># tables: [.tablassert/agent/configs/PMC10766526.yaml]</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./reference_graph.yaml<span class="w">   </span><span class="c1"># tables: [./legacy/PMC10766526.v12.yaml]</span>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="c1"># 3. Count edges; acceptance: agent &gt;= 0.5 * reference</span>
-<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>wc<span class="w"> </span>-l<span class="w"> </span>&lt;agent-graph-name&gt;_&lt;version&gt;.edges.ndjson<span class="w"> </span>&lt;reference-graph-name&gt;_&lt;version&gt;.edges.ndjson
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># 1. Run the agent OFFLINE against a local payload (no PMC-AWS fetch)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>tablassert<span class="w"> </span>agent<span class="w"> </span>PMC10766526<span class="w"> </span>--configuration-file<span class="w"> </span>./graph.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>--local<span class="w"> </span><span class="nv">PMC10766526</span><span class="o">=</span>./downloads/PMC10766526
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># accepted config: .tablassert/agent/configs/PMC10766526.yaml</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="c1"># 2. Build each as a one-table graph (same fullmap, same graph name/version conventions)</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./agent_graph.yaml<span class="w">       </span><span class="c1"># tables: [.tablassert/agent/configs/PMC10766526.yaml]</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>-f<span class="w"> </span>./reference_graph.yaml<span class="w">   </span><span class="c1"># tables: [./legacy/PMC10766526.v12.yaml]</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="c1"># 3. Count edges; acceptance: agent &gt;= 0.5 * reference</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>wc<span class="w"> </span>-l<span class="w"> </span>&lt;agent-graph-name&gt;_&lt;version&gt;.edges.ndjson<span class="w"> </span>&lt;reference-graph-name&gt;_&lt;version&gt;.edges.ndjson
 </code></pre></div>
 <p>The same comparison is scriptable via the env-gated test: set <code>TABLASSERT_PMC_COMPARE</code> to a JSON
 array of four paths: the agent config, the reference config, the payload, and the fullmap redb.
 A JSON array (not a colon-separated string) keeps POSIX paths containing <code>:</code> and Windows
 drive-letter paths working. The <code>&lt;agent-config&gt;</code> and <code>&lt;reference-config&gt;</code> may carry relative
 <code>source.local</code> paths; both are rebuilt over <code>&lt;payload&gt;</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nv">TABLASSERT_PMC_COMPARE</span><span class="o">=</span><span class="s1">&#39;[&quot;.tablassert/agent/configs/PMC10766526.yaml&quot;, &quot;./legacy/PMC10766526.v12.yaml&quot;, &quot;./downloads/PMC10766526/PMC10766526.1/table.xlsx&quot;, &quot;data/fullmap.redb&quot;]&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py::test_real_pmc_comparison<span class="w"> </span>-q
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nv">TABLASSERT_PMC_COMPARE</span><span class="o">=</span><span class="s1">&#39;[&quot;.tablassert/agent/configs/PMC10766526.yaml&quot;, &quot;./legacy/PMC10766526.v12.yaml&quot;, &quot;./downloads/PMC10766526/PMC10766526.1/table.xlsx&quot;, &quot;data/fullmap.redb&quot;]&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>uv<span class="w"> </span>run<span class="w"> </span>--extra<span class="w"> </span>qc<span class="w"> </span>--extra<span class="w"> </span>agent<span class="w"> </span>pytest<span class="w"> </span>tests/test_agent_edgecount.py::test_real_pmc_comparison<span class="w"> </span>-q
 </code></pre></div>
 <p>Unset, that test skips with a printed reason; the offline fixture tests run regardless.</p>
 <h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
 <p>The agent suite is <strong>fully offline</strong>: no live LLM or network. It uses a <code>FakeModel</code> smolagents stub,
 mocked/snapshotted PMC data, a tiny real redb (<code>rs.build_fullmap_db</code>), and injectable GEPA stubs.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Agent tests SKIP without the extra and PASS with it:</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>agent
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_agent_eval.py<span class="w"> </span>tests/test_agent_supervisor.py<span class="w"> </span>tests/test_agent_assembly.py
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Agent tests SKIP without the extra and PASS with it:</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>uv<span class="w"> </span>sync<span class="w"> </span>--extra<span class="w"> </span>agent
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_agent_eval.py<span class="w"> </span>tests/test_agent_supervisor.py<span class="w"> </span>tests/test_agent_assembly.py
 </code></pre></div>
 <p>Without the extra, the base suite stays green and every agent test skips via <code>pytest.importorskip</code>.</p>
 <div class="admonition tip">
