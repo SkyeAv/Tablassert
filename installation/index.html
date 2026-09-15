@@ -1564,7 +1564,7 @@ extras are opt-in.</p>
 </tr>
 <tr>
 <td><code>aria2</code></td>
-<td>Bundled aria2c downloader for <code>build-fullmap --aria2c</code> (Linux/Windows wheels only)</td>
+<td>Bundled aria2c downloader, used automatically by <code>build-fullmap</code> when installed (Linux/Windows wheels only)</td>
 <td><code>aria2==0.0.1b0</code> (imports as <code>aria2c</code>, bundles aria2c)</td>
 </tr>
 <tr>
@@ -1615,7 +1615,7 @@ extras are opt-in.</p>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title"><code>[aria2]</code> platform and license notes</p>
-<p>The <code>[aria2]</code> extra depends on the PyPI <code>aria2</code> package, which imports as <code>aria2c</code> and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; on macOS, omit <code>--aria2c</code> and use Tablassert's default Python downloader.</p>
+<p>The <code>[aria2]</code> extra depends on the PyPI <code>aria2</code> package, which imports as <code>aria2c</code> and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, so a normal macOS install resolves to Tablassert's Python downloader.</p>
 <p>The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.</p>
 </div>
 <p>Excel (<code>.xlsx</code>) input is read through Polars' <code>calamine</code> engine, which ships with the base install
@@ -1628,7 +1628,9 @@ distribution <strong>and</strong> the command that fixes it:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Missing optional dependencies &#39;scikit-learn&#39;, &#39;sentence-transformers&#39;, required by the QC audit.
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>Install the [qc] extra: pip install &quot;tablassert[qc]&quot; (uv: uv tool install &quot;tablassert[qc]&quot;)
 </code></pre></div>
-<p>Where the gap is knowable up front, it is reported up front rather than mid-run:</p>
+<p>Where the gap is knowable up front, it is reported up front rather than mid-run (one row below is the
+exception: <code>build-fullmap</code>'s <code>[aria2]</code> check is a downloader probe that picks a downloader and never
+fails, not a failure report):</p>
 <table>
 <thead>
 <tr>
@@ -1659,9 +1661,9 @@ distribution <strong>and</strong> the command that fixes it:</p>
 <td>After the recorded-NDJSON input check (an empty <code>--distill-dir</code> is reported first, since that typo is the faster loop to close) and before <code>datasets</code> is imported</td>
 </tr>
 <tr>
-<td><code>build-fullmap --aria2c</code></td>
+<td><code>build-fullmap</code></td>
 <td><code>[aria2]</code></td>
-<td>Before any download starts</td>
+<td>Before the first download, to pick the downloader — bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure)</td>
 </tr>
 </tbody>
 </table>

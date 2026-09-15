@@ -1689,13 +1689,6 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 <td>BABEL snapshot date to fetch (a RENCI stamp, <strong>not</strong> Tablassert's version)</td>
 </tr>
 <tr>
-<td><code>--aria2c</code>, <code>-a</code></td>
-<td>Flag</td>
-<td>No</td>
-<td><code>False</code></td>
-<td>Opt into the bundled <code>aria2c</code> binary from the <code>[aria2]</code> extra for resumable segmented downloads (the prebuilt archive <strong>or</strong> BABEL files); fails loud (exit 2, before any download starts) if the extra is missing or unsupported on the current platform, and on a non-zero aria2c exit</td>
-</tr>
-<tr>
 <td><code>--force</code>, <code>-f</code></td>
 <td>Flag</td>
 <td>No</td>
@@ -1708,8 +1701,9 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># Force a from-scratch rebuild from BABEL outputs (e.g. after a BABEL snapshot bump)</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--force<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Accelerate either download with bundled aria2c (`pip install &quot;tablassert[aria2]&quot;`; the multi-GB prebuilt is the ideal aria2 use case)</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--aria2c<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Install the [aria2] extra and the bundled aria2c is used automatically for either download (the multi-GB prebuilt is the ideal aria2 use case)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[aria2]&quot;</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--output<span class="w"> </span>/data/fullmap/fullmap.redb
 </code></pre></div>
 <p>Every one of those invocations produces a database filtered by the checked-in
 <code>src/tablassert/data/experimental_taxa.yaml</code> allowlist and records that filter as a
@@ -1724,6 +1718,14 @@ shard set, per-shard <code>build_id</code> equality, and a <code>META.taxon_allo
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
 warning — an archive published without the current filter is never installed.</p>
+<p>The downloader is chosen automatically — there is no flag to pass: with the optional <code>[aria2]</code> extra
+installed (<code>pip install "tablassert[aria2]"</code>; Linux/Windows wheels only), both the prebuilt archive
+and the BABEL files download through the bundled aria2c binary with resumable segmented downloads;
+without the extra, Tablassert's Python downloader is used. The extra ships no macOS wheels, so a
+normal macOS install resolves to the Python downloader. The choice is resolved once per run, after
+the reuse short-circuit, and is announced on stderr as well as logged either way (a run that reuses
+an existing database downloads nothing and stays silent); a failing aria2c download fails loud
+rather than being silently rescued by the Python downloader.</p>
 <p>A database already present at <code>--output</code> is reused only when it carries that same allowlist identity;
 an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
 Pass <code>--force</code> to rebuild unconditionally.</p>
