@@ -35,6 +35,7 @@ from urllib.request import Request, urlopen
 import pydantic
 import yaml
 
+from tablassert import distill_reward
 from tablassert._lazy import LazyModule
 from tablassert.biolink import ENUM_RANGED_QUALIFIERS, Categories
 from tablassert.enums import EncodingMethods
@@ -3617,6 +3618,32 @@ def make_distilling_model(model: object, recorder: object, *, purpose: str, meta
     return DistillingModel()
 
 
+def _recorder_run_id(recorder: object) -> str | None:
+    """Best-effort read of a duck-typed recorder's open ``run_id`` (None when absent or not a str)."""
+    value: object = getattr(recorder, "run_id", None)
+    return value if isinstance(value, str) else None
+
+
+def capture_run_outcome(recorder: object, **kwargs: Any) -> None:
+    """Assemble one run's outcome via ``distill_reward.build_outcome`` and append it; NEVER raises.
+
+    Why: outcome capture is observability, not pipeline logic — the corpus row matters (a crashed
+    run is a negative example the weighting step needs), but a capture bug must never change a
+    supervisor run's status, its checkpoint state, or its return value, so every failure is
+    swallowed and logged. The wrapper is smolagents-free (pure stdlib + ``yaml`` through
+    ``distill_reward``) so it is importable and callable in the base environment — where its unit
+    tests run, CI having no ``[agent]`` extra. ``recorder`` is duck-typed: anything without a
+    ``record_outcome`` method degrades to a logged no-op.
+    """
+    try:
+        outcome: dict[str, Any] = distill_reward.build_outcome(**kwargs)
+        # getattr on a duck-typed recorder avoids a pyright attribute error on ``object``; a missing
+        # method raises AttributeError, which the guard below logs + swallows.
+        cast(Callable[[dict[str, Any]], None], getattr(recorder, "record_outcome"))(outcome)  # noqa: B009
+    except Exception as exc:  # outcome capture must never break a batch
+        logger.warning("distill: failed to capture run outcome: {error}", error=exc)
+
+
 # --------------------------------------------------------------------------- #
 # US-009: outer DETERMINISTIC supervisor + monotonic improve loop + checkpoint/resume
 #
@@ -4113,10 +4140,27 @@ def run_supervisor(
     all_metrics: list[dict[str, object]] = []
     for pmc_id in ids:
         rec: ConfigRecord = state.records[pmc_id]
+        # Per-article outcome-capture state, hoisted so the SKIPPED except branch can record a
+        # (possibly empty) outcome for a run that crashed before populating it (REQ-OUT-19).
+        metrics: dict[str, object] = {}
+        current_config: str | None = None
+        current_report: dict[str, object] | None = None
+        judge_verdict: dict[str, Any] | None = None
+        model_id: str | None = None
         try:
             rec.status = "RUNNING"
             rec.attempts += 1
             save_state(state_dir, state)
+            if distill_recorder is not None:
+                # Open this article's run scope FIRST (REQ-OUT-17): every record written until the
+                # next begin_run — agent, judge and reflexion alike — carries this article's run_id,
+                # and a crashed run's outcome is captured under the right join key. Guarded: the
+                # recorder is duck-typed and a capture failure must never skip an article.
+                try:
+                    # getattr for the same duck-typing reason as capture_run_outcome (pyright vs object).
+                    cast(Callable[[str], str], getattr(distill_recorder, "begin_run"))(pmc_id)  # noqa: B009
+                except Exception as begin_exc:
+                    logger.warning("distill: begin_run failed for {pmc}: {error}", pmc=pmc_id, error=begin_exc)
 
             local_dir: Path | None = _resolve_local_dir(local, pmc_id)
             if local_dir is not None:
@@ -4147,8 +4191,9 @@ def run_supervisor(
                 table_list = "\n".join(f"  - {path}  (source.url: [{public_url(path.parent.name, path.name)}])" for path in tables)
             article_xml: Path | None = next((path for path in files if path.suffix.lower() in {".xml", ".nxml"}), None)
 
-            metrics: dict[str, object] = {}
             model: object = build_model_factory()
+            raw_model_id: object = getattr(model, "model_id", None)
+            model_id = str(raw_model_id) if raw_model_id is not None else None
             if distill_recorder is not None:
                 # Distillation capture: wrap so every generate() call lands in the NDJSON dataset,
                 # tagged with this article's id for later filtering against state.json status.
@@ -4202,18 +4247,54 @@ def run_supervisor(
                 rec.status = "SKIPPED"
                 rec.notes = "SKIPPED: agent final answer failed the validate_table_config gate."
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: this exit reaches neither the success-path nor the except-path
+                    # capture, and a gate-failed run is the most instructive negative example.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
             config: str = normalize_config(raw_config)
             if not validate_table_config(config):
                 rec.status = "SKIPPED"
                 rec.notes = "SKIPPED: normalized agent answer failed the validate_table_config gate."
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: same early-exit gap as the raw-answer gate above.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
 
             configs_dir(state_dir).mkdir(parents=True, exist_ok=True)
             derived_path: Path = derived_config_path(state_dir, pmc_id).resolve()
             derived_path.write_text(config)
             rec.config_path = str(derived_path)
+            current_config = config  # terminal config so far: a DERIVED exit below still hashes it
 
             if derive_mode in {"derive_only", "derive_coverage"}:
                 # Derive mode: the config is schema-valid but NOT built here (the build tools were withheld
@@ -4221,6 +4302,24 @@ def run_supervisor(
                 # these configs later.
                 rec.status = "DERIVED"
                 save_state(state_dir, state)
+                if distill_recorder is not None:
+                    # REQ-OUT-18: the DERIVED exit needs its outcome row as much as a built one —
+                    # unbuilt is a measured null, never a missing line.
+                    capture_run_outcome(
+                        distill_recorder,
+                        run_id=_recorder_run_id(distill_recorder),
+                        pmc_id=pmc_id,
+                        model_id=model_id,
+                        run_status=rec.status,
+                        report=current_report,
+                        record=asdict(rec),
+                        metrics=metrics,
+                        config_yaml=current_config,
+                        map_threshold=map_threshold,
+                        biolink_threshold=biolink_threshold,
+                        judge_threshold=judge_threshold,
+                        judge_verdict=judge_verdict,
+                    )
                 continue
 
             report: dict[str, object] = audit_config(config, workdir=pmc_build_dir(art_root, pmc_id))
@@ -4238,10 +4337,9 @@ def run_supervisor(
             #   Tier 2 (LLM reflexion, only when tier 1 stalls AND a reflexion model is supplied): a genuinely
             #     distinct config that may change predicate/source (llm_propose_config_edit).
             iters: int = 0
-            current_config: str = config
             current_cov: float = coverage
             current_ok: bool = bool(report.get("ok"))
-            current_report: dict[str, object] = report
+            current_report = report
             # ``measured is False`` (EXPLICIT) => coverage was unmeasurable. A report WITHOUT the key
             # (legacy/fake) is treated as measured so it follows the ordinary MAPPED/SKIPPED path and
             # is never mislabeled BUILT_UNMEASURED.
@@ -4354,6 +4452,7 @@ def run_supervisor(
                 semantic_ok: bool = True
                 if biolink_ok and judge_model is not None:
                     verdict: dict[str, Any] = judge_config(current_config, current_report, metrics, judge_model=judge_model)
+                    judge_verdict = verdict
                     raw_score: object = verdict.get("normalized")
                     judge_score: float = float(raw_score) if isinstance(raw_score, (int, float)) else 0.0
                     gate: float = judge_threshold if judge_threshold is not None else 0.5
@@ -4416,10 +4515,47 @@ def run_supervisor(
                     logger.error("target graph update failed for {pmc}: {error}", pmc=pmc_id, error=reg_exc)
                     note: str = f"target graph update failed (status kept {rec.status}): {reg_exc}"
                     rec.notes = f"{rec.notes}; {note}" if rec.notes else note
+            if distill_recorder is not None:
+                # REQ-OUT-18: capture the outcome EXACTLY once per article — after the terminal status
+                # is decided (and the best config persisted, so rec.config_chars is current), before
+                # the checkpoint. Guarded: capture never changes the status, state, or return value.
+                capture_run_outcome(
+                    distill_recorder,
+                    run_id=_recorder_run_id(distill_recorder),
+                    pmc_id=pmc_id,
+                    model_id=model_id,
+                    run_status=rec.status,
+                    report=current_report,
+                    record=asdict(rec),
+                    metrics=metrics,
+                    config_yaml=current_config,
+                    map_threshold=map_threshold,
+                    biolink_threshold=biolink_threshold,
+                    judge_threshold=judge_threshold,
+                    judge_verdict=judge_verdict,
+                )
             save_state(state_dir, state)
         except Exception as exc:  # one bad pmc never aborts the batch
             rec.status = "SKIPPED"
             rec.notes = f"SKIPPED: {exc}"
+            if distill_recorder is not None:
+                # REQ-OUT-19: a crashed/failed run is a NEGATIVE example — capture it with whatever
+                # was measured before the failure (possibly nothing) instead of letting it vanish.
+                capture_run_outcome(
+                    distill_recorder,
+                    run_id=_recorder_run_id(distill_recorder),
+                    pmc_id=pmc_id,
+                    model_id=model_id,
+                    run_status=rec.status,
+                    report=current_report,
+                    record=asdict(rec),
+                    metrics=metrics,
+                    config_yaml=current_config,
+                    map_threshold=map_threshold,
+                    biolink_threshold=biolink_threshold,
+                    judge_threshold=judge_threshold,
+                    judge_verdict=judge_verdict,
+                )
             save_state(state_dir, state)
             continue
 

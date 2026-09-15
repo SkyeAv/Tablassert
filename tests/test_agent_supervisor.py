@@ -188,6 +188,170 @@ def test_supervisor_distill_records_every_generate_call(tmp_path: Path, fullmap_
     assert "final_answer" in final_messages[-1]["content"]
 
 
+def test_supervisor_captures_an_outcome_per_run(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """End-to-end outcome capture: exactly one outcome line per article, joined by ``run_id``.
+
+    Why: the outcome is what makes a trajectory weightable, so a MAPPED run and a CRASHED run alike
+    must land in ``outcomes.ndjson`` exactly once — the crashed one as a SKIPPED negative example
+    rather than vanishing from the corpus. ``begin_run`` opens the article's scope at the START of
+    the iteration (before the model is wrapped), so the agent's records and the outcome share the
+    same ``<invocation_id>:<pmc_id>`` join key. This module skips without ``[agent]``; the base-env
+    proof for the wrapper lives in ``tests/test_distill.py``.
+    """
+    table: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+
+    def fake_fetch(pmc_id: str, outdir: Path, *, timeout: int = 120) -> list[Path]:  # pyright: ignore[reportUnusedParameter]
+        if pmc_id == "PMC2":
+            raise OSError("simulated fetch failure")
+        return [table]
+
+    monkeypatch.setattr("tablassert.agent.fetch_pmc_article", fake_fetch)
+    good_yaml: str = yaml.safe_dump(_column_cfg(table), sort_keys=False)
+    state_dir: Path = tmp_path / "state"
+    recorder = distill.DistillRecorder(distill_dir(state_dir) / distill.RECORDS_FILENAME, invocation_id="a1b2c3d4e5f6")
+
+    result = run_supervisor(
+        ["PMC1", "PMC2"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(final_yaml=good_yaml),
+        map_threshold=0.8,
+        state_dir=state_dir,
+        workdir=tmp_path / "w",
+        min_rows=0,
+        distill_recorder=recorder,
+    )
+
+    assert result["records"]["PMC1"].status == "MAPPED"  # pyright: ignore[reportIndexIssue]
+    assert result["records"]["PMC2"].status == "SKIPPED"  # pyright: ignore[reportIndexIssue]
+    outcomes: list[dict[str, object]] = [json.loads(line) for line in recorder.outcome_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert [o["pmc_id"] for o in outcomes] == ["PMC1", "PMC2"]  # exactly once per article, in order
+    assert [o["run_status"] for o in outcomes] == ["MAPPED", "SKIPPED"]
+    assert [o["run_id"] for o in outcomes] == ["a1b2c3d4e5f6:PMC1", "a1b2c3d4e5f6:PMC2"]
+    for outcome in outcomes:
+        assert tuple(outcome) == distill.OUTCOME_KEYS
+    mapped, crashed = outcomes
+    assert mapped["ok"] is True
+    assert cast(float, mapped["coverage_pct"]) >= 0.8
+    assert cast(int, mapped["steps"]) >= 1
+    assert mapped["config_yaml_sha256"]  # the terminal config is hashed
+    assert mapped["provenance_ok"] is True  # the fixture config carries repo + publication
+    assert mapped["judge_score"] is None  # no judge model ran
+    assert crashed["ok"] is None  # crashed before any build: nothing measured
+    assert crashed["error_codes"] == []
+
+    # begin_run opened the scope before the wrap: every agent record carries its article's run_id.
+    records: list[dict[str, object]] = [json.loads(line) for line in recorder.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert records, "the wrapped model must record at least one call"
+    assert {r["run_id"] for r in records} == {"a1b2c3d4e5f6:PMC1"}  # PMC2 crashed before its model was built
+    assert recorder.call_index == len(records)  # outcome lines never advance the record counter
+
+
+def test_supervisor_captures_outcomes_for_early_exit_runs(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Gate-rejected and derive-only runs capture an outcome row too (REQ-OUT-18).
+
+    Why: the validate-gate SKIPPED and derive-mode DERIVED exits leave the loop via ``continue``
+    and therefore reach neither the success-path capture (after the improve loop) nor the
+    except-path one. A gate-failed run — the agent produced unusable YAML — is the most
+    instructive negative example the corpus can hold, and a DERIVED run is the only record of a
+    config that was derived but deliberately not built; if either vanished, its records would
+    stay unmatched (``weight`` 0.0) and the "one outcome line per run" contract in
+    ``docs/agent.md`` would be false. This module skips without ``[agent]``; the capture guard
+    itself is proven in ``tests/test_distill.py``.
+    """
+    table: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+    _patch_fetch(monkeypatch, table)
+    good_yaml: str = yaml.safe_dump(_column_cfg(table), sort_keys=False)
+
+    # Run 1: the model's final answer fails the validate_table_config gate -> SKIPPED via continue.
+    gate_recorder = distill.DistillRecorder(distill_dir(tmp_path / "gate") / distill.RECORDS_FILENAME, invocation_id="f00dfeed0000")
+    gate_result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(final_yaml="not a table config"),
+        map_threshold=0.8,
+        state_dir=tmp_path / "gate",
+        workdir=tmp_path / "w1",
+        min_rows=0,
+        distill_recorder=gate_recorder,
+    )
+    assert gate_result["records"]["PMC1"].status == "SKIPPED"  # pyright: ignore[reportIndexIssue]
+
+    # Run 2: derive_only with a valid config -> DERIVED via continue (no build ever happens).
+    derived_recorder = distill.DistillRecorder(distill_dir(tmp_path / "der") / distill.RECORDS_FILENAME, invocation_id="cafeba5e0000")
+    derived_result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(final_yaml=good_yaml),
+        map_threshold=0.8,
+        state_dir=tmp_path / "der",
+        workdir=tmp_path / "w2",
+        min_rows=0,
+        derive_mode="derive_only",
+        distill_recorder=derived_recorder,
+    )
+    assert derived_result["records"]["PMC1"].status == "DERIVED"  # pyright: ignore[reportIndexIssue]
+
+    for recorder, expected_status in ((gate_recorder, "SKIPPED"), (derived_recorder, "DERIVED")):
+        outcomes = [json.loads(line) for line in recorder.outcome_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(outcomes) == 1, f"{expected_status} run must land exactly one outcome line"
+        outcome = outcomes[0]
+        assert tuple(outcome) == distill.OUTCOME_KEYS
+        assert outcome["run_status"] == expected_status
+        assert outcome["run_id"] == f"{recorder.invocation_id}:PMC1"
+        records = [json.loads(line) for line in recorder.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert records, "the wrapped model must have recorded its calls"
+        assert {r["run_id"] for r in records} == {outcome["run_id"]}  # joinable, not orphaned
+
+    gate_outcome = json.loads(gate_recorder.outcome_path.read_text(encoding="utf-8").splitlines()[0])
+    assert gate_outcome["ok"] is None  # nothing was ever built
+    assert gate_outcome["config_yaml_sha256"] is None  # the invalid answer is not hashed
+    assert gate_outcome["error_codes"] == []
+    derived_outcome = json.loads(derived_recorder.outcome_path.read_text(encoding="utf-8").splitlines()[0])
+    assert derived_outcome["config_yaml_sha256"]  # the derived config IS the terminal artifact
+    assert derived_outcome["ok"] is None  # not built here: measured stays null, never guessed
+
+
+def test_supervisor_captures_outcome_for_the_normalized_gate_exit(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SECOND validate gate (post-normalization) captures its outcome too (REQ-OUT-18).
+
+    Why: there are two gate exits — the raw final answer and the normalized answer (normalization
+    mutates ``source.local`` values, so a config that passed the first gate can fail the second).
+    Only the first is exercised end-to-end elsewhere; the second capture call sits on an equally
+    early ``continue`` and would silently rot on kwarg drift without a direct test. Forcing the
+    second gate to fail (valid raw answer + normalization stubbed to return an invalid one) proves
+    the outcome row lands, hashes nothing (the invalid config is never persisted as terminal), and
+    joins the run's records.
+    """
+    table: Path = _write_table(tmp_path, "good.tsv", "brca1\tmapk1\nbrca1\tmapk1\n")
+    _patch_fetch(monkeypatch, table)
+    good_yaml: str = yaml.safe_dump(_column_cfg(table), sort_keys=False)
+    monkeypatch.setattr("tablassert.agent.normalize_agent_table_config", lambda *args, **kwargs: "still not a config")  # pyright: ignore[reportArgumentType]
+    recorder = distill.DistillRecorder(distill_dir(tmp_path / "norm") / distill.RECORDS_FILENAME, invocation_id="babecafe0000")
+
+    result = run_supervisor(
+        ["PMC1"],
+        fullmap=fullmap_db,
+        build_model_factory=lambda: make_fake_model(final_yaml=good_yaml),
+        map_threshold=0.8,
+        state_dir=tmp_path / "norm",
+        workdir=tmp_path / "w",
+        min_rows=0,
+        distill_recorder=recorder,
+    )
+    assert result["records"]["PMC1"].status == "SKIPPED"  # pyright: ignore[reportIndexIssue]
+    assert "normalized agent answer failed" in cast(str, result["records"]["PMC1"].notes)  # pyright: ignore[reportIndexIssue]
+
+    outcomes = [json.loads(line) for line in recorder.outcome_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(outcomes) == 1
+    outcome = outcomes[0]
+    assert tuple(outcome) == distill.OUTCOME_KEYS
+    assert outcome["run_status"] == "SKIPPED"
+    assert outcome["run_id"] == "babecafe0000:PMC1"
+    assert outcome["config_yaml_sha256"] is None  # never persisted as terminal
+    records = [json.loads(line) for line in recorder.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert {r["run_id"] for r in records} == {outcome["run_id"]}
+
+
 def test_supervisor_improve_loop_accepts_better(tmp_path: Path, fullmap_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A first config below threshold is genuinely improved by propose_config_edit and accepted.
 

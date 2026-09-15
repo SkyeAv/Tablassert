@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from tablassert import distill
-from tablassert.agent import distill_dir, make_distilling_model, make_fake_model
+from tablassert.agent import capture_run_outcome, distill_dir, make_distilling_model, make_fake_model
 
 
 class _Msg:
@@ -533,6 +533,99 @@ def test_record_outcome_normalizes_nested_structs_and_warns_on_unknown_keys(tmp_
     assert len(cap.warnings) == 1  # only the malformed one warns; None is just unmeasured
     assert "tool_calls" in cap.warnings[0]
     assert "mapping" in cap.warnings[0]
+
+
+def test_capture_run_outcome_is_guarded_and_needs_no_agent_extra(tmp_path: Path) -> None:
+    """``capture_run_outcome`` assembles + appends one full outcome line — with NO ``[agent]`` extra.
+
+    Why: the supervisor wiring (``begin_run``, the status-decision call site, the except-branch call
+    site) is end-to-end tested only in ``tests/test_agent_supervisor.py`` behind a module-level
+    ``importorskip("smolagents")`` — which SKIPS in CI, so it is bonus evidence, never the proof.
+    THIS module has no importorskip and runs in the base environment CI actually uses, so it is the
+    load-bearing proof that the wrapper is importable and callable there: it must drive a real
+    ``DistillRecorder`` to a schema-uniform outcome line joined on the open ``begin_run`` scope.
+    """
+    recorder = distill.DistillRecorder(tmp_path / distill.RECORDS_FILENAME, invocation_id="a1b2c3d4e5f6")
+    recorder.begin_run("PMC1")
+
+    capture_run_outcome(
+        recorder,
+        run_id=recorder.run_id,
+        pmc_id="PMC1",
+        model_id="fake-model",
+        run_status="MAPPED",
+        report={
+            "ok": True,
+            "coverage_pct": 0.83,
+            "measured": True,
+            "head": False,
+            "qc_pass_rate": 1.0,
+            "biolink_valid_pct": 0.9,
+            "node_count": 12,
+            "edge_count": 30,
+            "unresolved": ["brca1"],
+            "predicate_advice": [],
+            "multivalued_suspects": [],
+            "error_codes": [],
+        },
+        record={"attempts": 2, "best_coverage": 0.83, "coverage_history": [0.5, 0.83], "section_coverages": [0.83], "config_chars": 120},
+        metrics={"total_tool_calls": 3, "failed_tool_calls": 1, "wrong_tool_calls": 0, "redundant_tool_calls": 0, "total_tokens": 500, "steps": 4},
+        config_yaml="provenance:\n  repo: PMC\n  publication: PMC1\n",
+        map_threshold=0.25,
+        biolink_threshold=0.0,
+        judge_threshold=None,
+    )
+
+    (outcome,) = _read_records(recorder.outcome_path)
+    assert tuple(outcome) == distill.OUTCOME_KEYS  # the canonical key set, in canonical order
+    assert outcome["run_id"] == "a1b2c3d4e5f6:PMC1"  # joined on the open begin_run scope
+    assert (outcome["run_status"], outcome["ok"], outcome["coverage_pct"]) == ("MAPPED", True, 0.83)
+    assert outcome["unresolved_count"] == 1  # the list landed as a count
+    assert outcome["error_codes"] == []
+    assert outcome["tool_calls"] == {"total": 3, "failed": 1, "wrong": 0, "redundant": 0}
+    assert outcome["gate"] == {"map_threshold": 0.25, "biolink_threshold": 0.0, "judge_threshold": None}
+    assert outcome["provenance_ok"] is True
+    assert outcome["config_yaml_sha256"] is not None
+    assert recorder.call_index == 0  # an outcome is not a training record
+    assert not recorder.path.exists()  # nothing was written to the ChatML records file
+
+
+def test_capture_run_outcome_swallows_a_raising_recorder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A raising recorder, a recorder without ``record_outcome``, or bad kwargs: logged + swallowed.
+
+    Why: outcome capture is observability, not pipeline logic — the corpus row matters (a crashed
+    run is the negative example the weighting step needs), but a capture failure must never change a
+    supervisor run's status, abort a batch, or mask the run's own error. The guard therefore
+    swallows assembly errors (``build_outcome`` failing loud on a violated call contract) and sink
+    errors alike, and names each failure in a warning instead of staying silent.
+    """
+    cap = _CapturingLogger()
+    monkeypatch.setattr("tablassert.agent.logger", cap)
+
+    class ExplodingRecorder:
+        def record_outcome(self, outcome: object) -> None:
+            raise OSError("disk full")
+
+    kwargs: dict[str, Any] = {
+        "run_id": None,
+        "pmc_id": "PMC1",
+        "model_id": None,
+        "run_status": "SKIPPED",
+        "report": None,
+        "record": None,
+        "metrics": None,
+        "config_yaml": None,
+        "map_threshold": 0.25,
+        "biolink_threshold": 0.0,
+        "judge_threshold": None,
+    }
+    capture_run_outcome(ExplodingRecorder(), **kwargs)  # the sink raises: must not propagate
+    assert len(cap.warnings) == 1  # the failure is named, not silent
+
+    capture_run_outcome(object(), **kwargs)  # no record_outcome at all: a logged no-op
+    capture_run_outcome(ExplodingRecorder(), run_status="SKIPPED")  # assembly itself fails (missing kwargs): still swallowed
+    assert len(cap.warnings) == 3
+    assert not (tmp_path / distill.OUTCOMES_FILENAME).exists()  # no stray partial write
 
 
 def test_distill_module_has_no_third_party_imports() -> None:
