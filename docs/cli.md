@@ -1,7 +1,7 @@
 # CLI Reference
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
-exposes **six subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `validate`,
+exposes **seven subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -13,6 +13,7 @@ for the live surface.
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
 | [`distill-export`](#distill-export) | Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset |
+| [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model |
 
@@ -95,7 +96,8 @@ Use this to convert a distillation dataset recorded with
 [`agent --distill`](#agent) into an on-disk Hugging Face dataset (`save_to_disk`). Requires the
 `[distill]` extra (`pip install "tablassert[distill]"`, pulls `datasets`). The raw NDJSON already
 loads directly in Unsloth Studio and via `datasets.load_dataset("json", ...)` — this export is
-only needed for `datasets`-native workflows.
+only needed for `datasets`-native workflows. Keep derived training output in a separate directory;
+`distill-export` loads every `*.ndjson` under its input directory.
 
 ```bash
 tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dataset
@@ -105,6 +107,41 @@ tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dat
 | --- | --- | --- | --- | --- |
 | `--distill-dir`, `-dd` | Path | Yes | n/a | Directory holding the recorded `*.ndjson` files (exit 2 when empty) |
 | `--out`, `-o` | Path | Yes | n/a | Destination directory for the `save_to_disk` dataset |
+
+## distill-weigh
+
+Join `agent --distill` records to their sibling outcomes, compute deterministic reward weights, and
+write one flat training row per input record for LoRA/QLoRA supervised fine-tuning. This is data
+selection, not RLHF: no reward model or online trainer is involved. Keep the output outside the
+input directory because `distill-export` loads every `*.ndjson` in its directory.
+
+```bash
+tablassert distill-weigh --distill-dir .tablassert/agent/distill --out ./training/train.ndjson
+# Then optionally convert the weighed rows to a Hugging Face dataset:
+tablassert distill-export --distill-dir ./training --out ./hf-dataset
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--distill-dir`, `-dd` | Path | Yes | n/a | Input directory containing record and outcome `*.ndjson` files |
+| `--out`, `-o` | Path | Yes | n/a | Training NDJSON destination; must be outside `--distill-dir` |
+| `--policy`, `-p` | string (`threshold`, `best-of-n`, or `replication`) | No | `threshold` | Selection policy; validated at runtime |
+| `--threshold`, `-t` | float | No | `0.75` | Minimum weight for the `threshold` policy |
+| `--top-n`, `-tn` | int | No | `2` | Number retained per `pmc_id` group for `best-of-n` |
+| `--replication-k`, `-rk` | int | No | `2` | Replication slope for `replication`, bounded to 0–3 |
+| `--reward-config`, `-rc` | Path | No | `None` | YAML/JSON reward configuration override |
+| `--edge-ref` | float | No | `None` | Breadth reference override; otherwise the corpus median |
+| `--purpose` | str | No | `agent` | Keep this purpose, or use literal `all` to disable filtering |
+| `--final-call-only` | bool flag | No | `False` | Keep only the highest `call_index` per run |
+| `--manifest` | Path | No | `<out>.manifest.json` | Reproducibility manifest destination |
+
+The manifest JSON records the resolved reward configuration, resolved `edge_ref` and its source, join
+statistics, selected/unmatched counts, and nested `distinct` diversity counters for `pmc_id` and
+`config_yaml_sha256` before and after selection. Source paths are resolved absolute paths for portable
+provenance. Malformed input, missing records/outcomes, invalid policies or knobs, unmatched records,
+and an output inside the input directory fail with exit 2 and an actionable message. A corpus without a
+comparable build emits a warning and records a null `edge_ref`; its breadth contribution is 0.0. Replicas
+are counts on rows, not physical row duplication.
 
 ---
 
