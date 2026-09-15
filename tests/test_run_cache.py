@@ -1004,3 +1004,155 @@ def test_plan_keeps_a_two_member_group_when_peers_defect_deeper() -> None:
     # The k=5 group keeps exactly one producer and one consumer — nothing was over-removed.
     assert plan.entries[2] == PlanEntry(prefix_len=5, produce_digest=shallow_digest)
     assert plan.entries[3] == PlanEntry(resume_digest=shallow_digest, prefix_len=5)
+
+
+# --- compile_subgraph resume/snapshot seam ----------------------------------------------------
+#
+# The seam ``build_pipeline`` Stage 5 drives: a producer offers every checkpoint to ``snapshot``
+# and continues from the parquet it just wrote, a consumer hands ``resume`` the snapshot its
+# producer stored and skips the ops it covers. Both parameters are keyword-only and default to
+# ``None``, so the historical call sites — ``cli.py``'s unplanned branch, ``test_lib.py``'s e2e
+# calls, and ``agent.py``'s ``_reduce_ops`` mirror (which never uses the run cache) — keep their
+# exact behavior. The defaults test below pins that instead of assuming it.
+
+
+def _seam_source(tmp_path: Path) -> Path:
+    """Write the two-column headerless TSV the seam fixtures load (polars names them ``column_1``/``column_2``)."""
+    source: Path = tmp_path / "seam.tsv"
+    source.write_text("brca1\t1e-8\nmapk1\t0.5\n")
+    return source
+
+
+def _seam_ops(source: Path, store: Path, load: Callable = lib.csv) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """A real load → index → encode → clean → edge → write op list, shaped like ``Tcode.collect``'s.
+
+    Args:
+        source: TSV the load op reads.
+        store: Parquet path the final ``to_store`` writes — the only slot that distinguishes two
+            sections' lists here, so every prefix of two such lists is shared.
+        load: Source-load callable, so a test can count loads.
+
+    Returns:
+        Cleaned ``(callable, args)`` ops. Note ``OP_COST`` prices the real ``lib.csv`` (2): a
+        counting wrapper is unpriced and falls back to ``DEFAULT_OP_COST`` (1), which moves the
+        cost floor one op later — so callers must take their checkpoint from :func:`checkpoints`
+        rather than hardcoding a prefix length.
+    """
+    return [
+        (load, (source, "\t")),
+        (lib.idx, ()),
+        (lib.column, ("subject", "column_1")),
+        (lib.column, ("original_subject", "column_1")),
+        (lib.coerce_columns, ()),
+        (lib.clean_numeric, ()),
+        (lib.value, ("predicate", "biolink:related_to")),
+        (lib.to_store, (store, store.stem)),
+    ]
+
+
+def test_compile_subgraph_resume_skips_prefix_and_writes_identical_store(tmp_path: Path) -> None:
+    """A resumed section skips the shared prefix and still writes a byte-identical store.
+
+    WHY: this is the user-visible promise of the run cache — sections that open with the same
+    instructions compute them ONCE. Three runs over one op list pin the whole handshake: a plain
+    full run (the pre-seam baseline), a producer that snapshots its assigned checkpoint, and a
+    consumer resumed from that snapshot. The consumer's parquet must be BYTE-identical to the
+    baseline's, because a snapshot that widened a dtype, dropped a column, or reordered rows would
+    silently change what a section writes; and the load op must not be invoked again, which is the
+    evidence that the first ``prefix_len`` ops were skipped rather than merely re-run.
+    """
+    source: Path = _seam_source(tmp_path)
+    loads: list[Path] = []
+
+    def counting_load(p: Path, sep: str) -> pl.LazyFrame:
+        """Counting stand-in for ``lib.csv``: record the load, then really load."""
+        loads.append(p)
+        return lib.csv(p, sep)
+
+    baseline_ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(source, tmp_path / "baseline.parquet")
+    producer_ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(source, tmp_path / "producer.parquet", load=counting_load)
+    consumer_ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(source, tmp_path / "consumer.parquet", load=counting_load)
+    # Only the final write differs, so every prefix is shared — and the digest computed here is the
+    # key ``RunCache`` stores under, exactly as ``plan_run`` derives it.
+    assert prefix_digest(producer_ops[:-1]) == prefix_digest(consumer_ops[:-1])
+    offered: list[int] = checkpoints(producer_ops)
+    assert offered, "the fixture must clear both worth-caching guards"
+    prefix_len: int = offered[0]
+    digest: str = prefix_digest(producer_ops[:prefix_len])
+
+    baseline: Path = lib.compile_subgraph(baseline_ops)
+    seen: list[int] = []
+    with RunCache() as cache:
+
+        def snapshot(position: int, lf: pl.LazyFrame) -> None:
+            """Record every offered checkpoint and store the assigned one."""
+            seen.append(position)
+            if position == prefix_len:
+                cache.store(digest, lf)
+
+        producer: Path = lib.compile_subgraph(producer_ops, snapshot=snapshot)
+        assert loads == [source]  # the producer built the shared prefix exactly once
+        assert seen == offered  # every checkpoint offered, ascending, keyed by prefix length
+        resumed: pl.LazyFrame | None = cache.load(digest)
+        assert resumed is not None
+        consumer: Path = lib.compile_subgraph(consumer_ops, resume=(prefix_len, resumed))
+        summary: RunCacheStats = cache.stats()
+
+    assert loads == [source]  # the consumer never invoked a skipped op
+    assert (summary.stores, summary.hits, summary.misses) == (1, 1, 0)
+    expected: bytes = baseline.read_bytes()
+    assert producer.read_bytes() == expected
+    assert consumer.read_bytes() == expected
+    assert len({baseline, producer, consumer}) == 3  # three distinct stores, one identical result
+
+
+@pytest.mark.parametrize("prefix_len", [-1, 8, 9])
+def test_compile_subgraph_rejects_invalid_resume_boundaries(tmp_path: Path, prefix_len: int) -> None:
+    """Reject negative and exhausted resume prefixes before executing any operation.
+
+    WHY: a prefix at or beyond the instruction count skips the final ``to_store`` and returns a
+    LazyFrame instead of the promised Path; a negative prefix silently changes the resume contract.
+    The coded error must fire before the source or snapshot can be touched.
+    """
+    ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(_seam_source(tmp_path), tmp_path / "out.parquet")
+    with pytest.raises(RunCacheError, match="runcache-invalid-resume"):
+        lib.compile_subgraph(ops, resume=(prefix_len, pl.DataFrame().lazy()))
+
+
+def test_compile_subgraph_rejects_empty_tcode_loudly() -> None:
+    """An empty operation list is never treated as a successful subgraph compile.
+
+    WHY: there is no final write operation to execute, so returning the seed or ``None`` would
+    silently violate the compile_subgraph -> Path contract. Empty tcode is invalid with or without
+    a resume tuple and must fail with the same coded run-cache validation error.
+    """
+    for resume in (None, (0, pl.DataFrame().lazy())):
+        with pytest.raises(RunCacheError, match="runcache-invalid-resume"):
+            lib.compile_subgraph([], resume=resume)
+
+
+def test_compile_subgraph_defaults_are_no_op(tmp_path: Path) -> None:
+    """Without ``resume``/``snapshot`` the seam changes nothing: same bytes, same phase sequence.
+
+    WHY: every pre-existing call site relies on the historical contract, and the run cache must not
+    leak into a build that never planned one. Two runs of one op list — bare, and passing the new
+    keywords explicitly as ``None`` — must write byte-identical parquet and fire the identical
+    phase sequence, hardcoded here (not recomputed from ``_phase_of``) so a change to the phase
+    mapping cannot make the test agree with itself. The run-cache tag must never appear when
+    nothing was resumed: a stray ``cache`` sub-step would misreport progress on every ordinary build.
+    """
+    source: Path = _seam_source(tmp_path)
+    bare_ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(source, tmp_path / "bare.parquet")
+    explicit_ops: list[tuple[Callable, tuple[Any, ...]]] = _seam_ops(source, tmp_path / "explicit.parquet")
+    bare_phases: list[str] = []
+    explicit_phases: list[str] = []
+
+    bare: Path = lib.compile_subgraph(bare_ops, on_phase=bare_phases.append)
+    explicit: Path = lib.compile_subgraph(explicit_ops, on_phase=explicit_phases.append, resume=None, snapshot=None)
+
+    assert bare.read_bytes() == explicit.read_bytes()
+    assert bare_phases == explicit_phases
+    # One tag per phase transition over the fixture's ops: load(csv,idx) → encode(column x 2) →
+    # clean(coerce_columns,clean_numeric) → edge(value "predicate") → write(to_store).
+    assert bare_phases == ["load", "encode", "clean", "edge", "write"]
+    assert lib.CACHE_PHASE not in bare_phases
