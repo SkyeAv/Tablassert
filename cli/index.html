@@ -726,6 +726,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="build-kg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-run-scoped-tcode-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic run-scoped TCode cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1302,6 +1319,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="build-kg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#automatic-run-scoped-tcode-cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic run-scoped TCode cache
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1961,6 +1995,16 @@ stage prints a green <code>✓ Stage N · NAME · elapsed</code> line above the 
 Subgraphs the detail line also shows the per-section phase (<code>load</code>, <code>filter</code>, <code>clean</code>, <code>encode</code>,
 <code>resolve</code>, <code>qc</code>, <code>edge</code>, <code>provenance</code>, <code>significance</code>, <code>finalize</code>, <code>write</code>).</p>
 </details>
+<h3 id="automatic-run-scoped-tcode-cache">Automatic run-scoped TCode cache<a class="headerlink" href="#automatic-run-scoped-tcode-cache" title="Permanent link">&para;</a></h3>
+<p><code>build-kg</code> automatically caches only expensive TCode instruction prefixes shared by at least two
+sections. Worth-caching guards exclude trivial prefixes, and runs with no qualifying sharing create
+no cache. Snapshot keys use the bundled Rust XXH64 digest. Snapshots live in a temporary directory
+that is deleted when the build ends, including on failure; there is no persistent cache and no new
+CLI flag to control it.</p>
+<p>The <code>--head</code> option remains a debug/shape preview. When sections share a cached prefix, consumers
+reuse the producer's random sample, so identical samples for identical prefixes are intentional.
+With <code>--log</code>, resolve/audit lines from a shared label-free prefix are attributed to the producer
+section; other section-local operations retain their own section labels.</p>
 <hr />
 <h2 id="validate">validate<a class="headerlink" href="#validate" title="Permanent link">&para;</a></h2>
 <p>Use this to validate a configuration against a schema without running the build, ideal for CI and
