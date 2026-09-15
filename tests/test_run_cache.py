@@ -1084,11 +1084,12 @@ def test_compile_subgraph_resume_skips_prefix_and_writes_identical_store(tmp_pat
     seen: list[int] = []
     with RunCache() as cache:
 
-        def snapshot(position: int, lf: pl.LazyFrame) -> None:
+        def snapshot(position: int, lf: pl.LazyFrame) -> pl.LazyFrame | None:
             """Record every offered checkpoint and store the assigned one."""
             seen.append(position)
             if position == prefix_len:
                 cache.store(digest, lf)
+            return None
 
         producer: Path = lib.compile_subgraph(producer_ops, snapshot=snapshot)
         assert loads == [source]  # the producer built the shared prefix exactly once
@@ -1104,6 +1105,51 @@ def test_compile_subgraph_resume_skips_prefix_and_writes_identical_store(tmp_pat
     assert producer.read_bytes() == expected
     assert consumer.read_bytes() == expected
     assert len({baseline, producer, consumer}) == 3  # three distinct stores, one identical result
+
+
+def test_compile_subgraph_snapshot_replacement_avoids_producer_recompute(tmp_path: Path) -> None:
+    """A producer's stored prefix is collected once when the callback returns its replacement scan."""
+    evaluations: list[int] = []
+
+    def source() -> pl.LazyFrame:
+        """Create a tiny lazy source without doing any counted work."""
+        return pl.DataFrame({"value": [1]}).lazy()
+
+    def counted_prefix(lf: pl.LazyFrame) -> pl.LazyFrame:
+        """Count execution of a lazy prefix expression, not construction of its plan."""
+        return lf.with_columns(pl.col("value").map_elements(lambda value: evaluations.append(value) or value, return_dtype=pl.Int64))
+
+    def identity(lf: pl.LazyFrame) -> pl.LazyFrame:
+        """Keep enough cheap lazy ops to clear the checkpoint cost guard."""
+        return lf
+
+    output: Path = tmp_path / "producer.parquet"
+    ops: list[tuple[Callable, tuple[Any, ...]]] = [
+        (source, ()),
+        (counted_prefix, ()),
+        *[(identity, ()) for _ in range(6)],
+        (lib.to_store, (output, output.stem)),
+    ]
+    offered: list[int] = checkpoints(ops)
+    assert offered == [8]
+    prefix_len: int = offered[0]
+    digest: str = prefix_digest(ops[:prefix_len])
+
+    with RunCache() as cache:
+
+        def snapshot(position: int, lf: pl.LazyFrame) -> pl.LazyFrame | None:
+            """Store the selected prefix and hand its scan back to compile_subgraph."""
+            if position != prefix_len:
+                return None
+            cache.store(digest, lf)
+            replacement: pl.LazyFrame | None = cache.load(digest)
+            assert replacement is not None
+            return replacement
+
+        result: Path = lib.compile_subgraph(ops, snapshot=snapshot)
+
+    assert evaluations == [1]
+    assert pl.read_parquet(result)["value"].to_list() == [1]
 
 
 @pytest.mark.parametrize("prefix_len", [-1, 8, 9])

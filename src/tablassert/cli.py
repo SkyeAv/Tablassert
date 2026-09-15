@@ -218,13 +218,13 @@ def _run_cache_resume(cache: RunCache, entry: PlanEntry) -> tuple[int, pl.LazyFr
     return (entry.prefix_len, snapshot)
 
 
-def _run_cache_snapshot(cache: RunCache, entry: PlanEntry) -> Callable[[int, pl.LazyFrame], None] | None:
+def _run_cache_snapshot(cache: RunCache, entry: PlanEntry) -> Callable[[int, pl.LazyFrame], pl.LazyFrame | None] | None:
     """Build ``compile_subgraph``'s ``snapshot`` callback for one planned section.
 
     ``compile_subgraph`` offers EVERY checkpoint of the op list; only the one the plan assigned to
-    this producer is stored. The producer keeps its in-memory accumulator for its own final write,
-    while consumers read the one stored snapshot, so the shared prefix is materialized once for
-    consumers rather than recomputed in each one.
+    this producer is stored. After storing, the producer switches its accumulator to the same
+    materialized snapshot that consumers read, so its final write does not recompute the lazy
+    prefix. The cache remains ephemeral for this build only.
 
     Args:
         cache: This build's open run cache.
@@ -239,15 +239,34 @@ def _run_cache_snapshot(cache: RunCache, entry: PlanEntry) -> Callable[[int, pl.
     digest: str = entry.produce_digest
     prefix_len: int = entry.prefix_len
 
-    def snapshot(position: int, lf: pl.LazyFrame) -> None:
-        """Store this producer's assigned checkpoint.
+    def snapshot(position: int, lf: pl.LazyFrame) -> pl.LazyFrame | None:
+        """Store this producer's assigned checkpoint and return its materialized lineage.
 
         Args:
             position: Prefix length ``compile_subgraph`` just finished (1-based op count).
             lf: Frame that ``ops[:position]`` produced.
+
+        Returns:
+            The stored snapshot scan at the selected checkpoint, making the producer's remaining
+            tail consume the materialization; ``None`` for other offered checkpoints.
+
+        Raises:
+            RunCacheError: If the just-stored snapshot cannot be loaded, because continuing with
+                the original lazy lineage would silently recompute the producer prefix.
         """
-        if position == prefix_len:
-            cache.store(digest, lf)
+        if position != prefix_len:
+            return None
+        cache.store(digest, lf)
+        materialized: pl.LazyFrame | None = cache.load(digest)
+        if materialized is None:
+            from tablassert.runcache import RunCacheError
+
+            raise RunCacheError(
+                f"run cache could not load the snapshot just stored for digest {digest}; refusing to continue "
+                "with the original lazy producer lineage",
+                code="runcache-missing-snapshot",
+            )
+        return materialized
 
     return snapshot
 

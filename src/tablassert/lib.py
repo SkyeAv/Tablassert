@@ -1477,7 +1477,7 @@ def compile_subgraph(
     *,
     on_phase: Callable[[str], None] | None = None,
     resume: tuple[int, pl.LazyFrame] | None = None,
-    snapshot: Callable[[int, pl.LazyFrame], None] | None = None,
+    snapshot: Callable[[int, pl.LazyFrame], pl.LazyFrame | None] | None = None,
 ) -> Path:
     """Execute a Tcode operation list to build a subgraph parquet.
 
@@ -1492,7 +1492,10 @@ def compile_subgraph(
             default) runs every op from the first, i.e. the historical behavior.
         snapshot: Called as ``snapshot(position, frame)`` right after the op at each checkpoint
             position (``runcache.checkpoints(tcode)``) has run, with the frame ``tcode[:position]``
-            produced. ``None`` (the default) checkpoints nothing and never consults the cost guards.
+            produced. A callback may return a materialized replacement LazyFrame; when it does,
+            that replacement becomes the accumulator for the remaining producer tail, so the
+            stored prefix is not lazily recomputed by the producer's final write. ``None`` (the
+            default) checkpoints nothing and never consults the cost guards.
 
     Returns:
         Path to the written subgraph parquet.
@@ -1557,8 +1560,13 @@ def compile_subgraph(
             acc = fn(acc, *args) if acc is not None else fn(*args)  # pyright: ignore
         if snapshot is not None and position + 1 in checkpoint_positions:
             # A checkpoint never lands on a write op (runcache.WRITE_OPS), so acc is the frame
-            # tcode[:position + 1] produced, never the Path a final to_store returned.
-            snapshot(position + 1, acc)  # pyright: ignore[reportArgumentType]
+            # tcode[:position + 1] produced, never the Path a final to_store returned. A producer
+            # may return a scan of its stored snapshot here; replacing the accumulator at this
+            # seam makes the final write consume that materialization instead of recomputing the
+            # original lazy prefix.
+            replacement: pl.LazyFrame | None = snapshot(position + 1, acc)  # pyright: ignore[reportArgumentType]
+            if replacement is not None:
+                acc = replacement
     return acc  # pyright: ignore
 
 
