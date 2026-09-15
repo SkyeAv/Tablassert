@@ -91,6 +91,56 @@ in the config). Small tables and worksheets are filtered before this context is 
     Only the **open-access subset** of PMC (~half) is available here. Articles are **CC-BY**: cite the
     source and DOI (e.g. PMC11708054 → [10.1128/mbio.01679-24](https://doi.org/10.1128/mbio.01679-24)).
 
+## Network resilience
+
+Every network call the agent makes — the PMC-AWS object listing, article metadata, and file downloads
+— routes through one stdlib-only seam, `tablassert.net`, which classifies each failure as transient
+(worth retrying) or permanent (fail fast) and retries the transient ones with bounded jittered
+backoff. The fleet run that motivated this lost 2,194 of 2,507 queue failures (87.5%) to DNS-shaped
+errors (`[Errno -2] Name or service not known`): single-attempt fetches turned a recoverable
+resolver blip into a terminal `SKIPPED` for the whole article.
+
+| Transient (retried) | Permanent (fail fast) |
+| --- | --- |
+| DNS failures (`URLError` wrapping `socket.gaierror`, bare `gaierror`) | `ValueError` / `TypeError` / `KeyError` (malformed id, listing, JSON) |
+| Connection loss (`ConnectionError`, `ssl.SSLError`, `http.client.HTTPException`) | `PermissionError` (metadata not CC-licensed), `FileNotFoundError` (no OA versions / no table files) |
+| Timeouts (`TimeoutError`; `socket.timeout` *is* `TimeoutError` on Python 3.10+) | Any 4xx except 408 / 425 / 429 |
+| HTTP 408 / 425 / 429 and every 5xx | A bare `OSError` with a local errno (`ENOSPC`, `EACCES`, `ENOENT`) |
+| A bare `OSError` with a network errno (`ECONNRESET`, `EPIPE`, `ENETUNREACH`, `EMFILE`, …) | |
+| Rate-limit / quota errors from optional libraries (`openai`, `litellm`, `httpx`), matched by exception **name** — never imported — or by a `rate limit` / `429` / `too many requests` message token; a `(reset after …)` hint then sets the wait, not the classification | |
+
+The HTTP retry budget is 4 attempts per call, sleeping 1.0 s before the second attempt and doubling
+per attempt up to 20.0 s, with the **sum** of sleeps inside one call capped at 60.0 s. When the
+failure carries a `Retry-After` header (or a `(reset after 90s)` quota hint in its message), the
+longer of that hint and the jittered doubling step is slept — the hint overrides the schedule only
+when it is longer, capped at 60 s. The worst case for one HTTP round
+trip is therefore 4 x 120 s timeout + 60 s backoff = 540 s before the call raises for good; the
+article is then `SKIPPED` with `error_code: network-transient` (see
+[checkpoint / rerun](#workspace-layout-target-graph-and-checkpoint-rerun)) and can be requeued.
+
+Article file downloads are idempotent, atomic, and bounded-parallel: a file that already exists
+non-empty is skipped **without any request** (a torn zero-length file re-downloads), each download
+writes a `.part` sibling that is atomically `os.replace`d into place on completion — and removed
+even on `KeyboardInterrupt`, so no half-written file survives — and up to 8 files fetch concurrently
+by default, with results collected in submission order. `concurrency < 1` fails before any network
+call is made.
+
+**Exactly one retry layer exists for LLM calls.** Smolagents' own rate-limit retryer is disabled
+(`retry=False`) and the OpenAI client's transport retries are off (`max_retries: 0`); the shared
+seam retries transient LLM failures — DNS, timeouts, 429, 5xx — with the same 4 attempts but a
+45-second per-call backoff budget. LiteLLM's internal backend retry is not exposed by its
+constructor and remains outside this control.
+
+**Worst-case wall clock.** The fleet forensic run recorded ~13–18 HTTP round trips per article
+(3 sequential listing/metadata calls plus one per downloaded file). At the per-call worst case of
+540 s (which includes the 120 s socket timeout on each attempt, not just the backoff), three serial
+calls plus ceil(15/8) = 2 parallel download waves bound the fetch phase at 5 x 540 s = 2,700 s =
+45 min; the LLM layer adds at most 29 logical calls x 45 s = 1,305 s ~
+21.8 min. Together that is ~67 min of the 90-minute per-article budget, leaving ~23 min for the
+real work of deriving, building, and auditing configs — and a fully-down article never hangs a
+worker: every call either succeeds, retries within budget, or raises, and an exhausted article is
+skipped with `network-transient` for requeue.
+
 ### Local payloads (non-open-access articles)
 
 Only the open-access subset of PMC is fetchable from the bucket. To run the **same** derive/build/improve
@@ -237,6 +287,19 @@ endpoint; neither is required):
   clear it. Defaults to `0.0` (report only): the rate is always measured and recorded, and raising
   the threshold turns that measurement into a terminal gate. See
   [Biolink validity](#biolink-validity) below.
+
+Both LLM-facing prompts are hard-bounded so a pathological article cannot outgrow the model's
+context window. The reflexion prompt caps its three interpolated blocks — current config at 8,000
+chars (`MAX_PROMPT_CONFIG_CHARS`), coverage report at 8,000 chars (`COVERAGE_PROMPT_CHARS`),
+article/table context at 40,000 chars (`MAX_PROMPT_CONTEXT_CHARS`) — and the judge prompt
+serializes the compact audit report bounded at 8,000 chars (`MAX_PROMPT_REPORT_CHARS`). Every
+`unresolved` term list keeps only its first 20 entries (`UNRESOLVED_CAP`) plus a visible `+N more`
+marker and an `unresolved_count` naming the original length, so truncation is never silent and the
+scale signal survives; the worst-case prompt is ~58,000 chars, about 15,000 tokens. The fleet distill
+telemetry that motivated this recorded reflexion prompts of 1.6M and 2.3M characters (689,241 and
+524,336 input tokens) — past every model's window, failing outright after paying for the
+serialization. Compaction happens only at prompt serialization: `map_coverage`, `build_and_audit`,
+and the supervisor's deterministic proposer still see the full uncapped reports.
 
 ### Distilling a fine-tuning dataset (`--distill`)
 
@@ -461,7 +524,7 @@ cannot retain a stale transient code. Consumers should inspect it only when `sta
 `network-transient` and `llm-transient` mean requeue the article; the CLI emits the latter through one
 bounded retry layer for the inner agent, reflexion, and judge. Smolagents' retryer and OpenAI's client
 retryer are disabled; LiteLLM's internal retry setting is not exposed by `LiteLLMModel.__init__`.
-The worst case is 29 logical calls per article (20 agent + 3 reflexion + 6 judge) × 45 seconds =
+The worst case is 29 logical calls per article (20 agent + 3 reflexion + 6 judge) x 45 seconds =
 1,305 seconds (about 21.8 minutes), leaving the rest of the 90-minute timeout for real work. Other
 codes are terminal for that payload. Switch on `error_code` rather than keyword-matching `notes`;
 `status` remains `SKIPPED` and the `SKIPPED: <error>` prefix remains for older consumers. The
