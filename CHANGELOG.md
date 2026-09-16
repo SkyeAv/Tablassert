@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 19.0.1 - 2026-09-16
+
+### Changed
+- **PyPI metadata now uses an updated short description.** The package description now names supported spreadsheet formats, YAML statement mapping, CURIE resolution, provenance, statistical annotations, and KGX output. ([#189](https://github.com/SkyeAv/Tablassert/pull/189))
+
 ## 19.0.0 - 2026-09-15
 
 ### Breaking Changes
