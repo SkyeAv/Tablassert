@@ -2,7 +2,7 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **seven subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `validate`,
+exposes **eight subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -15,6 +15,7 @@ for the live surface.
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
 | [`distill-export`](#distill-export) | Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset |
 | [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows |
+| [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model |
 
@@ -229,6 +230,57 @@ See [Fullmap](fullmap.md) for the data pipeline, output schema, and graph-config
 
 ---
 
+## quick-map
+
+Use this to see what fullmap entity resolution will do with one or more terms — the rows a
+`build-kg` run would emit for a cell holding that term under the filters shown. Each term runs
+through the exact build path (level-one/level-two normalization → probe-key extraction → redb
+fetch → filter, rank, dedup), one `rich` table per term in input order, with the term's normalized
+probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
+never one per term. A term with no matches prints a `no matches` line and still exits 0 — a miss is
+a finding, not a failure; only usage errors and an unreadable fullmap exit 2.
+
+```bash
+tablassert quick-map TERMS... --fullmap ./fullmap/data/fullmap.redb [OPTIONS]
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `TERMS` (`--terms`) | list[str] | Yes | n/a | One or more terms to resolve (positional); any casing or whitespace, and a CURIE string works too because fullmap indexes CURIEs and their equivalent identifiers as terms |
+| `--fullmap`, `-f` | Path | Yes | n/a | Fullmap redb file, or a directory holding one (resolved like the `Graph.fullmap` config field: `<dir>/fullmap.redb` then `<dir>/data/fullmap.redb`) |
+| `--taxon`, `-t` | int | No | `9606` | NCBI taxon id constraining taxon-bearing matches; `0` disables the filter like `taxon: null` does |
+| `--prioritize`, `-p` | list[str] | No | `None` | Biolink categories ranked higher (see the vocabulary note below) |
+| `--avoid`, `-a` | list[str] | No | `None` | Biolink categories dropped entirely (see the vocabulary note below) |
+| `--exclude-prefixes`, `-ep` | list[str] | No | `None` | CURIE namespace prefixes (text before the first `:`) to drop |
+| `--exclude-regex`, `-er` | list[str] | No | `None` | Regex patterns; any resolved CURIE matching one is dropped |
+
+The flags mirror the `NodeEncoding` config fields one-to-one, so a debugging invocation can copy
+the `taxon` / `prioritize` / `avoid` / `exclude_prefixes` / `exclude_regex` values straight from the
+section config whose resolution you are checking (see the
+[Table Configuration Reference](configuration/table.md)).
+
+```bash
+# One term against the default build location
+tablassert quick-map BRCA1 -f ./fullmap/data/fullmap.redb
+# Several terms (mixed hits and misses are fine) in one batched lookup
+tablassert quick-map BRCA1 "breast cancer 1" MONDO:0005148 nonsense -f ./fullmap/data/fullmap.redb
+# Reproduce a node column's exact resolution settings
+tablassert quick-map "TNF-alpha" -f ./fullmap -t 9606 -p Gene -a Disease -ep OMIM -er '^OMIM:\\d+$'
+```
+
+!!! note "The `--prioritize` / `--avoid` vocabulary"
+    These flags accept the **live Biolink entity category names** — the same vocabulary the
+    `prioritize` / `avoid` config keys accept — validated at run time rather than enumerated in
+    `--help`, because the `Categories` enum is built dynamically from the installed biolink-model.
+    An invalid value exits 2 naming the nearest valid names.
+
+!!! note "`-f` means `--fullmap` here"
+    On `build-kg`, `validate`, and `agent`, `-f` is `--configuration-file`; on `build-fullmap` it is
+    `--force`. Aliases are per-command, and `quick-map` takes no config and has no force mode —
+    `-f` is its one required input path.
+
+---
+
 ## build-kg
 
 Use this to build a KGX NDJSON knowledge graph (nodes, edges, and a Resource Ingest Guide) from a
@@ -376,7 +428,9 @@ once a model release drops the requirement.
 1. Author a table config, then a graph config that references it.
 2. `tablassert validate graph.yaml --schema graph`: fail fast on schema errors.
 3. `tablassert build-kg graph.yaml`: produce KGX NDJSON + RIG (add `--qc` to audit mappings).
-4. `tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson`: confirm the
+4. `tablassert quick-map TERM... -f <fullmap>`: spot-check how a term resolves under a column's
+   exact filters when a mapping needs debugging.
+5. `tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson`: confirm the
    output validates against the Biolink Model before shipping it downstream.
 
 ## Next Steps

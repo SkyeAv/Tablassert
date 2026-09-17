@@ -1258,6 +1258,7 @@ class ApiSignatureBlock:
 
 
 API_SIGNATURE_BINDINGS: tuple[ApiSignatureBinding, ...] = (
+    ApiSignatureBinding(API_DOCS / "fullmap.md", "quick_map", live=fullmap_api.quick_map),
     ApiSignatureBinding(API_DOCS / "fullmap.md", "resolve", live=fullmap_api.resolve),
     ApiSignatureBinding(API_DOCS / "lib.md", "resolve_many", live=lib_api.resolve_many),
     ApiSignatureBinding(API_DOCS / "qc.md", "fullmap_audit", live=qc_api.fullmap_audit),

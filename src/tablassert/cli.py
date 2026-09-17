@@ -17,7 +17,7 @@ from importlib.metadata import version as get_version
 from itertools import chain, pairwise
 from multiprocessing import Pool
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, Literal, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, Literal, NoReturn, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     import polars as pl
     import pydantic
 
+    from tablassert.biolink import Categories
     from tablassert.lib import Tcode
     from tablassert.models import Graph
     from tablassert.progress import PipelineProgress
@@ -966,6 +967,127 @@ def validate_kgx_command(
         print("KGX output is not Biolink-compliant.", file=sys.stderr)
         raise SystemExit(1)
     print("KGX output is Biolink-compliant.", file=sys.stderr)
+
+
+@APP.command(name="quick-map")
+def quick_map_command(
+    terms: Annotated[list[str], cyclopts.Parameter(allow_leading_hyphen=False)],
+    *,
+    fullmap: Annotated[Path, cyclopts.Parameter(name=["--fullmap", "-f"])],
+    taxon: Annotated[int | None, cyclopts.Parameter(name=["--taxon", "-t"])] = 9606,
+    prioritize: Annotated[list[str] | None, cyclopts.Parameter(name=["--prioritize", "-p"])] = None,
+    avoid: Annotated[list[str] | None, cyclopts.Parameter(name=["--avoid", "-a"])] = None,
+    exclude_prefixes: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-prefixes", "-ep"])] = None,
+    exclude_regex: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-regex", "-er"])] = None,
+) -> None:
+    """Show what fullmap entity resolution does with one or more terms, as a build would see it.
+
+    Each term runs through the exact op chain a build runs per node column -- level-one/level-two
+    normalization, probe-key extraction, the redb fetch, then ``filter_and_rank``'s taxon filter,
+    category prioritize/avoid, prefix/regex exclusion, ``PR`` scoring, and best-tier dedup -- so the
+    printed rows are the rows ``build-kg`` would emit for a cell holding that term under a
+    ``NodeEncoding`` carrying the same settings. Use it to debug a mapping ("why did this cell
+    resolve to that CURIE?") or to smoke-test a freshly built fullmap. The flags mirror the
+    ``NodeEncoding`` config fields one-to-one; ``--taxon`` defaults to 9606 like the config does,
+    and ``--taxon 0`` disables the filter like ``taxon: null`` does.
+
+    ``--prioritize`` / ``--avoid`` accept the live Biolink entity category names -- the same
+    vocabulary those keys accept in a table config -- validated at run time rather than enumerated
+    here (the enum is built dynamically from the installed biolink-model), so an invalid value
+    exits 2 naming the nearest valid names. A term with no matches prints an explicit "no matches"
+    line (with the normalized probe keys it became, so the miss is diagnosable) and still exits 0:
+    a miss is a finding, not a failure. Only usage errors and an unreadable fullmap exit 2.
+
+    Args:
+        terms: One or more terms to resolve (positional); any casing or whitespace, and a CURIE
+            string works too because the fullmap indexes CURIEs and their equivalent identifiers
+            as terms.
+        fullmap: Path to the fullmap redb file, or a directory holding one (resolved like the
+            ``Graph.fullmap`` config field: ``<dir>/fullmap.redb`` then ``<dir>/data/fullmap.redb``).
+        taxon: NCBI taxon id constraining taxon-bearing matches; ``0`` disables the filter.
+        prioritize: Biolink categories ranked higher (see the vocabulary note above).
+        avoid: Biolink categories dropped entirely (see the vocabulary note above).
+        exclude_prefixes: CURIE namespace prefixes (text before the first ':') to drop.
+        exclude_regex: Regex patterns; any resolved CURIE matching one is dropped.
+    """
+    from difflib import get_close_matches
+
+    from rich.console import Console
+    from rich.table import Table
+
+    from tablassert import rs
+    from tablassert.fullmap import _KNOWN_CATEGORIES, _probe_keys, fullmap_db_path, quick_map
+
+    def fail(message: str) -> NoReturn:
+        """Print one actionable user error and use the CLI's documented exit status."""
+        print(f"tablassert quick-map: {message}", file=sys.stderr)
+        raise SystemExit(2)
+
+    # Flag validation precedes any fullmap access: a typo'd category or regex is the user's fastest
+    # loop to close, and these checks are pure so they fire before the redb is even resolved.
+    for label, categories in (("prioritize", prioritize), ("avoid", avoid)):
+        for category in categories or []:
+            if category not in _KNOWN_CATEGORIES:
+                nearest: list[str] = get_close_matches(category, _KNOWN_CATEGORIES, n=3, cutoff=0.5)
+                hint: str = f"; did you mean {', '.join(repr(x) for x in nearest)}" if nearest else ""
+                fail(
+                    f"--{label} value {category!r} is not a known Biolink entity category{hint}; accepted values are the same names the `prioritize`/`avoid` config keys accept"
+                )
+    for pattern in exclude_regex or []:
+        # Mirrors the NodeEncoding.exclude_regex validator: an empty pattern matches EVERY CURIE
+        # and would silently drop all candidates, and a non-polars regex would die mid-filter.
+        if not str(pattern).strip():
+            fail(f"--exclude-regex entries must be non-empty patterns (an empty pattern matches every CURIE), got {pattern!r}")
+        try:
+            pl.Series([""]).str.contains(str(pattern))
+        except Exception as e:
+            fail(f"--exclude-regex entries must be polars-compatible regular expressions, got {pattern!r}: {e}")
+
+    db: Path = fullmap_db_path(fullmap)
+    if not db.is_file():
+        fail(f"no fullmap database at {db} (resolved from {fullmap}) — build one with tablassert build-fullmap")
+
+    results: dict[str, pl.DataFrame] = quick_map(
+        terms,
+        db,
+        taxon=str(taxon) if taxon else None,
+        prioritize=cast("list[Categories] | None", prioritize),
+        avoid=cast("list[Categories] | None", avoid),
+        exclude_prefixes=exclude_prefixes,
+        exclude_regex=exclude_regex,
+    )
+
+    # One run-level header: the resolved database, its source version, the term count, and every
+    # active filter, printed once so per-term output stays pure result. Joined as ONE string so a
+    # wrapped line never dangles a separator at the break.
+    console: Console = Console()
+    active: list[str] = []
+    if taxon:
+        active.append(f"taxon={taxon}")
+    for label, values in (("prioritize", prioritize), ("avoid", avoid), ("exclude-prefixes", exclude_prefixes), ("exclude-regex", exclude_regex)):
+        if values:
+            active.append(f"{label}={','.join(values)}")
+    header: str = " · ".join(["[bold]quick-map[/bold]", str(db), f"source {rs.fullmap_source_version()}", f"{len(results)} term(s)", *active])
+    console.print(header)
+
+    # Probe keys come from the SAME normalization quick_map probed with, so a title can never
+    # diagnose a miss against a key the lookup never used.
+    keys: pl.DataFrame = _probe_keys(terms)
+    columns: tuple[str, ...] = ("CURIE", "PREFERRED_NAME", "CATEGORY_NAME", "TAXON_ID", "SOURCE_NAME", "NLP_LEVEL", "PR")
+    for term, matches in results.items():
+        position: int = terms.index(term)
+        level_one_key: str = str(keys.get_column("term")[position])
+        level_two_key: str = str(keys.get_column("term_two")[position])
+        probe: str = level_one_key if level_one_key == level_two_key else f"{level_one_key} | {level_two_key}"
+        if matches.height == 0:
+            console.print(f"{term!r} → {probe} · no matches")
+            continue
+        table: Table = Table(title=f"{term!r} → {probe}", title_justify="left")
+        for column in columns:
+            table.add_column(column)
+        for row in matches.iter_rows(named=True):
+            table.add_row(*(str(row[column]) for column in columns))
+        console.print(table)
 
 
 @APP.command(name="agent")

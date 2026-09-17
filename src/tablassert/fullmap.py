@@ -12,7 +12,7 @@ from tablassert._lazy import LazyModule
 from tablassert.biolink import Categories
 from tablassert.errors import TablassertError
 from tablassert.log import cat
-from tablassert.nlp import _normalize_terms_series
+from tablassert.nlp import _normalize_terms_series, level_one, level_two
 
 logger = cat("FULLMAP")
 
@@ -754,3 +754,106 @@ def resolve(
         column_context=column_context,
         tag=tag,
     )
+
+
+def _probe_keys(terms: list[str]) -> pl.DataFrame:
+    """Normalize raw terms through the exact level-one/level-two steps a build applies.
+
+    This is ``Tcode.node_prep``'s normalization pair (``lib.py`` ``node_prep``) with no
+    encodings in front of it: ``level_one`` then ``level_two`` on one ``term`` column.
+    ``quick_map`` builds its probe frame from the result, and callers use it to show a
+    user what their raw input became -- both need the SAME normalization the build ran,
+    never a Python-side reimplementation, or a miss would be diagnosed against the wrong
+    key.
+
+    Args:
+        terms: Raw input terms, in input order.
+
+    Returns:
+        DataFrame with ``term`` (level-one) and ``term_two`` (level-two) columns,
+        position-aligned with ``terms``.
+    """
+    return level_two(level_one(pl.LazyFrame({"term": terms}), "term"), "term").collect()
+
+
+def quick_map(
+    terms: list[str],
+    db: Path,
+    *,
+    taxon: str | None = "9606",
+    prioritize: list[Categories] | None = None,
+    avoid: list[Categories] | None = None,
+    exclude_prefixes: list[str] | None = None,
+    exclude_regex: list[str] | None = None,
+) -> dict[str, pl.DataFrame]:
+    """Resolve raw terms against a fullmap exactly as a build would, one entry per input.
+
+    This is the ``tablassert quick-map`` core: it answers "what will entity resolution do
+    with THIS term under THESE filters?" by running the same op chain a build runs per
+    node column -- normalize (``level_one``/``level_two``) -> extract probe keys
+    (``distinct``) -> fetch (``lookup_rows``) -> filter, rank, and dedup
+    (``filter_and_rank``) -- over a one-column frame instead of a table. Nothing is
+    reimplemented, so the returned rows are the rows a build would emit for a cell holding
+    that term under a ``NodeEncoding`` carrying the same settings.
+
+    Differences from a build, both deliberate:
+
+    - ``column_context`` is fixed ``False``. The frequency tiebreaker counts category
+      occurrences within one resolved column of a real table; a handful of probe terms is
+      not that population, so enabling it would invent a ranking signal no build would
+      have.
+    - The whole input is ONE batch through ONE ``lookup_rows`` call (the same pooling
+      ``resolve_batch`` does across columns), not one round trip per term.
+
+    Grouping back to inputs: a ranked row's ``term`` is a normalized probe key, so each
+    input is reported under every probe key it produced that survived ``distinct``'s
+    junk-term filter. Two inputs that normalize to the same key both report that key's
+    matches -- the fullmap genuinely cannot distinguish them. An input whose keys were
+    all dropped (a purely numeric or sentinel term) maps to a zero-row frame, because a
+    build would never probe it either. Repeated identical inputs collapse to one entry.
+
+    Args:
+        terms: Raw input terms, in input order (any casing/whitespace; a CURIE string
+            works too, because the builder indexes CURIEs and their equivalent
+            identifiers as terms).
+        db: Path to the fullmap redb file (already resolved via ``fullmap_db_path``).
+        taxon: Optional NCBI taxon id constraining taxon-bearing matches; rows with
+            ``TAXON_ID`` 0 are retained. ``None`` disables the filter.
+        prioritize: Categories to boost in ranking.
+        avoid: Categories to drop entirely (see :func:`filter_and_rank`, which also drops
+            categories the ``Categories`` enum cannot name).
+        exclude_prefixes: CURIE namespace prefixes (text before the first ':') to drop.
+        exclude_regex: Regex patterns; any CURIE matching one is dropped.
+
+    Returns:
+        Insertion-ordered mapping of each distinct input term to its ranked matches
+        DataFrame (``filter_and_rank``'s schema: ``term``, ``CURIE``, ``PREFERRED_NAME``,
+        ``CATEGORY_NAME``, ``TAXON_ID``, ``SOURCE_NAME``, ``SOURCE_VERSION``,
+        ``NLP_LEVEL``, ``PR``). A term with no matches maps to ``empty_matches(False)``,
+        never to a missing key, so callers never branch on presence.
+    """
+    if not terms:
+        return {}
+    # Position-aligned (level-one, level-two) keys per input; ALSO the display truth for
+    # callers, so probe keys and titles can never drift apart.
+    keys: pl.DataFrame = _probe_keys(terms)
+    # distinct() dedups the probe keys across inputs, tags each with its NLP level, and
+    # drops numeric/sentinel/generic junk exactly as a build's term extraction does.
+    terms_df: pl.DataFrame = distinct(keys.lazy(), "term", "term_two").collect()
+    probe_keys: list[str] = terms_df.get_column("term").to_list()
+    probed: set[str] = set(probe_keys)
+    # ONE redb round trip for the whole batch (term cache, dimension maps, and lock retry
+    # all live inside lookup_rows), then ONE filter/rank pass whose per-term best-tier
+    # dedup already partitions results by probe key.
+    rows: list[dict[str, object]] = lookup_rows(db, probe_keys) if probe_keys else []
+    matches: pl.DataFrame = filter_and_rank(pl.DataFrame(rows), terms_df, taxon, prioritize, avoid, False, exclude_prefixes, exclude_regex)
+    level_one_col: pl.Series = keys.get_column("term")
+    level_two_col: pl.Series = keys.get_column("term_two")
+    out: dict[str, pl.DataFrame] = {}
+    for position, term in enumerate(terms):
+        candidates: list[str] = []
+        for key in (level_one_col[position], level_two_col[position]):
+            if key and key in probed and key not in candidates:
+                candidates.append(key)
+        out[term] = matches.filter(pl.col("term").is_in(candidates)) if candidates else empty_matches(False)
+    return out
