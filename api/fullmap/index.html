@@ -1049,6 +1049,78 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#quick_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quick_map()
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="quick_map()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-signature_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Function Signature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#return-value_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Return Value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-usage_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fidelity-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fidelity Notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1356,6 +1428,78 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#quick_map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quick_map()
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="quick_map()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#function-signature_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Function Signature
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#return-value_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Return Value
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#example-usage_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fidelity-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fidelity Notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1587,6 +1731,67 @@ dropped as well.</p>
 <h2 id="integration-with-qc">Integration with QC<a class="headerlink" href="#integration-with-qc" title="Permanent link">&para;</a></h2>
 <p>Entity resolution output is validated by <code>fullmap_audit()</code> from the <code>qc</code> module before being included in the knowledge graph.</p>
 <p>See <a href="../qc/">Quality Control</a> for details.</p>
+<h2 id="quick_map">quick_map()<a class="headerlink" href="#quick_map" title="Permanent link">&para;</a></h2>
+<p>Single-shot inspection core behind the <code>tablassert quick-map</code> CLI command: resolve raw terms
+against a fullmap exactly as a build would, one result frame per input term. It runs the same op
+chain a build runs per node column (normalization → probe keys → one batched redb fetch →
+filter/rank/dedup), so the returned rows are the rows <code>build-kg</code> would emit for a cell holding
+that term under a <code>NodeEncoding</code> with the same settings. The whole input is ONE batched lookup,
+never a round trip per term.</p>
+<h3 id="function-signature_1">Function Signature<a class="headerlink" href="#function-signature_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">quick_map</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  <span class="n">terms</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  <span class="n">db</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>  <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>  <span class="n">taxon</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;9606&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>  <span class="n">prioritize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Categories</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>  <span class="n">avoid</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">Categories</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>  <span class="n">exclude_prefixes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>  <span class="n">exclude_regex</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">pl</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span>
+</code></pre></div>
+<h3 id="parameters_1">Parameters<a class="headerlink" href="#parameters_1" title="Permanent link">&para;</a></h3>
+<p><strong><code>terms: list[str]</code></strong></p>
+<p>Raw input terms, in input order. Any casing or whitespace; a CURIE string works too, because the
+fullmap indexes CURIEs and their equivalent identifiers as terms.</p>
+<p><strong><code>db: Path</code></strong></p>
+<p>Path to the fullmap redb file (already resolved; see <code>fullmap_db_path()</code> and <a href="../../fullmap/">Fullmap</a>).</p>
+<p><strong><code>taxon: Optional[str]</code></strong></p>
+<p>Optional NCBI taxon id constraining taxon-bearing matches; rows with <code>TAXON_ID</code> 0 are retained.
+Defaults to <code>"9606"</code> like <code>NodeEncoding.taxon</code>; <code>None</code> disables the filter.</p>
+<p><strong><code>prioritize: Optional[list[Categories]]</code></strong></p>
+<p>Optional list of Biolink categories to prefer when multiple matches exist. Plain category-name
+strings are accepted alongside enum members.</p>
+<p><strong><code>avoid: Optional[list[Categories]]</code></strong></p>
+<p>Optional list of Biolink categories to exclude from results. When set, the column is an
+allow-list by complement: fullmap categories the <code>Categories</code> enum cannot name are dropped as
+well.</p>
+<p><strong><code>exclude_prefixes: Optional[list[str]]</code></strong></p>
+<p>Optional CURIE namespace prefixes (text before the first <code>:</code>) dropped from results.</p>
+<p><strong><code>exclude_regex: Optional[list[str]]</code></strong></p>
+<p>Optional regex patterns; any resolved CURIE matching one is dropped.</p>
+<h3 id="return-value_1">Return Value<a class="headerlink" href="#return-value_1" title="Permanent link">&para;</a></h3>
+<p>An insertion-ordered <code>dict[str, pl.DataFrame]</code> mapping each distinct input term to its ranked
+matches in the <code>filter_and_rank</code> schema (<code>term</code>, <code>CURIE</code>, <code>PREFERRED_NAME</code>, <code>CATEGORY_NAME</code>,
+<code>TAXON_ID</code>, <code>SOURCE_NAME</code>, <code>SOURCE_VERSION</code>, <code>NLP_LEVEL</code>, <code>PR</code>). A term with no matches maps to
+<code>empty_matches(False)</code>, never to a missing key, so callers never branch on presence. Two inputs
+normalizing to the same probe key both report that key's matches; repeated identical inputs
+collapse to one entry.</p>
+<h3 id="example-usage_1">Example Usage<a class="headerlink" href="#example-usage_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tablassert.fullmap</span><span class="w"> </span><span class="kn">import</span> <span class="n">quick_map</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">db</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/fullmap/data/fullmap.redb&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">for</span> <span class="n">term</span><span class="p">,</span> <span class="n">matches</span> <span class="ow">in</span> <span class="n">quick_map</span><span class="p">([</span><span class="s2">&quot;TP53&quot;</span><span class="p">,</span> <span class="s2">&quot;BRCA1&quot;</span><span class="p">,</span> <span class="s2">&quot;nonsense&quot;</span><span class="p">],</span> <span class="n">db</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">term</span><span class="p">,</span> <span class="n">matches</span><span class="o">.</span><span class="n">get_column</span><span class="p">(</span><span class="s2">&quot;CURIE&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_list</span><span class="p">())</span>
+</code></pre></div>
+<h3 id="fidelity-notes">Fidelity Notes<a class="headerlink" href="#fidelity-notes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>column_context</code> is fixed <code>False</code>: the frequency tiebreaker counts category occurrences within
+  one resolved column of a real table, and a handful of probe terms is not that population.</li>
+<li>A term whose keys were all dropped by the junk-term filter (purely numeric or sentinel values)
+  resolves to the empty frame, because a build would never probe it either.</li>
+</ul>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="../qc/">Quality Control</a></strong> - Multi-stage validation</li>

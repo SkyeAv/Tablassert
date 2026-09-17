@@ -750,6 +750,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#inspecting-a-fullmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting a Fullmap
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1251,6 +1262,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#inspecting-a-fullmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inspecting a Fullmap
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1539,6 +1561,15 @@ directory. Tablassert resolves it via <code>fullmap_db_path()</code>:</p>
 <p>Pass the fullmap path (file or base directory) as the <code>fullmap</code> argument to <code>resolve_many()</code>; see
 <a href="../api/lib/">Batch Resolution</a> for the full reference and example, and
 <a href="../api/fullmap/">Entity Resolution</a> for the lower-level <code>resolve()</code> API.</p>
+<h2 id="inspecting-a-fullmap">Inspecting a Fullmap<a class="headerlink" href="#inspecting-a-fullmap" title="Permanent link">&para;</a></h2>
+<p><code>tablassert quick-map TERMS... -f &lt;fullmap&gt;</code> resolves one or more terms against a built database
+through the exact op chain a build runs per node column, printing one <code>rich</code> table per term with
+its ranked matches (<code>CURIE</code>, <code>PREFERRED_NAME</code>, <code>CATEGORY_NAME</code>, <code>TAXON_ID</code>, <code>SOURCE_NAME</code>,
+<code>NLP_LEVEL</code>, <code>PR</code>) and the normalized probe keys the term became. Its flags mirror the
+<code>NodeEncoding</code> config fields (<code>--taxon</code>, <code>--prioritize</code>, <code>--avoid</code>, <code>--exclude-prefixes</code>,
+<code>--exclude-regex</code>), so it reproduces any column's resolution settings; see the
+<a href="../cli/#quick-map">CLI reference</a>. The Python-side core is <code>fullmap.quick_map()</code>
+(<a href="../api/fullmap/">Entity Resolution</a>).</p>
 
 
 

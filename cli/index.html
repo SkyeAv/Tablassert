@@ -718,6 +718,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#quick-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quick-map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-kg" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1312,6 +1323,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#quick-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        quick-map
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-kg" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1406,7 +1428,7 @@
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
 <p>Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The <code>tablassert</code> app
 requires the <code>[cli]</code> extra (<code>pip install "tablassert[cli]"</code> or <code>uv tool install "tablassert[cli]"</code>) and
-exposes <strong>seven subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>distill-weigh</code>, <code>validate</code>,
+exposes <strong>eight subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>distill-weigh</code>, <code>quick-map</code>, <code>validate</code>,
 and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
 for the live surface.</p>
 <h2 id="command-index">Command index<a class="headerlink" href="#command-index" title="Permanent link">&para;</a></h2>
@@ -1437,6 +1459,10 @@ for the live surface.</p>
 <tr>
 <td><a href="#distill-weigh"><code>distill-weigh</code></a></td>
 <td>Join distillation records to outcomes and prepare LoRA-SFT training rows</td>
+</tr>
+<tr>
+<td><a href="#quick-map"><code>quick-map</code></a></td>
+<td>Show what fullmap entity resolution does with one or more terms</td>
 </tr>
 <tr>
 <td><a href="#validate"><code>validate</code></a></td>
@@ -1918,10 +1944,107 @@ worker count is capped by available memory (~2 GB per thread, read from <code>/p
 OOMs. There is no flag to tune.</p>
 <p>See <a href="../fullmap/">Fullmap</a> for the data pipeline, output schema, and graph-config usage.</p>
 <hr />
+<h2 id="quick-map">quick-map<a class="headerlink" href="#quick-map" title="Permanent link">&para;</a></h2>
+<p>Use this to see what fullmap entity resolution will do with one or more terms — the rows a
+<code>build-kg</code> run would emit for a cell holding that term under the filters shown. Each term runs
+through the exact build path (level-one/level-two normalization → probe-key extraction → redb
+fetch → filter, rank, dedup), one <code>rich</code> table per term in input order, with the term's normalized
+probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
+never one per term. A term with no matches prints a <code>no matches</code> line and still exits 0 — a miss is
+a finding, not a failure; only usage errors and an unreadable fullmap exit 2.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>quick-map<span class="w"> </span>TERMS...<span class="w"> </span>--fullmap<span class="w"> </span>./fullmap/data/fullmap.redb<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TERMS</code> (<code>--terms</code>)</td>
+<td>list[str]</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>One or more terms to resolve (positional); any casing or whitespace, and a CURIE string works too because fullmap indexes CURIEs and their equivalent identifiers as terms</td>
+</tr>
+<tr>
+<td><code>--fullmap</code>, <code>-f</code></td>
+<td>Path</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>Fullmap redb file, or a directory holding one (resolved like the <code>Graph.fullmap</code> config field: <code>&lt;dir&gt;/fullmap.redb</code> then <code>&lt;dir&gt;/data/fullmap.redb</code>)</td>
+</tr>
+<tr>
+<td><code>--taxon</code>, <code>-t</code></td>
+<td>int</td>
+<td>No</td>
+<td><code>9606</code></td>
+<td>NCBI taxon id constraining taxon-bearing matches; <code>0</code> disables the filter like <code>taxon: null</code> does</td>
+</tr>
+<tr>
+<td><code>--prioritize</code>, <code>-p</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>Biolink categories ranked higher (see the vocabulary note below)</td>
+</tr>
+<tr>
+<td><code>--avoid</code>, <code>-a</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>Biolink categories dropped entirely (see the vocabulary note below)</td>
+</tr>
+<tr>
+<td><code>--exclude-prefixes</code>, <code>-ep</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>CURIE namespace prefixes (text before the first <code>:</code>) to drop</td>
+</tr>
+<tr>
+<td><code>--exclude-regex</code>, <code>-er</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td><code>None</code></td>
+<td>Regex patterns; any resolved CURIE matching one is dropped</td>
+</tr>
+</tbody>
+</table>
+<p>The flags mirror the <code>NodeEncoding</code> config fields one-to-one, so a debugging invocation can copy
+the <code>taxon</code> / <code>prioritize</code> / <code>avoid</code> / <code>exclude_prefixes</code> / <code>exclude_regex</code> values straight from the
+section config whose resolution you are checking (see the
+<a href="../configuration/table/">Table Configuration Reference</a>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># One term against the default build location</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>tablassert<span class="w"> </span>quick-map<span class="w"> </span>BRCA1<span class="w"> </span>-f<span class="w"> </span>./fullmap/data/fullmap.redb
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># Several terms (mixed hits and misses are fine) in one batched lookup</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>tablassert<span class="w"> </span>quick-map<span class="w"> </span>BRCA1<span class="w"> </span><span class="s2">&quot;breast cancer 1&quot;</span><span class="w"> </span>MONDO:0005148<span class="w"> </span>nonsense<span class="w"> </span>-f<span class="w"> </span>./fullmap/data/fullmap.redb
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Reproduce a node column&#39;s exact resolution settings</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>tablassert<span class="w"> </span>quick-map<span class="w"> </span><span class="s2">&quot;TNF-alpha&quot;</span><span class="w"> </span>-f<span class="w"> </span>./fullmap<span class="w"> </span>-t<span class="w"> </span><span class="m">9606</span><span class="w"> </span>-p<span class="w"> </span>Gene<span class="w"> </span>-a<span class="w"> </span>Disease<span class="w"> </span>-ep<span class="w"> </span>OMIM<span class="w"> </span>-er<span class="w"> </span><span class="s1">&#39;^OMIM:\\d+$&#39;</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">The <code>--prioritize</code> / <code>--avoid</code> vocabulary</p>
+<p>These flags accept the <strong>live Biolink entity category names</strong> — the same vocabulary the
+<code>prioritize</code> / <code>avoid</code> config keys accept — validated at run time rather than enumerated in
+<code>--help</code>, because the <code>Categories</code> enum is built dynamically from the installed biolink-model.
+An invalid value exits 2 naming the nearest valid names.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title"><code>-f</code> means <code>--fullmap</code> here</p>
+<p>On <code>build-kg</code>, <code>validate</code>, and <code>agent</code>, <code>-f</code> is <code>--configuration-file</code>; on <code>build-fullmap</code> it is
+<code>--force</code>. Aliases are per-command, and <code>quick-map</code> takes no config and has no force mode —
+<code>-f</code> is its one required input path.</p>
+</div>
+<hr />
 <h2 id="build-kg">build-kg<a class="headerlink" href="#build-kg" title="Permanent link">&para;</a></h2>
 <p>Use this to build a KGX NDJSON knowledge graph (nodes, edges, and a Resource Ingest Guide) from a
 YAML configuration file.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>GRAPH-CONFIGURATION-FILE<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>GRAPH-CONFIGURATION-FILE<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>
 </code></pre></div>
 <p>The positional <code>GRAPH-CONFIGURATION-FILE</code> (also <code>--configuration-file</code>, <code>-f</code>) is a <strong>graph</strong> YAML.</p>
 <table>
@@ -1972,7 +2095,7 @@ YAML configuration file.</p>
 </tr>
 </tbody>
 </table>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
 </code></pre></div>
 <p>The parallel fullmap reads behind entity resolution are automatic: large lookup batches (≥ 1024
 terms) fan out across the record-shard files on all available CPU threads (redb readers share-lock,
@@ -2011,8 +2134,8 @@ section; other section-local operations retain their own section labels.</p>
 <p>Use this to validate a configuration against a schema without running the build, ideal for CI and
 pre-commit hooks. The required <code>--schema</code> flag selects which schema to validate against (the kind is
 no longer sniffed from the YAML).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>graph
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>table
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>graph
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>-f<span class="w"> </span>CONFIGURATION-FILE<span class="w"> </span>--schema<span class="w"> </span>table
 </code></pre></div>
 <table>
 <thead>
@@ -2043,8 +2166,8 @@ no longer sniffed from the YAML).</p>
 </table>
 <p>Exits non-zero on any schema error. See <a href="../configuration/table/">Table Configuration</a> and
 <a href="../configuration/graph/">Graph Configuration</a>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>table-config.yaml<span class="w"> </span>--schema<span class="w"> </span>table
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>graph.yaml<span class="w"> </span>--schema<span class="w"> </span>graph
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>table-config.yaml<span class="w"> </span>--schema<span class="w"> </span>table
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>tablassert<span class="w"> </span>validate<span class="w"> </span>graph.yaml<span class="w"> </span>--schema<span class="w"> </span>graph
 </code></pre></div>
 <hr />
 <h2 id="validate-kgx">validate-kgx<a class="headerlink" href="#validate-kgx" title="Permanent link">&para;</a></h2>
@@ -2053,7 +2176,7 @@ no longer sniffed from the YAML).</p>
 and edge is constructed as the Biolink Pydantic class named by its own <code>category</code>, the same classes
 <a href="https://github.com/NCATSTranslator/translator-ingests"><code>NCATSTranslator/translator-ingests</code></a> builds
 when it ingests your files.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson
 </code></pre></div>
 <table>
 <thead>
@@ -2091,10 +2214,10 @@ when it ingests your files.</p>
 </table>
 <p>Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
 rather than a million:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>biolink-model 4.4.4
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>nodes: 424141/424141 valid (0 failures)
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>edges: 2000085/2000085 valid (0 failures)
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>KGX output is Biolink-compliant.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>biolink-model 4.4.4
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>nodes: 424141/424141 valid (0 failures)
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>edges: 2000085/2000085 valid (0 failures)
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>KGX output is Biolink-compliant.
 </code></pre></div>
 <p>Exits non-zero when any record fails, so it can gate a release in CI. A missing or misspelled path is
 reported as <code>file not found</code> and also exits non-zero: a file that was never read must never count as
@@ -2105,7 +2228,7 @@ so they are counted separately as <em>pending</em> rather than treated as defect
 from the installed package, so a field leaves it the moment a <code>biolink-model</code> release declares
 it, as <code>effect_size</code> / <code>effect_type</code> did when 4.4.4 shipped
 <a href="https://github.com/biolink/biolink-model/pull/1774">#1774</a>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model support)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model support)
 </code></pre></div>
 <p>The strict count is what <code>ok</code> and the exit code use; the pending count is what
 <a href="#agent"><code>tablassert agent</code></a> optimizes against, so a deliberate gap never reads as a modelling error.</p>
@@ -2121,6 +2244,8 @@ once a model release drops the requirement.</p>
 <li>Author a table config, then a graph config that references it.</li>
 <li><code>tablassert validate graph.yaml --schema graph</code>: fail fast on schema errors.</li>
 <li><code>tablassert build-kg graph.yaml</code>: produce KGX NDJSON + RIG (add <code>--qc</code> to audit mappings).</li>
+<li><code>tablassert quick-map TERM... -f &lt;fullmap&gt;</code>: spot-check how a term resolves under a column's
+   exact filters when a mapping needs debugging.</li>
 <li><code>tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson</code>: confirm the
    output validates against the Biolink Model before shipping it downstream.</li>
 </ol>
