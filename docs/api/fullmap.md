@@ -214,6 +214,92 @@ Entity resolution output is validated by `fullmap_audit()` from the `qc` module 
 
 See [Quality Control](qc.md) for details.
 
+## quick_map()
+
+Single-shot inspection core behind the `tablassert quick-map` CLI command: resolve raw terms
+against a fullmap exactly as a build would, one result frame per input term. It runs the same op
+chain a build runs per node column (normalization → probe keys → one batched redb fetch →
+filter/rank/dedup), so the returned rows are the rows `build-kg` would emit for a cell holding
+that term under a `NodeEncoding` with the same settings. The whole input is ONE batched lookup,
+never a round trip per term.
+
+### Function Signature
+
+```python
+def quick_map(
+  terms: list[str],
+  db: Path,
+  *,
+  taxon: Optional[str] = "9606",
+  prioritize: Optional[list[Categories]] = None,
+  avoid: Optional[list[Categories]] = None,
+  exclude_prefixes: Optional[list[str]] = None,
+  exclude_regex: Optional[list[str]] = None,
+) -> dict[str, pl.DataFrame]
+```
+
+### Parameters
+
+**`terms: list[str]`**
+
+Raw input terms, in input order. Any casing or whitespace; a CURIE string works too, because the
+fullmap indexes CURIEs and their equivalent identifiers as terms.
+
+**`db: Path`**
+
+Path to the fullmap redb file (already resolved; see `fullmap_db_path()` and [Fullmap](../fullmap.md)).
+
+**`taxon: Optional[str]`**
+
+Optional NCBI taxon id constraining taxon-bearing matches; rows with `TAXON_ID` 0 are retained.
+Defaults to `"9606"` like `NodeEncoding.taxon`; `None` disables the filter.
+
+**`prioritize: Optional[list[Categories]]`**
+
+Optional list of Biolink categories to prefer when multiple matches exist. Plain category-name
+strings are accepted alongside enum members.
+
+**`avoid: Optional[list[Categories]]`**
+
+Optional list of Biolink categories to exclude from results. When set, the column is an
+allow-list by complement: fullmap categories the `Categories` enum cannot name are dropped as
+well.
+
+**`exclude_prefixes: Optional[list[str]]`**
+
+Optional CURIE namespace prefixes (text before the first `:`) dropped from results.
+
+**`exclude_regex: Optional[list[str]]`**
+
+Optional regex patterns; any resolved CURIE matching one is dropped.
+
+### Return Value
+
+An insertion-ordered `dict[str, pl.DataFrame]` mapping each distinct input term to its ranked
+matches in the `filter_and_rank` schema (`term`, `CURIE`, `PREFERRED_NAME`, `CATEGORY_NAME`,
+`TAXON_ID`, `SOURCE_NAME`, `SOURCE_VERSION`, `NLP_LEVEL`, `PR`). A term with no matches maps to
+`empty_matches(False)`, never to a missing key, so callers never branch on presence. Two inputs
+normalizing to the same probe key both report that key's matches; repeated identical inputs
+collapse to one entry.
+
+### Example Usage
+
+```python
+from pathlib import Path
+from tablassert.fullmap import quick_map
+
+db = Path("/path/to/fullmap/data/fullmap.redb")
+for term, matches in quick_map(["TP53", "BRCA1", "nonsense"], db).items():
+    print(term, matches.get_column("CURIE").to_list())
+```
+
+### Fidelity Notes
+
+- `column_context` is fixed `False`: the frequency tiebreaker counts category occurrences within
+  one resolved column of a real table, and a handful of probe terms is not that population.
+- A term whose keys were all dropped by the junk-term filter (purely numeric or sentinel values)
+  resolves to the empty frame, because a build would never probe it either.
+
 ## Next Steps
 
 - **[Quality Control](qc.md)** - Multi-stage validation

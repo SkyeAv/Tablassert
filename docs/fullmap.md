@@ -216,3 +216,14 @@ rig:
 Pass the fullmap path (file or base directory) as the `fullmap` argument to `resolve_many()`; see
 [Batch Resolution](api/lib.md) for the full reference and example, and
 [Entity Resolution](api/fullmap.md) for the lower-level `resolve()` API.
+
+## Inspecting a Fullmap
+
+`tablassert quick-map TERMS... -f <fullmap>` resolves one or more terms against a built database
+through the exact op chain a build runs per node column, printing one `rich` table per term with
+its ranked matches (`CURIE`, `PREFERRED_NAME`, `CATEGORY_NAME`, `TAXON_ID`, `SOURCE_NAME`,
+`NLP_LEVEL`, `PR`) and the normalized probe keys the term became. Its flags mirror the
+`NodeEncoding` config fields (`--taxon`, `--prioritize`, `--avoid`, `--exclude-prefixes`,
+`--exclude-regex`), so it reproduces any column's resolution settings; see the
+[CLI reference](cli.md#quick-map). The Python-side core is `fullmap.quick_map()`
+([Entity Resolution](api/fullmap.md)).

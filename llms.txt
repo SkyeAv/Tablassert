@@ -9,7 +9,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## Quickstart
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
 - [Installation Guide](docs/installation.md): local/dev/tool installation paths. Optional extras: `cli` (Cyclopts and Rich command-line runtime), `rt` (runtime-compatible Polars), `aria2` (bundled aria2c downloader), `qc` (quality-control runtime), `agent` (autonomous agent), `optimize` (GEPA prompt optimization), `distill` (distillation dataset export), and `log` (loguru-backed logging).
-- [CLI Reference](docs/cli.md): seven commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
+- [CLI Reference](docs/cli.md): eight commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
 ## YAML Authoring
