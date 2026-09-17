@@ -27,6 +27,7 @@ from tablassert.biolink import (
     DISABLED_EDGE_FIELDS,
     EFFECT_TYPE_VALUES,
     KNOWN_PENDING_EDGE_FIELDS,
+    PREDICATE_OVERRIDES,
     TABLASERT_EDGE_EXTRAS,
     UNSATISFIABLE_EDGE_FIELDS,
     AgentTypes,
@@ -121,6 +122,13 @@ def test_predicates_has_treats() -> None:
 
 def test_predicates_has_related_to() -> None:
     assert Predicates.RELATED_TO == "related_to"
+
+
+def test_predicates_has_prevention_overrides() -> None:
+    """The named local extensions ride on the model-derived predicate vocabulary."""
+    assert Predicates.PREVENTS == "prevents"
+    assert Predicates.APPLIED_TO_PREVENT == "applied_to_prevent"
+    assert Predicates.CONTRAINDICATED_IN_THE_PREVENTION_OF == "contraindicated_in_the_prevention_of"
 
 
 def test_qualifiers_has_disease_context() -> None:
@@ -225,10 +233,18 @@ def test_edge_categories_match_biolink() -> None:
 
 
 def test_predicates_are_biolink_slots(schema: SchemaView) -> None:
-    """Every predicate is a real Biolink slot (guarantees translator-ingests needs no re-validation)."""
+    """Every NON-override predicate is a real Biolink slot (overrides are named local extensions).
+
+    ``PREDICATE_OVERRIDES`` members are the deliberate exceptions: they ship ahead of the
+    pinned model, so they cannot appear in the installed slot hierarchy. Every other
+    member keeps the translator-ingests no-re-validation guarantee.
+    """
     slots: set[str] = _slot_names_snake(schema)
     for predicate in Predicates:
-        assert predicate.value in slots, predicate.value
+        if predicate.value in PREDICATE_OVERRIDES:
+            assert predicate.value not in slots, predicate.value
+        else:
+            assert predicate.value in slots, predicate.value
 
 
 def test_qualifiers_are_biolink_slots(schema: SchemaView) -> None:
@@ -463,6 +479,28 @@ def test_validate_record_tolerates_class_field_override_grants() -> None:
     assert "not_a_biolink_field: extra_forbidden" in validate_record(unknown, edge=True)
 
 
+@pytest.mark.parametrize("predicate", ["prevents", "applied_to_prevent", "contraindicated_in_the_prevention_of"], ids=lambda p: p)
+def test_validate_record_accepts_override_predicates_on_open_pinned_classes(predicate: str) -> None:
+    """The local extension predicates validate natively on the classes DAKP pins.
+
+    The pinned ``EntityToDiseaseAssociation`` / ``EntityToPhenotypicFeatureAssociation``
+    classes declare ``predicate`` as open ``str`` -- no Literal / enum vocabulary to
+    reject a name the model has not been taught -- so an edge carrying an override
+    predicate validates strictly (not just pending-forgiven).
+    """
+    for category in ("EntityToDiseaseAssociation", "EntityToPhenotypicFeatureAssociation", "ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation"):
+        record: dict[str, Any] = {
+            "id": f"e:{category}:{predicate}",
+            "subject": "CHEBI:1",
+            "predicate": f"biolink:{predicate}",
+            "object": "MONDO:0005148",
+            "category": [f"biolink:{category}"],
+            "knowledge_level": "statistical_association",
+            "agent_type": "data_analysis_pipeline",
+        }
+        assert validate_record(record, edge=True) == [], (category, predicate)
+
+
 def test_allowed_edge_fields_excludes_unattached_qualifiers() -> None:
     """Qualifier slots attached to no Pydantic class are not emittable.
 
@@ -630,6 +668,55 @@ def test_validate_kgx_separates_pending_extras_from_real_failures(tmp_path: Path
     assert "effect_size: extra_forbidden" not in report["edges"]["problems"]
 
 
+@pytest.mark.parametrize("predicate", ["prevents", "applied_to_prevent", "contraindicated_in_the_prevention_of"], ids=lambda p: p)
+def test_validate_kgx_counts_override_predicates_as_pending_not_valid(tmp_path: Path, predicate: str) -> None:
+    """Constrained-class edges carrying an override predicate fail strict, pass pending.
+
+    Base ``Association`` and the DAKP-pinned classes declare ``predicate`` as open
+    ``str``, so an override predicate validates strictly there. The model's
+    CONSTRAINED predicate vocabularies -- ``ChemicalEntityToBiologicalProcessAssociation``'s
+    exhaustive ``Literal`` and the ``GeneToDiseasePredicateEnum`` family -- reject it
+    with ``literal_error`` / ``enum``: a deliberate gap, forgiven by the pending
+    score. An unrelated non-Biolink predicate (one the config enum would have
+    rejected at authoring time) fails BOTH pass rates even under the identical
+    ``literal_error`` -- the pending exemption must never forgive arbitrary values.
+    """
+    nodes: Path = tmp_path / "n.ndjson"
+    edges: Path = tmp_path / "e.ndjson"
+    nodes.write_text(json.dumps({"id": "CHEBI:1", "name": "x", "category": ["biolink:ChemicalEntity"]}) + "\n")
+    base: dict[str, Any] = {
+        "subject": "CHEBI:1",
+        "object": "MONDO:0005148",
+        "knowledge_level": "statistical_association",
+        "agent_type": "data_analysis_pipeline",
+    }
+    edges.write_text(
+        # Constrained Literal class: rejects the override predicate -> pending only.
+        json.dumps({**base, "id": "e1", "predicate": f"biolink:{predicate}", "category": ["biolink:ChemicalEntityToBiologicalProcessAssociation"]})
+        + "\n"
+        # DAKP-pinned open-str class: validates strictly.
+        + json.dumps({**base, "id": "e2", "predicate": f"biolink:{predicate}", "category": ["biolink:EntityToDiseaseAssociation"]})
+        + "\n"
+        # Constrained enum class (GeneToDiseasePredicateEnum): rejects with enum -> pending only.
+        + json.dumps({**base, "id": "e3", "predicate": f"biolink:{predicate}", "category": ["biolink:GeneToDiseaseAssociation"]})
+        + "\n"
+        # Control: same literal_error shape, but the predicate is NOT in
+        # PREDICATE_OVERRIDES -- must fail strictly AND pending.
+        + json.dumps(
+            {**base, "id": "e4", "predicate": "biolink:not_a_real_predicate", "category": ["biolink:ChemicalEntityToBiologicalProcessAssociation"]}
+        )
+        + "\n"
+    )
+    report: dict[str, Any] = validate_kgx(nodes, edges)
+    assert report["edges"]["total"] == 4
+    assert report["edges"]["valid"] == 1  # only the pinned-class edge is strictly valid
+    assert report["edges"]["valid_excluding_pending"] == 3  # ...plus the two deliberate gaps
+    assert report["ok"] is False
+    assert report["ok_excluding_pending"] is False  # the smuggled-in predicate still fails
+    assert "predicate: literal_error" in report["edges"]["problems"]
+    assert "predicate: enum" in report["edges"]["problems"]
+
+
 def test_category_overrides_track_the_installed_model() -> None:
     """Every override name must still be invisible to the Entity-subclass scan.
 
@@ -646,4 +733,21 @@ def test_category_overrides_track_the_installed_model() -> None:
         mixin: Any = getattr(bm, name, None)
         assert mixin is not None, name
         assert not issubclass(mixin, bm.Entity), f"{name} is now an Entity subclass; drop the override"
+        assert name in known, name
+
+
+def test_predicate_overrides_track_the_installed_model(schema: SchemaView) -> None:
+    """Every predicate override must still be absent from installed ``related to`` slots.
+
+    Tripwire: the moment a biolink-model release adopts a member of
+    :data:`PREDICATE_OVERRIDES` into the ``related to`` hierarchy, this fails and the
+    stale name is removed (same philosophy as the category / class-field tripwires).
+    Each member must simultaneously remain nameable in the ``Predicates`` enum, which
+    is the whole point of the grant.
+    """
+    assert frozenset({"applied_to_prevent", "contraindicated_in_the_prevention_of", "prevents"}) == PREDICATE_OVERRIDES
+    slots: set[str] = _slot_names_snake(schema)
+    known: set[str] = {predicate.value for predicate in Predicates}
+    for name in PREDICATE_OVERRIDES:
+        assert name not in slots, f"{name} is now a real Biolink slot; drop the override"
         assert name in known, name

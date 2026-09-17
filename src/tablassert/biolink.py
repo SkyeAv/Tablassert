@@ -11,7 +11,10 @@ Deriving these values from the model -- instead of hand-maintaining copies that
 can drift -- guarantees Tablassert's KGX output uses only terms that are valid
 for the pinned Biolink version. Downstream translator-ingests can therefore
 consume Tablassert output without running Koza or re-validating against the
-Biolink Model.
+Biolink Model. A tiny curated set of named local extensions
+(:data:`PREDICATE_OVERRIDES`, the DAKP prevention family) rides on top of that
+model-derived vocabulary; each is a deliberate step ahead of the pinned model
+and is dropped by a drift tripwire the moment the model adopts it.
 
 Source mapping
 --------------
@@ -22,7 +25,8 @@ Source mapping
 - ``Predicates`` / ``Qualifiers``: walked from the bundled
   ``biolink_model.yaml`` slot hierarchy via ``linkml-runtime`` (a pinned
   dependency of ``biolink-model``), because predicates and qualifiers are LinkML
-  *slots* rather than Pydantic classes.
+  *slots* rather than Pydantic classes. ``Predicates`` then unions
+  :data:`PREDICATE_OVERRIDES`, the named local extensions above.
 - ``ALLOWED_EDGE_FIELDS``: the Biolink ``Association`` model fields (walked over
   the MRO) unioned with the qualifier slot names and a curated set of KGX /
   Tablassert edge columns that are not Biolink Association fields.
@@ -65,6 +69,7 @@ __all__ = [
     "EFFECT_TYPE_VALUES",
     "ENUM_RANGED_QUALIFIERS",
     "KNOWN_PENDING_EDGE_FIELDS",
+    "PREDICATE_OVERRIDES",
     "STUDY_METADATA_FIELDS",
     "UNSATISFIABLE_EDGE_FIELDS",
     "AgentTypes",
@@ -188,6 +193,22 @@ scan otherwise picks it up), the suite fails and the stale name is removed from
 ``CATEGORY_OVERRIDES`` -- the same philosophy as ``CLASS_FIELD_OVERRIDES``.
 """
 
+PREDICATE_OVERRIDES: frozenset[str] = frozenset({"applied_to_prevent", "contraindicated_in_the_prevention_of", "prevents"})
+"""Biolink predicate names Tablassert deliberately supports ahead of pinned model.
+
+``Predicates`` normally comes directly from installed Biolink ``related to`` slots.
+DAKP needs this prevention family before upstream adds it:
+``applied_to_prevent`` expresses use of an intervention for prevention,
+``prevents`` expresses preventive effect, and
+``contraindicated_in_the_prevention_of`` expresses a prevention-specific
+contraindication. Each emits as its ordinary ``biolink:`` CURIE, but remains a
+local extension until Biolink adopts it.
+
+A tripwire test asserts every member remains absent from installed ``related to``
+slots. When Biolink adds one, that test fails and the stale member is removed from
+this set, restoring fully model-derived vocabulary for that predicate.
+"""
+
 
 def _entity_category_names() -> list[str]:
     """Collect all Biolink entity category names from the Pydantic model.
@@ -265,8 +286,8 @@ def _slot_descendants(root: str) -> frozenset[str]:
 
 
 def _predicate_values() -> list[str]:
-    """All Biolink predicates: the ``related to`` slot hierarchy, snake_cased (root included)."""
-    return sorted({_snake(p) for p in (_slot_descendants("related to") | {"related to"})})
+    """All Biolink predicates plus deliberate pending-upstream local extensions."""
+    return sorted({_snake(p) for p in (_slot_descendants("related to") | {"related to"})} | PREDICATE_OVERRIDES)
 
 
 def _qualifier_values() -> list[str]:
@@ -478,6 +499,9 @@ if TYPE_CHECKING:
         CHEMICAL_GENE_INTERACTION_ASSOCIATION: EdgeCategories
 
     class Predicates(str, Enum):
+        APPLIED_TO_PREVENT: Predicates
+        CONTRAINDICATED_IN_THE_PREVENTION_OF: Predicates
+        PREVENTS: Predicates
         RELATED_TO: Predicates
         TREATS: Predicates
 
@@ -856,15 +880,60 @@ def numeric_slot_kind(field: str) -> str | None:
     return None
 
 
-def is_pending_problem(problem: str) -> bool:
-    """Whether a ``"field: error-type"`` problem is a known, intentional model gap.
+def _is_pending_edge_problem(problem: str, record: dict[str, Any]) -> bool:
+    """Whether a single edge failure on ``record`` is a known, intentional model gap.
 
-    True only for an ``extra_forbidden`` rejection of a field in
-    :data:`KNOWN_PENDING_EDGE_FIELDS` -- i.e. Tablassert emitted a column on purpose that
-    the pinned Biolink Model has not declared yet. Every other failure is a real defect.
+    Two deliberate-gap kinds:
+
+    * ``extra_forbidden`` on a field in :data:`KNOWN_PENDING_EDGE_FIELDS` -- a curated
+      KGX / Tablassert column emitted ahead of the pinned model (same contract as
+      :func:`is_pending_problem`).
+    * ``literal_error`` / enum mismatch on the ``predicate`` slot when the record's
+      own predicate value is a member of :data:`PREDICATE_OVERRIDES` -- a local
+      predicate Tablassert emits ahead of the installed model. Most association
+      classes (``Association`` itself, the DAKP-pinned
+      ``EntityToDisease`` / ``EntityToPhenotypicFeature`` classes) declare ``predicate``
+      as open ``str`` and accept it natively; the constrained ones -- e.g.
+      ``ChemicalEntityToBiologicalProcessAssociation``'s exhaustive ``Literal`` or the
+      ``GeneToDiseasePredicateEnum`` family -- reject it with exactly these error
+      types, which this arm forgives.
+
+    Every other failure is a real defect.
+    """
+    field, _, error_type = problem.rpartition(": ")
+    if field == "predicate" and error_type in {"literal_error", "enum"}:
+        predicate: Any = record.get("predicate")
+        normalized: str = predicate if isinstance(predicate, str) else ""
+        if not normalized.startswith("biolink:"):
+            normalized = f"biolink:{normalized}"
+        return normalized.removeprefix("biolink:") in PREDICATE_OVERRIDES
+    return error_type == "extra_forbidden" and field in KNOWN_PENDING_EDGE_FIELDS
+
+
+def is_pending_problem(problem: str) -> bool:
+    """Whether a ``"field: error-type"`` problem string is a known, intentional model gap.
+
+    Kept field-only for the existing extra-forbidden vocabulary. For predicate
+    failures the record's own predicate value is needed, so prefer
+    :func:`_is_pending_edge_problem` (or :func:`_record_has_only_pending_problems` for
+    a record's full error list).
     """
     field, _, error_type = problem.rpartition(": ")
     return error_type == "extra_forbidden" and field in KNOWN_PENDING_EDGE_FIELDS
+
+
+def _record_has_only_pending_problems(record: dict[str, Any], problems: list[str]) -> bool:
+    """True when every failure of ``record`` is a known, intentional model gap.
+
+    Applies the strict :func:`is_pending_problem` contract to edge records (where the
+    override-predicate exemption is meaningful) and keeps the field-only contract
+    everywhere else, so a predicate mismatch on a node record can never be forgiven.
+    """
+    if not problems:
+        return False
+    if "predicate" in record:
+        return all(_is_pending_edge_problem(problem, record) for problem in problems)
+    return all(is_pending_problem(problem) for problem in problems)
 
 
 def validate_kgx(nodes_path: Path, edges_path: Path, limit: int = 20) -> dict[str, Any]:
@@ -877,9 +946,11 @@ def validate_kgx(nodes_path: Path, edges_path: Path, limit: int = 20) -> dict[st
 
     Two pass rates are reported. ``valid`` is strict and drives ``ok`` (the CLI's
     non-zero exit). ``valid_excluding_pending`` additionally counts records whose *every*
-    failure is a :func:`is_pending_problem` -- the score to optimize against, so a
-    deliberate gap like the KGX denormalized carryovers is not mistaken for a
-    malformed record. The two converge as future model releases absorb curated extras.
+    failure is a known, intentional model gap -- an :func:`is_pending_problem` field
+    rejection, or a record-scoped :data:`PREDICATE_OVERRIDES` predicate rejection (see
+    :func:`_is_pending_edge_problem`) -- the score to optimize against, so a deliberate
+    gap like the KGX denormalized carryovers is not mistaken for a malformed record. The
+    two converge as future model releases absorb curated extras.
 
     Args:
         nodes_path: Path to ``<name>_<version>.nodes.ndjson``.
@@ -914,7 +985,7 @@ def validate_kgx(nodes_path: Path, edges_path: Path, limit: int = 20) -> dict[st
                         valid += 1
                         valid_excluding_pending += 1
                         continue
-                    if all(is_pending_problem(problem) for problem in errors):
+                    if _record_has_only_pending_problems(record, errors):
                         valid_excluding_pending += 1
                     problems.update(errors)
                     if len(examples) < limit:
