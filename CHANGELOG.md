@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- **`Predicates` now carries the DAKP prevention family ahead of the pinned model via `PREDICATE_OVERRIDES`.** `prevents`, `applied_to_prevent`, and `contraindicated_in_the_prevention_of` are deliberate local extensions of the model-derived predicate vocabulary: each emits as its ordinary `biolink:` CURIE and validates as a config `statement.predicate` today, while remaining absent from the pinned biolink-model 4.4.4 `related to` hierarchy (DAKP's assertion pipeline already defers the first two for exactly this reason). Association classes with open-`str` predicate slots -- including the `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` classes DAKP pins via `category_override` -- accept the predicates natively; constrained predicate vocabularies (e.g. `ChemicalEntityToBiologicalProcessAssociation`'s exhaustive `Literal`, the `GeneToDiseasePredicateEnum` family) reject them, and `validate_kgx`'s pending score (`valid_excluding_pending`) now forgives exactly those `predicate: literal_error` / `predicate: enum` failures for records whose own predicate is an override member, while strict `valid` stays strict and unlisted predicates fail both scores. A tripwire test asserts every member is still absent from installed `related to` slots: the moment a biolink-model release adopts one, the suite fails and the stale name is removed, restoring fully model-derived vocabulary for that predicate. No DAKP config changes; downstream can author the new predicates through the existing `statement.predicate` field.
+
 ## 19.0.1 - 2026-09-16
 
 ### Changed

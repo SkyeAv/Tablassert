@@ -569,6 +569,35 @@ def test_statement_no_warning_when_override_accepts_predicate() -> None:
     assert not [w for w in caught if issubclass(w.category, BiolinkRelocationWarning)]
 
 
+@pytest.mark.parametrize("predicate", ["prevents", "applied_to_prevent", "contraindicated_in_the_prevention_of"], ids=lambda p: p)
+def test_statement_accepts_predicate_overrides(predicate: str) -> None:
+    """The named local extension predicates validate as ``statement.predicate`` values.
+
+    They are deliberate steps ahead of the pinned model (see
+    ``biolink.PREDICATE_OVERRIDES``); a DAKP downstream config can author them today.
+    The pinned open-``str`` classes also keep the category_override reconciliation
+    silent for them (no demotion warning).
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        stmt: Statement = Statement(  # pyright: ignore
+            subject={"method": "value", "encoding": "A"},
+            object={"method": "value", "encoding": "B"},
+            predicate=predicate,
+            category_override={"Disease": "EntityToDiseaseAssociation"},
+        )
+    assert stmt.predicate == predicate
+    assert not [w for w in caught if issubclass(w.category, BiolinkRelocationWarning)]
+
+
+def test_statement_rejects_unlisted_predicate() -> None:
+    """An override set is not a wildcard: an unlisted predicate still fails at config time."""
+    with pytest.raises(ValidationError):
+        Statement(  # pyright: ignore
+            subject={"method": "value", "encoding": "A"}, object={"method": "value", "encoding": "B"}, predicate="not_a_predicate"
+        )
+
+
 def test_node_encoding_with_prioritize_avoid() -> None:
     """NodeEncoding with prioritize and avoid."""
     node: NodeEncoding = NodeEncoding(  # pyright: ignore
