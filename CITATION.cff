@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use Tablassert, please cite it as below."
 type: software
 title: Tablassert
-version: 19.1.0
+version: 19.2.0
 license: Apache-2.0
 repository-code: https://github.com/SkyeAv/Tablassert
 abstract: Tablassert is a highly performant declarative knowledge graph backend for bioinformatics that extracts knowledge assertions from tabular data, performs entity resolution and data quality control, and exports NCATS Translator-compliant Knowledge Graph Exchange (KGX) NDJSON.

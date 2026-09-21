@@ -1,6 +1,6 @@
 [project]
 name = "tablassert"
-version = "19.1.0"
+version = "19.2.0"
 description = "Tablassert turns biomedical spreadsheets (Excel, CSV, TSV) into knowledge graphs ready for NCATS Translator. Declare how your columns map to subject–predicate–object statements in YAML; Tablassert resolves free text to standard CURIEs, attaches provenance and statistical annotations, and emits KGX-compliant nodes and edges."
 authors = [
     { name = "Skye Lane Goetz", email = "sgoetz@isbscience.org" }

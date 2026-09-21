@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 19.2.0 - 2026-09-21
+
+### Added
+- **Configurable QC cascade controls.** Graph configuration now exposes `qc_similarity_threshold`, `qc_fuzzy_ratio_threshold`, `qc_fuzzy_partial_threshold`, and `qc_aliases`; QC also normalizes separator noise and applies token-set fallback matching before SapBERT. ([#195](https://github.com/SkyeAv/Tablassert/pull/195))
+
+### Fixed
+- **Deterministic collision merging.** `uuid_on_collision: merge` selects lexicographically smallest canonical scalar values, preserves deterministic list unions, and emits fold conflict reports for downstream drift review. ([#194](https://github.com/SkyeAv/Tablassert/pull/194))
+
 ## 19.1.0 - 2026-09-18
 
 ### Added
