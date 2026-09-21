@@ -1138,6 +1138,10 @@ class Graph(TablaBase):
         description="Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise. Set it only when graphs must deliberately share an id space.",
         examples=["infores:multiomicskg"],
     )
+    qc_similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="SapBERT cosine threshold for QC.")
+    qc_fuzzy_ratio_threshold: float = Field(default=70.0, ge=0.0, le=100.0, description="RapidFuzz ratio threshold for QC.")
+    qc_fuzzy_partial_threshold: float = Field(default=80.0, ge=0.0, le=100.0, description="RapidFuzz token threshold for QC.")
+    qc_aliases: dict[str, str] = Field(default_factory=dict, description="QC source-text aliases applied before similarity scoring.")
     uuid_on_collision: Literal["error", "merge"] = Field(
         default="error",
         description="What to do when two different edges derive one id under `uuid_fields`: `error` aborts the build with `uuid-fields-not-a-key`; `merge` folds the records into one edge (list fields unioned and sorted, scalars first-wins). Requires `uuid_fields`, and buffers one full record per unique id, which is why it is opt-in.",

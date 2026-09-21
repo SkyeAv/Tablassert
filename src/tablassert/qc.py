@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from functools import cache
 from pathlib import Path
@@ -27,6 +28,18 @@ MODEL: Path = BASE / "sapbert"
 # BioBERT gate; SapBERT's UMLS synonym-alignment training shifts true synonym
 # pairs upward, so a tuning pass against real reject logs is the natural follow-up.
 SIMILARITY_THRESHOLD: float = 0.5
+FUZZ_RATIO_THRESHOLD: float = 70.0
+FUZZ_PARTIAL_THRESHOLD: float = 80.0
+
+
+def _qc_text(value: str) -> str:
+    """Normalize separator noise before lexical QC scoring."""
+    return re.sub(r"[^\w]+", " ", value.replace("?", "-")).strip().casefold()
+
+
+def _qc_alias(value: str, aliases: dict[str, str]) -> str:
+    """Resolve configured source-specific aliases before generic similarity stages."""
+    return aliases.get(value.casefold(), value)
 
 
 def _cascade(passed: pl.DataFrame, scored: pl.DataFrame, out: str) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -121,6 +134,10 @@ def fullmap_audit(
     out: str = "passed",
     log: bool = True,
     on_phase: Callable[[str], None] | None = None,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    fuzzy_ratio_threshold: float = FUZZ_RATIO_THRESHOLD,
+    fuzzy_partial_threshold: float = FUZZ_PARTIAL_THRESHOLD,
+    aliases: dict[str, str] | None = None,
 ) -> pl.LazyFrame:
     """Audit that fullmap correctly processed source strings into CURIEs.
 
@@ -182,8 +199,11 @@ def fullmap_audit(
         on_phase("qc:exact")
     # Collection point: pending pairs require eager.
     df: pl.DataFrame = lf.collect()
+    aliases = {str(key).casefold(): str(value) for key, value in (aliases or {}).items()}
     pairs: pl.DataFrame = df.select(cols).unique()
-    pairs = pairs.with_columns((pl.col(cols[1]) == pl.col(cols[2])).alias(out))
+    pairs = pairs.with_columns(
+        pl.struct(cols[1:]).map_elements(lambda row: _qc_alias(str(row[cols[1]]), aliases) == str(row[cols[2]]), return_dtype=pl.Boolean).alias(out)
+    )
 
     passed: pl.DataFrame
     pending: pl.DataFrame
@@ -203,15 +223,24 @@ def fullmap_audit(
     # Stage 2: fuzzy matching via RapidFuzz (batched).
     if on_phase is not None:
         on_phase("qc:fuzzy")
-    originals: list[str] = pending.get_column(cols[1]).to_list()
-    preferreds: list[str] = pending.get_column(cols[2]).to_list()
+    originals: list[str] = [_qc_alias(str(value), aliases) for value in pending.get_column(cols[1]).to_list()]
+    preferreds: list[str] = [str(value) for value in pending.get_column(cols[2]).to_list()]
+    normalized_originals: list[str] = [_qc_text(value) for value in originals]
+    normalized_preferreds: list[str] = [_qc_text(value) for value in preferreds]
 
-    ratio_scores: object = cpdist(originals, preferreds, scorer=fuzz.ratio)
-    partial_scores: object = cpdist(originals, preferreds, scorer=fuzz.partial_token_sort_ratio)
+    ratio_scores: object = cpdist(normalized_originals, normalized_preferreds, scorer=fuzz.ratio)
+    partial_scores: object = cpdist(normalized_originals, normalized_preferreds, scorer=fuzz.partial_token_sort_ratio)
+    token_scores: object = cpdist(normalized_originals, normalized_preferreds, scorer=fuzz.token_set_ratio)
 
-    pending = pending.with_columns([pl.Series("fuzz_ratio", ratio_scores), pl.Series("fuzz_partial", partial_scores)])
+    pending = pending.with_columns(
+        [pl.Series("fuzz_ratio", ratio_scores), pl.Series("fuzz_partial", partial_scores), pl.Series("fuzz_token_set", token_scores)]
+    )
 
-    fuzz_mask: pl.Series = pl.Series(out, (ratio_scores >= 70) | (partial_scores >= 80), dtype=pl.Boolean)
+    fuzz_mask: pl.Series = pl.Series(
+        out,
+        (ratio_scores >= fuzzy_ratio_threshold) | (partial_scores >= fuzzy_partial_threshold) | (token_scores >= fuzzy_partial_threshold),
+        dtype=pl.Boolean,
+    )
     masked_fuzz: pl.DataFrame = pending.with_columns(fuzz_mask)
     pairs = pl.concat((passed, masked_fuzz), how="diagonal")
 
@@ -253,7 +282,7 @@ def fullmap_audit(
 
     pending = pending.with_columns(pl.Series("sapbert_similarity", similarity))  # pyright: ignore
 
-    sapbert_mask: pl.Series = pl.Series(out, similarity >= SIMILARITY_THRESHOLD, dtype=pl.Boolean)  # pyright: ignore
+    sapbert_mask: pl.Series = pl.Series(out, similarity >= similarity_threshold, dtype=pl.Boolean)  # pyright: ignore
     masked_sapbert: pl.DataFrame = pending.with_columns(sapbert_mask)
     pairs = pl.concat((passed, masked_sapbert), how="diagonal")
 

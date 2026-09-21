@@ -54,7 +54,7 @@ def test_fullmap_audit_logs_failures(monkeypatch: Any) -> None:
             return np.array([[0.0], [1.0]])
 
     def fake_cpdist(left: list[str], right: list[str], scorer: Any) -> object:
-        assert scorer in {fuzz.ratio, fuzz.partial_token_sort_ratio}
+        assert scorer in {fuzz.ratio, fuzz.partial_token_sort_ratio, fuzz.token_set_ratio}
         return np.array([0.0])
 
     def fake_cosine_similarity(left: object, right: object) -> object:
@@ -206,3 +206,15 @@ def test_fullmap_audit_passes_abbreviation_pairs_without_sapbert(monkeypatch: An
 
     assert phases == ["qc:exact", "qc:fuzzy", "qc:abbrev"]
     assert result.height == 2
+
+
+def test_qc_text_restores_faers_separator_noise() -> None:
+    """Punctuation-mangled source names normalize to the same lexical form as clean names."""
+    assert qc._qc_text("PFIZER?BIONTECH COVID?19 VACCINE") == "pfizer biontech covid 19 vaccine"
+    assert qc._qc_text("NATURE?THROID") == "nature throid"
+
+
+def test_qc_alias_resolves_brand_name_before_scoring() -> None:
+    """Configured aliases provide deterministic brand-to-generic control without SapBERT."""
+    assert qc._qc_alias("BETOLVEX", {"betolvex": "Cyanocobalamin"}) == "Cyanocobalamin"
+    assert qc._qc_alias("XEFO", {}) == "XEFO"
