@@ -1150,6 +1150,10 @@ class Tcode(Section):
     head: bool = Field(False)
     name: str | None = Field(None)
     infores: str | None = Field(None)
+    qc_similarity_threshold: float = Field(0.5)
+    qc_fuzzy_ratio_threshold: float = Field(70.0)
+    qc_fuzzy_partial_threshold: float = Field(80.0)
+    qc_aliases: dict[str, str] = Field(default_factory=dict)
 
     def encoding(self: Self, x: Encoding, col: str, table_literal: bool = False) -> list[Any]:
         """Collect helper for Encoding classes.
@@ -1302,7 +1306,30 @@ class Tcode(Section):
             # QC audits only the strict columns: a nullable qualifier's nulls are expected
             # (blank cell / no match), not resolution errors for the audit to delete.
             [
-                (fullmap_audit, (col, self.store.stem, self.config.name, "passed", True))
+                (
+                    fullmap_audit,
+                    (
+                        (col, self.store.stem, self.config.name, "passed", True)
+                        if (
+                            self.qc_similarity_threshold == 0.5
+                            and self.qc_fuzzy_ratio_threshold == 70.0
+                            and self.qc_fuzzy_partial_threshold == 80.0
+                            and not self.qc_aliases
+                        )
+                        else (
+                            col,
+                            self.store.stem,
+                            self.config.name,
+                            "passed",
+                            True,
+                            None,
+                            self.qc_similarity_threshold,
+                            self.qc_fuzzy_ratio_threshold,
+                            self.qc_fuzzy_partial_threshold,
+                            self.qc_aliases,
+                        )
+                    ),
+                )
                 for x, col in node_columns
                 if not (isinstance(x, Qualifier) and x.nullable)
             ]

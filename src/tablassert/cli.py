@@ -368,6 +368,10 @@ def build_graph_pipeline(
                         "head": head,
                         "name": g.name,
                         "infores": g.rig.source_info.infores_id,
+                        "qc_similarity_threshold": g.qc_similarity_threshold,
+                        "qc_fuzzy_ratio_threshold": g.qc_fuzzy_ratio_threshold,
+                        "qc_fuzzy_partial_threshold": g.qc_fuzzy_partial_threshold,
+                        "qc_aliases": g.qc_aliases,
                     }
                 )
             )
