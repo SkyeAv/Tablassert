@@ -1749,6 +1749,26 @@
 <td><code>error</code> | <code>merge</code></td>
 <td>What to do when two different edges derive one id. <code>error</code> (default) aborts; <code>merge</code> folds them into one edge. Requires <code>uuid_fields</code> (see <a href="#merging-collisions-instead">Merging collisions instead</a>)</td>
 </tr>
+<tr>
+<td><code>qc_similarity_threshold</code></td>
+<td>Float 0–1</td>
+<td>SapBERT cosine threshold used by QC</td>
+</tr>
+<tr>
+<td><code>qc_fuzzy_ratio_threshold</code></td>
+<td>Float 0–100</td>
+<td>RapidFuzz ratio threshold used by QC</td>
+</tr>
+<tr>
+<td><code>qc_fuzzy_partial_threshold</code></td>
+<td>Float 0–100</td>
+<td>RapidFuzz partial/token-set threshold used by QC</td>
+</tr>
+<tr>
+<td><code>qc_aliases</code></td>
+<td>Mapping[String, String]</td>
+<td>Source-text aliases applied before QC similarity stages</td>
+</tr>
 </tbody>
 </table>
 <h2 id="stable-edge-ids">Stable edge ids<a class="headerlink" href="#stable-edge-ids" title="Permanent link">&para;</a></h2>
@@ -1833,7 +1853,7 @@ answer is one edge with the combined evidence, not a failed build. Opt in with:<
   <code>upstream_resource_ids</code>, <code>has_supporting_studies</code>, …) are unioned, deduplicated, and <strong>sorted</strong>,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
   <code>sources[]</code> dedup by content — key order alone never keeps two copies.</li>
-<li><strong>scalar fields</strong> keep the first record's value; each conflict is counted and reported in a
+<li><strong>scalar fields</strong> keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.</li>
 <li>fields only the later record carries are copied over — first-wins arbitrates <em>conflicts</em>, not
   additions.</li>
