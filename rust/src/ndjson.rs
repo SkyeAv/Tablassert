@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::Value;
 use std::collections::hash_map::Entry;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -299,8 +299,9 @@ impl ListState {
 /// membership are hash sets, and the per-fold re-canonicalization + re-sort of every
 /// stored list item is gone -- lists sort ONCE, at write-out, and only if a union ran.
 struct MergedRecord {
-    /// The live record: scalars first-wins, lists in original/append order until the
-    /// deferred write-out sort.
+    /// The live record: conflicting scalars keep the lexicographically smallest canonical
+    /// value (see `merge_records`), lists in original/append order until the deferred
+    /// write-out sort.
     value: Value,
     /// Content hashes of every record absorbed into this id: O(1) exact-repeat
     /// suppression. Bare hashes keep the pre-US-002 `Vec<u64>` semantics exactly (a false
@@ -311,6 +312,9 @@ struct MergedRecord {
     lists: FxHashMap<String, ListState>,
     /// Distinct non-empty scalar source values for each `original_*` field.
     original_values: OriginalValues,
+    /// Conflicting scalar field names, one entry per fold conflict (with multiplicity).
+    /// Consumed at write-out by the per-predicate fold report.
+    conflict_fields: Vec<String>,
 }
 
 impl MergedRecord {
@@ -332,6 +336,7 @@ impl MergedRecord {
             value,
             hashes,
             lists,
+            conflict_fields: Vec::new(),
         })
     }
 
@@ -387,8 +392,9 @@ impl MergedRecord {
     }
 }
 
-/// Fold `incoming` into `stored`, field-wise. Returns the number of conflicting scalar
-/// fields (kept first-wins) so the caller can report them.
+/// Fold `incoming` into `stored`, field-wise. Returns the conflicting scalar field names
+/// (one entry per conflict, reported for the base record) so the caller can build the fold
+/// report.
 ///
 /// Near-linear implementation of the semantics frozen by `merge_records_reference` and
 /// policed by `merge_fold_matches_reference_on_fuzz`:
@@ -398,25 +404,32 @@ impl MergedRecord {
 ///   checked against the field's `ListState` set in O(1); stored items are never
 ///   re-canonicalized, and the sort by canonical bytes is deferred to write-out
 ///   (`MergedRecord::finish`), where it runs only for fields that saw a real union;
-/// - scalar fields: first-wins on conflict, counted, except `original_*` fields;
+/// - scalar fields: a conflicting scalar keeps the LEXICOGRAPHICALLY SMALLEST canonical
+///   value -- a commutative, associative winner, so the merged record is identical under
+///   any arrival order -- and each conflict is reported by field name for the fold report,
+///   except `original_*` fields;
 /// - `original_*` fields collect distinct non-empty strings and render sorted values as
 ///   `A`, `A|B`, or `A|B|C`;
 /// - fields only on `incoming`: copied over (only a conflict when both sides disagree);
 /// - `id` is never touched: both sides carry the same one by construction.
 ///
-/// `number_of_cases` has one hardcoded exception to first-wins: when the MERGED record
-/// carries `supporting_case_ids` (a build-internal `list[str]` of the case IDs behind
-/// the count -- allowed onto edge frames so it reaches this pass, then stripped before
-/// write) and either side carried a count, the count is recomputed as the length of the
-/// unioned ID list. A case ID shared by both records is one case, so first-wins and
-/// summing both over- and under-report; the union length is the exact count. The
-/// superseded divergence is NOT reported as a scalar conflict. When neither side
-/// carries the list, `number_of_cases` stays an ordinary first-wins scalar.
-fn merge_records(stored: &mut MergedRecord, incoming: &Value) -> PyResult<u64> {
+/// `number_of_cases` has one hardcoded exception to the smallest-value rule: when the
+/// MERGED record carries `supporting_case_ids` (a build-internal `list[str]` of the case
+/// IDs behind the count -- allowed onto edge frames so it reaches this pass, then stripped
+/// before write) and either side carried a count, the count is recomputed as the length of
+/// the unioned ID list. A case ID shared by both records is one case, so smallest-value
+/// and summing both over- and under-report; the union length is the exact count. The
+/// superseded divergence is NOT reported as a scalar conflict. When neither side carries
+/// the list, `number_of_cases` stays an ordinary smallest-value scalar.
+fn merge_records(stored: &mut MergedRecord, incoming: &Value) -> PyResult<Vec<String>> {
     let Some(incoming_map) = incoming.as_object() else {
         return Err(runtime_error("expected JSON object"));
     };
-    let mut conflicts: u64 = 0;
+    let mut conflict_fields: Vec<String> = Vec::new();
+    // Winner overrides are collected during the loop and applied after it: the stored
+    // value's mutable borrow is live while a conflict is detected, and the winner needs
+    // the canonical bytes of BOTH sides compared.
+    let mut winner_overrides: Vec<(String, Value)> = Vec::new();
     // Read both counts BEFORE the fold: the fold may copy incoming's over a stored side
     // that lacks it, and the recompute rule below needs to know each side contributed one.
     let stored_cases: Option<Value> = stored.value.get("number_of_cases").cloned();
@@ -487,13 +500,36 @@ fn merge_records(stored: &mut MergedRecord, incoming: &Value) -> PyResult<u64> {
                                 .map(str::to_owned),
                         );
                     } else if stored_value != incoming_value {
-                        conflicts += 1;
+                        conflict_fields.push(key.clone());
+                        let stored_wins = {
+                            let stored_bytes =
+                                canonical_json_bytes(stored_value).map_err(runtime_error)?;
+                            let incoming_bytes =
+                                canonical_json_bytes(incoming_value).map_err(runtime_error)?;
+                            stored_bytes <= incoming_bytes
+                        };
+                        if !stored_wins {
+                            winner_overrides.push((key.clone(), incoming_value.clone()));
+                        }
                     }
                 } else if stored_value != incoming_value {
-                    conflicts += 1;
+                    conflict_fields.push(key.clone());
+                    let stored_wins = {
+                        let stored_bytes =
+                            canonical_json_bytes(stored_value).map_err(runtime_error)?;
+                        let incoming_bytes =
+                            canonical_json_bytes(incoming_value).map_err(runtime_error)?;
+                        stored_bytes <= incoming_bytes
+                    };
+                    if !stored_wins {
+                        winner_overrides.push((key.clone(), incoming_value.clone()));
+                    }
                 }
             }
         }
+    }
+    for (key, value) in winner_overrides {
+        stored_map.insert(key, value);
     }
     // WHY: exact-unique `number_of_cases` semantics (see the docstring). Guarded on the
     // merged record actually carrying the ID list: a one-sided carrier is fine (the union
@@ -511,7 +547,17 @@ fn merge_records(stored: &mut MergedRecord, incoming: &Value) -> PyResult<u64> {
             // not both arrays (two arrays took the union path and were never counted).
             if let (Some(left), Some(right)) = (&stored_cases, &incoming_cases) {
                 if left != right && !(left.is_array() && right.is_array()) {
-                    conflicts -= 1;
+                    // The superseded divergence was counted by an EARLIER fold when the
+                    // counts first collided (not necessarily this one), so the pop is
+                    // unconditional on this fold's pushes: at most one live
+                    // number_of_cases conflict can exist per merged record, and the
+                    // recompute retires it.
+                    if let Some(pos) = conflict_fields
+                        .iter()
+                        .rposition(|field| field == "number_of_cases")
+                    {
+                        conflict_fields.remove(pos);
+                    }
                 }
             }
             let Some(map) = stored.value.as_object_mut() else {
@@ -523,7 +569,7 @@ fn merge_records(stored: &mut MergedRecord, incoming: &Value) -> PyResult<u64> {
             );
         }
     }
-    Ok(conflicts)
+    Ok(conflict_fields)
 }
 
 /// Remove build-internal carrier fields from an edge record before it is written.
@@ -555,8 +601,10 @@ impl MergeIndex {
                     return Ok(());
                 }
                 self.merged += 1;
-                self.scalar_conflicts += merge_records(record, &value)?;
+                let fields: Vec<String> = merge_records(record, &value)?;
+                self.scalar_conflicts += fields.len() as u64;
                 record.hashes.insert(content);
+                record.conflict_fields.extend(fields);
                 Ok(())
             }
         }
@@ -573,7 +621,8 @@ impl MergeIndex {
 /// Original semantics doc:
 ///
 /// Fold `incoming` into `stored`, field-wise. Returns the number of conflicting scalar
-/// fields (kept first-wins) so the caller can report them.
+/// fields (the base record's value wins; see `merge_records`) so the caller can report
+/// them.
 ///
 /// - list fields: union, deduped by canonical JSON bytes (so two `sources` objects that
 ///   differ only in key order collapse), then sorted by canonical bytes so the merged
@@ -582,20 +631,21 @@ impl MergeIndex {
 /// - fields only on `incoming`: copied over (only a conflict when both sides disagree);
 /// - `id` is never touched: both sides carry the same one by construction.
 ///
-/// `number_of_cases` has one hardcoded exception to first-wins: when the MERGED record
+/// `number_of_cases` has one hardcoded exception to base-wins: when the MERGED record
 /// carries `supporting_case_ids` (a build-internal `list[str]` of the case IDs behind
 /// the count -- allowed onto edge frames so it reaches this pass, then stripped before
 /// write) and either side carried a count, the count is recomputed as the length of the
-/// unioned ID list. A case ID shared by both records is one case, so first-wins and
+/// unioned ID list. A case ID shared by both records is one case, so base-wins and
 /// summing both over- and under-report; the union length is the exact count. The
 /// superseded divergence is NOT reported as a scalar conflict. When neither side
-/// carries the list, `number_of_cases` stays an ordinary first-wins scalar.
+/// carries the list, `number_of_cases` stays an ordinary base-wins scalar.
 #[cfg(test)]
 fn merge_records_reference(stored: &mut Value, incoming: &Value) -> PyResult<u64> {
     let Some(incoming_map) = incoming.as_object() else {
         return Err(runtime_error("expected JSON object"));
     };
     let mut conflicts: u64 = 0;
+    let mut winner_overrides: Vec<(String, Value)> = Vec::new();
     let mut original_values: OriginalValues = collect_original_values(stored);
     for (key, values) in collect_original_values(incoming) {
         original_values.entry(key).or_default().extend(values);
@@ -640,9 +690,18 @@ fn merge_records_reference(stored: &mut Value, incoming: &Value) -> PyResult<u64
                     // Aggregated and rendered after this fold, once all values are known.
                 } else if stored_value != incoming_value {
                     conflicts += 1;
+                    let stored_bytes = canonical_json_bytes(stored_value).map_err(runtime_error)?;
+                    let incoming_bytes =
+                        canonical_json_bytes(incoming_value).map_err(runtime_error)?;
+                    if incoming_bytes < stored_bytes {
+                        winner_overrides.push((key.clone(), incoming_value.clone()));
+                    }
                 }
             }
         }
+    }
+    for (key, value) in winner_overrides {
+        stored_map.insert(key, value);
     }
     if let Some(map) = stored.as_object_mut() {
         for (key, values) in &original_values {
@@ -684,6 +743,12 @@ fn merge_records_reference(stored: &mut Value, incoming: &Value) -> PyResult<u64
 /// FROZEN EQUIVALENCE ORACLE -- BYTE-VERBATIM copy of the pre-US-002 `MergeIndex` absorb
 /// path (state shape included), compiled ONLY under `cfg(test)`; drives
 /// `merge_records_reference`. Treat as read-only -- see that fn's docs.
+///
+/// AMENDED once, deliberately (fold determinism): the oracle's base election now keeps the
+/// record with the smallest canonical bytes as the fold base, exactly mirroring the
+/// production `MergeIndex::absorb`, so both sides still demand byte-identical merged
+/// output under any arrival order. This is a semantic amendment agreed for the fold
+/// report work, not an optimization -- the oracle remains the algorithm of record.
 #[cfg(test)]
 #[derive(Default)]
 struct MergeIndexReference {
@@ -719,17 +784,24 @@ impl MergeIndexReference {
     }
 }
 
-/// Merge-mode edge pass: buffer every unique edge, fold divergent same-id records into the
-/// first, then write in first-seen order. Returns (divergent records merged, conflicting
-/// scalar fields) for the summary log. Runs ONLY under `uuid_on_collision: merge`; the
-/// default path stays streaming and never buffers a record. The build-internal
-/// `supporting_case_ids` carrier is stripped from each record right before the write.
+/// Merge-mode edge pass: buffer every unique edge, fold divergent same-id records into
+/// their smallest-canonical-bytes base, then write in first-seen id order. Returns
+/// (divergent records merged, conflicting scalar fields) for the summary log, and writes a
+/// fold report (`<output>.foldreport.json`: per-predicate, per-field conflict counts) when
+/// any record folded. Runs ONLY under `uuid_on_collision: merge`; the default path stays
+/// streaming and never buffers a record. The build-internal `supporting_case_ids` carrier
+/// is stripped from each record right before the write.
 fn dedup_edges_merge(
     reader: BufReader<File>,
     mut writer: BufWriter<File>,
     domain: &str,
     fields: Option<&[String]>,
+    output: &Path,
 ) -> PyResult<(u64, u64)> {
+    let mut fold_report: std::collections::BTreeMap<
+        String,
+        std::collections::BTreeMap<String, u64>,
+    > = std::collections::BTreeMap::new();
     let mut index: MergeIndex = MergeIndex::default();
     for line in reader.lines() {
         let line: String = line.map_err(runtime_error)?;
@@ -744,9 +816,23 @@ fn dedup_edges_merge(
         index.absorb(edge_id_bytes(&value)?, value, content)?;
     }
     for id in std::mem::take(&mut index.order) {
-        let Some(record) = index.records.remove(&id) else {
+        let Some(mut record) = index.records.remove(&id) else {
             continue;
         };
+        // Fold report: every conflict this id accumulated is attributed to the base
+        // record's predicate, so consumers can see WHERE divergent evidence merged.
+        if !record.conflict_fields.is_empty() {
+            let predicate = record
+                .value
+                .get("predicate")
+                .and_then(Value::as_str)
+                .unwrap_or("_unknown_predicate_")
+                .to_string();
+            let fields_report = fold_report.entry(predicate).or_default();
+            for field in std::mem::take(&mut record.conflict_fields) {
+                *fields_report.entry(field).or_insert(0) += 1;
+            }
+        }
         // The one deferred sort: unioned lists sort here, everything else ships as-is.
         let mut value: Value = record.finish()?;
         strip_internal_edge_fields(&mut value);
@@ -756,6 +842,20 @@ fn dedup_edges_merge(
         writer.write_all(b"\n").map_err(runtime_error)?;
     }
     writer.flush().map_err(runtime_error)?;
+    if !fold_report.is_empty() {
+        let report_path = output.with_file_name(format!(
+            "{}.foldreport.json",
+            output
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or_default()
+        ));
+        fs::write(
+            &report_path,
+            serde_json::to_vec_pretty(&fold_report).map_err(runtime_error)?,
+        )
+        .map_err(runtime_error)?;
+    }
     Ok((index.merged, index.scalar_conflicts))
 }
 
@@ -783,7 +883,7 @@ pub fn dedup_ndjson(
     let reader: BufReader<File> = BufReader::new(File::open(input).map_err(runtime_error)?);
     let mut writer: BufWriter<File> = BufWriter::new(File::create(&output).map_err(runtime_error)?);
     if is_edges && merge {
-        return dedup_edges_merge(reader, writer, &domain, fields);
+        return dedup_edges_merge(reader, writer, &domain, fields, &output);
     }
     let mut nodes: FxHashMap<u64, Vec<Vec<u8>>> = FxHashMap::default();
     let mut edges: EdgeIndex = EdgeIndex::default();

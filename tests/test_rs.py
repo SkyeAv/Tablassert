@@ -268,6 +268,8 @@ def _merge_records(stored: dict[str, Any], incoming: dict[str, Any]) -> int:
             pass
         elif stored_value != incoming_value:
             conflicts += 1
+            if _canonical_json_bytes(incoming_value) < _canonical_json_bytes(stored_value):
+                stored[key] = incoming_value
     for key, values in original_values.items():
         if values:
             ordered = sorted(values, key=lambda value: value.encode("utf-8"))
