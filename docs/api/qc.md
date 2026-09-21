@@ -21,6 +21,10 @@ def fullmap_audit(
   out: str = "passed",
   log: bool = True,
   on_phase: Optional[Callable[[str], None]] = None,
+  similarity_threshold: float = 0.5,
+  fuzzy_ratio_threshold: float = 70.0,
+  fuzzy_partial_threshold: float = 80.0,
+  aliases: Optional[dict[str, str]] = None,
 ) -> pl.LazyFrame
 ```
 

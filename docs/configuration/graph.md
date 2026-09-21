@@ -34,6 +34,10 @@ The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation
 | `uuid_fields` | List[str] | Edge fields that constitute edge identity. Only these feed the derived edge `id` (see [Stable edge ids](#stable-edge-ids)) |
 | `uuid_domain` | String | Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise |
 | `uuid_on_collision` | `error` \| `merge` | What to do when two different edges derive one id. `error` (default) aborts; `merge` folds them into one edge. Requires `uuid_fields` (see [Merging collisions instead](#merging-collisions-instead)) |
+| `qc_similarity_threshold` | Float 0–1 | SapBERT cosine threshold used by QC |
+| `qc_fuzzy_ratio_threshold` | Float 0–100 | RapidFuzz ratio threshold used by QC |
+| `qc_fuzzy_partial_threshold` | Float 0–100 | RapidFuzz partial/token-set threshold used by QC |
+| `qc_aliases` | Mapping[String, String] | Source-text aliases applied before QC similarity stages |
 
 ## Stable edge ids
 
@@ -127,7 +131,7 @@ Under `merge`, a divergent same-id record is folded into the first record that c
   `upstream_resource_ids`, `has_supporting_studies`, …) are unioned, deduplicated, and **sorted**,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
   `sources[]` dedup by content — key order alone never keeps two copies.
-- **scalar fields** keep the first record's value; each conflict is counted and reported in a
+- **scalar fields** keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.
 - fields only the later record carries are copied over — first-wins arbitrates *conflicts*, not
   additions.
