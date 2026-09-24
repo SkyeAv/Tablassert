@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON — declaratively, with entity resolution and quality control built in.">
+        <meta name="description" content="Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON, declaratively, with entity resolution and quality control built in.">
       
       
       
@@ -540,28 +540,6 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#why-tablassert" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why Tablassert
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Start
-      
-    </span>
-  </a>
-  
-</li>
       
         <li class="md-nav__item">
   <a href="#documentation-sections" class="md-nav__link">
@@ -1161,28 +1139,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-tablassert" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why Tablassert
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Quick Start
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#documentation-sections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1237,38 +1193,37 @@
 
 <h1 id="tablassert">Tablassert<a class="headerlink" href="#tablassert" title="Permanent link">&para;</a></h1>
 <p>Tablassert turns biomedical tables (Excel, CSV, TSV) into NCATS Translator-compliant KGX knowledge
-graphs, declaratively, with entity resolution built in and optional quality control. <strong>Installing?</strong>
-See <a href="installation/">Installation</a>. <strong>First build?</strong> Follow the <a href="tutorial/">Tutorial</a>. <strong>Automating?</strong>
-Use the <a href="cli/">CLI</a> or the autonomous <a href="agent/">Agent</a>.</p>
-<h2 id="why-tablassert">Why Tablassert<a class="headerlink" href="#why-tablassert" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Declarative YAML configuration</strong>: define data transformations without code</li>
-<li><strong>Entity resolution</strong>: map free text to biological entities (genes, diseases, chemicals) with
-  taxonomic filtering and provenance, backed by an embedded redb database</li>
-<li><strong>Optional quality control</strong>: four-stage audit (exact → fuzzy → abbreviation → SapBERT embeddings) flags
-  low-confidence mappings</li>
-<li><strong>KGX compliance</strong>: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories and
-  predicates</li>
-<li><strong>Performance &amp; reproducibility</strong>: lazy Polars pipelines and a UV-based, deterministic development
-  environment</li>
-</ul>
-<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span><span class="w">   </span><span class="c1"># or: uv tool install &quot;tablassert[cli]&quot;</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>config.yaml
-</code></pre></div>
-<p>Quality control and runtime-compatible Polars are opt-in extras. See <a href="installation/">Installation</a> for
-the full install matrix, extras, and development setup.</p>
+graphs, declaratively, with entity resolution built in and optional quality control.</p>
+<p><strong>Installing?</strong> See <a href="installation/">Installation</a>. <strong>First build?</strong> Follow the
+<a href="tutorial/">Tutorial</a>. <strong>Automating?</strong> Use the <a href="cli/">CLI</a> or the autonomous
+<a href="agent/">Agent</a>.</p>
 <h2 id="documentation-sections">Documentation Sections<a class="headerlink" href="#documentation-sections" title="Permanent link">&para;</a></h2>
+<p><strong>Start</strong></p>
 <ul>
 <li><strong><a href="installation/">Installation</a></strong>: install methods, extras, and development setup</li>
-<li><strong><a href="cli/">CLI Reference</a></strong>: complete command-line flag reference</li>
-<li><strong><a href="tutorial/">Tutorial</a></strong>: step-by-step example with synthetic data</li>
-<li><strong><a href="examples/">Use Case Gallery</a></strong>: real-world configuration patterns</li>
-<li><strong><a href="fullmap/">Fullmap</a></strong>: building and querying the entity-resolution database</li>
-<li><strong><a href="configuration/graph/">Configuration</a></strong>: graph and table configuration reference</li>
-<li><strong><a href="agent/">Agent</a></strong>: the autonomous agent pipeline</li>
-<li><strong><a href="api/fullmap/">API Reference</a></strong>: core functions documentation</li>
-<li><strong><a href="development/">Development</a></strong>: dev environment setup and contributor workflow</li>
+<li><strong><a href="tutorial/">Tutorial</a></strong>: build your first knowledge graph from a CSV, step by step</li>
+<li><strong><a href="examples/">Use Case Gallery</a></strong>: real-world configuration patterns to copy and adapt</li>
+</ul>
+<p><strong>How-to guides</strong></p>
+<ul>
+<li><strong><a href="cli/">CLI Reference</a></strong>: every command and flag: <code>build-kg</code>, <code>build-fullmap</code>, <code>validate</code>,
+  <code>validate-kgx</code>, <code>quick-map</code>, <code>agent</code>, <code>distill-export</code>, <code>distill-weigh</code></li>
+<li><strong><a href="fullmap/">Fullmap</a></strong>: obtain and build the entity-resolution database</li>
+<li><strong><a href="agent/">Agent</a></strong>: run the autonomous PMC-to-graph pipeline, with checkpoints and tooling</li>
+</ul>
+<p><strong>Reference</strong></p>
+<ul>
+<li><strong><a href="configuration/graph/">Configuration</a></strong>: graph-level schema, the required <code>rig:</code> section, and stable edge ids</li>
+<li><strong><a href="configuration/table/">Table Configuration</a></strong>: sources, statements, entity-resolution rules, provenance, annotations</li>
+<li><strong><a href="configuration/advanced-example/">Advanced Example</a></strong>: a fully-annotated real-world configuration</li>
+<li><strong><a href="api/fullmap/">API Reference</a></strong>: <code>resolve()</code> and <code>quick_map()</code></li>
+<li><strong><a href="api/lib/">Batch Resolution</a></strong>: <code>resolve_many()</code> for scripts and notebooks</li>
+<li><strong><a href="api/qc/">Quality Control</a></strong>: the four-stage <code>fullmap_audit()</code> pipeline</li>
+<li><strong><a href="api/utils/">Utilities</a></strong>: hashing, store keys, and deterministic edge UUIDs</li>
+</ul>
+<p><strong>Contribute</strong></p>
+<ul>
+<li><strong><a href="development/">Development</a></strong>: dev environment setup, the daily loop, and the docs gate</li>
 <li><strong><a href="changelog/">Changelog</a></strong>: release history</li>
 </ul>
 <h2 id="authors">Authors<a class="headerlink" href="#authors" title="Permanent link">&para;</a></h2>
@@ -1278,7 +1233,7 @@ the full install matrix, extras, and development setup.</p>
 <li><strong>Jared C. Roach</strong>: Institute for Systems Biology</li>
 </ul>
 <h2 id="license">License<a class="headerlink" href="#license" title="Permanent link">&para;</a></h2>
-<p>See repository for license information.</p>
+<p>Apache License 2.0 (see <a href="https://github.com/SkyeAv/Tablassert/blob/main/LICENSE">LICENSE</a>).</p>
 
 
 
