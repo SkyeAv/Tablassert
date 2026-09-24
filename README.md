@@ -1,12 +1,9 @@
 # Tablassert
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyPI version](https://badge.fury.io/py/tablassert.svg)](https://badge.fury.io/py/tablassert)
-[![Downloads](https://static.pepy.tech/badge/tablassert/month)](https://pepy.tech/project/tablassert)
 [![CI](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml/badge.svg)](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/github/deployments/SkyeAv/Tablassert/github-pages?label=docs)](https://skyeav.github.io/Tablassert/)
-[![GitHub stars](https://img.shields.io/github/stars/SkyeAv/Tablassert.svg)](https://github.com/SkyeAv/Tablassert/stargazers)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 > Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON,
 > declaratively, with entity resolution built in and optional quality control.
@@ -97,7 +94,7 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 - **Declarative YAML configuration**: define data transformations without writing code
 - **Built-in entity resolution**: map free text to genes, diseases, and chemicals with standard
   CURIEs, taxonomic filtering, and provenance, backed by an embedded redb database
-- **Optional quality control**: a four-stage audit (exact → fuzzy → abbreviation → SapBERT embeddings) flags
+- **Optional quality control**: a four-stage audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) flags
   low-confidence mappings
 - **KGX compliance**: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories
   and predicates
@@ -119,7 +116,7 @@ install `[cli]` to use the `tablassert` command and optional extras for addition
 | `cli` | `tablassert` command and rich terminal progress | `pip install "tablassert[cli]"` |
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
-| `qc` | four-stage QC audit (exact → fuzzy → abbreviation → SapBERT embeddings) | `pip install "tablassert[qc]"` |
+| `qc` | four-stage QC audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) | `pip install "tablassert[qc]"` |
 | `agent` | autonomous agent (smolagents, litellm, article/table context) | `pip install "tablassert[agent]"` |
 | `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) | `pip install "tablassert[optimize]"` |
 | `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) | `pip install "tablassert[distill]"` |
@@ -156,11 +153,11 @@ no LazyFrame setup or NLP preprocessing required. See the
 
 - **[Installation](https://skyeav.github.io/Tablassert/installation/)**: install methods, extras, and development setup
 - **[Tutorial](https://skyeav.github.io/Tablassert/tutorial/)**: step-by-step example with synthetic data
-- **[CLI Reference](https://skyeav.github.io/Tablassert/cli/)**: complete command-line flag reference
 - **[Use Case Gallery](https://skyeav.github.io/Tablassert/examples/)**: real-world configuration patterns
+- **[CLI Reference](https://skyeav.github.io/Tablassert/cli/)**: complete command-line flag reference
 - **[Fullmap](https://skyeav.github.io/Tablassert/fullmap/)**: building and querying the entity-resolution database
-- **[Configuration](https://skyeav.github.io/Tablassert/configuration/graph/)**: graph and table configuration reference
 - **[Agent](https://skyeav.github.io/Tablassert/agent/)**: the autonomous agent pipeline
+- **[Configuration](https://skyeav.github.io/Tablassert/configuration/graph/)**: graph and table configuration reference
 - **[API Reference](https://skyeav.github.io/Tablassert/api/fullmap/)**: core functions documentation
 - **[Development](https://skyeav.github.io/Tablassert/development/)**: dev environment setup and contributor workflow
 - **[Changelog](https://skyeav.github.io/Tablassert/changelog/)**: release history
@@ -181,8 +178,8 @@ request guidelines.
 If you use Tablassert, please cite it as described in [CITATION.cff](CITATION.cff). The approach is
 described in:
 
-> Skye Lane Goetz, Amy K. Glen, and Gwênlyn Glusman. “MicrobiomeKG: bridging microbiome research
-> and host health through knowledge graphs.” *Frontiers in Systems Biology* 5 (2025).
+> Skye Lane Goetz, Amy K. Glen, and Gwênlyn Glusman. "MicrobiomeKG: bridging microbiome research
+> and host health through knowledge graphs." *Frontiers in Systems Biology* 5 (2025).
 > [doi:10.3389/fsysb.2025.1544432](https://doi.org/10.3389/fsysb.2025.1544432)
 
 ## License
