@@ -8,8 +8,9 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 
 ## Quickstart
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
+- [Documentation Site Home](docs/index.md): docs landing page and navigation context.
 - [Installation Guide](docs/installation.md): local/dev/tool installation paths. Optional extras: `cli` (Cyclopts and Rich command-line runtime), `rt` (runtime-compatible Polars), `aria2` (bundled aria2c downloader), `qc` (quality-control runtime), `agent` (autonomous agent), `optimize` (GEPA prompt optimization), `distill` (distillation dataset export), and `log` (loguru-backed logging).
-- [CLI Reference](docs/cli.md): eight commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
+- [CLI Reference](docs/cli.md): the eight commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
 ## YAML Authoring
@@ -20,13 +21,11 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Tutorial Graph Example](docs/examples/tutorial-graph.yaml): minimal graph configuration.
 - [Advanced Example](docs/configuration/advanced-example.md): complex regex, filtering, annotations, and section overrides.
 - [Agent Guide](docs/agent.md): autonomous article-to-graph pipeline, checkpoints, and tooling.
-- [Agent Example Artifacts](examples/agent/README.md): prompt-optimization and distillation example artifacts.
 
 ## CLI and Runtime
-- [CLI Module](src/tablassert/cli.py): the eight command implementations (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, `validate-kgx`) plus build pipeline stages; the console entry point is [cli_entry.py](src/tablassert/cli_entry.py), which also runs the `[cli]` runtime preflight.
-- [Pydantic Models](src/tablassert/models.py): authoritative schema for `Section` and `Graph`.
-- [YAML Ingestion](src/tablassert/ingests.py): `from_yaml()`, `to_sections()`, and template/section merge behavior.
 - [Fullmap Guide](docs/fullmap.md): entity-resolution database build pipeline and redb schema.
+- [CLI Entry Point](src/tablassert/cli_entry.py): console-script launcher (`main()`) and the `[cli]` runtime preflight.
+- [CLI Module](src/tablassert/cli.py): the eight command implementations and the build pipeline stages.
 
 ## Contributor Development
 - [Contributing Guide](CONTRIBUTING.md): setup, style conventions, checks, and PR expectations.
@@ -35,24 +34,23 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Tests](tests/): pytest coverage and fixtures.
 - [MkDocs Configuration](mkdocs.yml): docs navigation and published pages.
 - [GitHub Workflows](.github/workflows/): `ci.yml` runs lint, format, type, test, and rust checks; `docs.yml` builds and deploys MkDocs; `pipy.yml` checks the project version, builds sdist and wheel artifacts, and publishes to PyPI; `tag-version.yml` tags changed project versions.
+- [Changelog](CHANGELOG.md): release history and version notes.
 
 ## Implementation Map
 - [Agent Module](src/tablassert/agent.py): article fetching, config derivation, auditing, and improvement orchestration.
-- [Biolink Module](src/tablassert/biolink.py): Biolink-derived vocabularies, edge fields, and KGX validation.
-- [CLI Module](src/tablassert/cli.py): command implementations and build pipeline stages.
-- [CLI Entry Point](src/tablassert/cli_entry.py): console-script launcher and `[cli]` runtime preflight.
+- [Biolink Module](src/tablassert/biolink.py): Biolink-derived vocabularies (`Categories`, `Predicates`, `Qualifiers`, `KnowledgeLevels`, `AgentTypes`, `EdgeCategories`, `EffectTypes`, `ALLOWED_EDGE_FIELDS`, `validate_kgx` derived from the installed Biolink Model), edge fields, and KGX validation.
 - [Coercion Helpers](src/tablassert/coerce.py): annotation and value coercion helpers.
 - [Distillation Module](src/tablassert/distill.py): ChatML distillation record serialization.
 - [Distill Reward Module](src/tablassert/distill_reward.py): reward calculation, selection policies, record/outcome joins, outcome flattening, and training-row schema normalization alongside outcome assembly and config-provenance checks.
 - [Enums Catalog](src/tablassert/enums.py): Tablassert-owned configuration vocabularies (`Tokens`, `Repositories`, `InformationResources`, `Contributions`, `Comparisons`, `Functions`, `Files`, `EncodingMethods`, `FillMethods`, `SourceStatuses`, `ProvisionMechanisms`, `DataFormats`, `IngestCategories`, `ContentCategories`, `ModelingCategories`).
 - [Error Types](src/tablassert/errors.py): coded exceptions and validation warnings.
-- [Extras Registry](src/tablassert/extras.py): optional-dependency checks and install hints.
+- [Extras Registry](src/tablassert/extras.py): the package -> extra mapping behind the missing-dependency errors and their install hints.
 - [Fullmap Module](src/tablassert/fullmap.py): embedded redb synonym resolution and ranking logic.
 - [Graph Target](src/tablassert/graph_target.py): graph output target preparation and locking.
-- [YAML Ingestion](src/tablassert/ingests.py): YAML loading, section expansion, and merging.
+- [YAML Ingestion](src/tablassert/ingests.py): `from_yaml()`, `to_sections()`, template/section merge behavior, YAML loading, and section expansion.
 - [Core Pipeline](src/tablassert/lib.py): extraction transforms, statement assembly, and graph compilation.
 - [Logging](src/tablassert/log.py): optional loguru logging abstraction.
-- [Pydantic Models](src/tablassert/models.py): table, graph, and RIG configuration models.
+- [Pydantic Models](src/tablassert/models.py): authoritative schema for `Section` and `Graph`: table, graph, and RIG configuration models.
 - [Network Resilience](src/tablassert/net.py): transient-failure classification, bounded jittered backoff, and the retrying HTTP seam.
 - [NLP Helpers](src/tablassert/nlp.py): text normalization levels and preprocessing helpers.
 - [Progress](src/tablassert/progress.py): pipeline progress reporting and validation formatting.
@@ -65,21 +63,5 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Rust Extension](src/tablassert/rs.pyi): compiled Rust fullmap, NDJSON, UUID, and hash functions.
 
 ## Optional
-- [Biolink Vocabulary](src/tablassert/biolink.py): `Categories`, `Predicates`, `Qualifiers`, `KnowledgeLevels`, `AgentTypes`, `EdgeCategories`, `EffectTypes`, `ALLOWED_EDGE_FIELDS`, and `validate_kgx` derived from the installed Biolink Model.
-- [Documentation Home](docs/index.md): docs landing page and navigation context.
-- [Installation](docs/installation.md): installation methods, optional extras, and development setup.
-- [Tutorial](docs/tutorial.md): first end-to-end table-to-KGX walkthrough.
-- [Use Case Gallery](docs/examples.md): real-world configuration patterns.
-- [CLI Details](docs/cli.md): complete command and flag reference.
-- [Configuration: Graph](docs/configuration/graph.md): graph schema and identity configuration.
-- [Configuration: Table](docs/configuration/table.md): table schema and field semantics.
-- [Configuration: Advanced Example](docs/configuration/advanced-example.md): advanced configuration patterns.
-- [Agent Guide](docs/agent.md): autonomous article-to-graph workflow.
-- [Agent Example Artifacts](examples/agent/README.md): agent optimization and QC artifacts.
-- [API Reference: Fullmap](docs/api/fullmap.md): lower-level entity-resolution details.
-- [API Reference: Batch Resolution](docs/api/lib.md): the `resolve_many()` convenience function.
-- [API Reference: QC](docs/api/qc.md): quality control internals.
-- [API Reference: Utils](docs/api/utils.md): utility function references.
-- [Development](docs/development.md): contributor setup and documentation checks.
-- [Optional Extras Registry](src/tablassert/extras.py): the package → extra mapping behind the missing-dependency errors and their install hints.
-- [Changelog](CHANGELOG.md): release history and version notes.
+- [CITATION.cff](CITATION.cff): citation metadata and the reference paper.
+- [Agent Example Artifacts](examples/agent/README.md): GEPA prompt-optimization and distillation example artifacts.
