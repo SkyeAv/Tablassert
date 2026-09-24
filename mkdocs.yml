@@ -1,5 +1,5 @@
 site_name: Tablassert
-site_description: Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON — declaratively, with entity resolution and quality control built in.
+site_description: Extract knowledge assertions from tabular data into NCATS Translator-compliant KGX NDJSON, declaratively, with entity resolution and quality control built in.
 site_url: https://skyeav.github.io/Tablassert/
 repo_url: https://github.com/SkyeAv/Tablassert
 repo_name: SkyeAv/Tablassert
