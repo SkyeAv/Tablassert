@@ -23,7 +23,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Agent Example Artifacts](examples/agent/README.md): prompt-optimization and distillation example artifacts.
 
 ## CLI and Runtime
-- [CLI Entry Point](src/tablassert/cli.py): seven command implementations, the app-level `--version` flag, and build pipeline stages.
+- [CLI Module](src/tablassert/cli.py): the eight command implementations (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, `validate-kgx`) plus build pipeline stages; the console entry point is [cli_entry.py](src/tablassert/cli_entry.py), which also runs the `[cli]` runtime preflight.
 - [Pydantic Models](src/tablassert/models.py): authoritative schema for `Section` and `Graph`.
 - [YAML Ingestion](src/tablassert/ingests.py): `from_yaml()`, `to_sections()`, and template/section merge behavior.
 - [Fullmap Guide](docs/fullmap.md): entity-resolution database build pipeline and redb schema.

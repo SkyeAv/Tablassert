@@ -22,7 +22,7 @@ configuration reference, and API docs.
 ## Quick Start
 
 ```bash
-pip install tablassert
+pip install "tablassert[cli]"
 ```
 
 Given a CSV of gene-disease associations with p-values and sample sizes, declare the mapping in a
@@ -87,7 +87,7 @@ Output is one JSON object per line: nodes with Biolink categories, edges with an
 ```
 
 ```json
-{"subject":"HGNC:11998","predicate":"biolink:associated_with","object":"MONDO:0008903","p_value":"1.0000e-03","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"gene-disease.csv","study_size":450,"has_study_results":[{"id":"row:2"}]}}}
+{"id":"2cfea591-0f8f-33af-a7df-03da531d3359","subject":"HGNC:11998","predicate":"biolink:associated_with","object":"MONDO:0008903","p_value":"1.0000e-03","statistical_significance_qualifier":"strongly_significant","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"gene-disease.csv","study_size":450,"has_study_results":[{"id":"row:2"}]}},"publications":["PMID:12345678"]}
 ```
 
 See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full walkthrough.
@@ -181,7 +181,7 @@ request guidelines.
 If you use Tablassert, please cite it as described in [CITATION.cff](CITATION.cff). The approach is
 described in:
 
-> Skye Lane Goetz, Alex K. Glen, and Gwênlyn Glusman. “MicrobiomeKG: bridging microbiome research
+> Skye Lane Goetz, Amy K. Glen, and Gwênlyn Glusman. “MicrobiomeKG: bridging microbiome research
 > and host health through knowledge graphs.” *Frontiers in Systems Biology* 5 (2025).
 > [doi:10.3389/fsysb.2025.1544432](https://doi.org/10.3389/fsysb.2025.1544432)
 
