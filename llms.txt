@@ -27,6 +27,12 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [CLI Entry Point](src/tablassert/cli_entry.py): console-script launcher (`main()`) and the `[cli]` runtime preflight.
 - [CLI Module](src/tablassert/cli.py): the eight command implementations and the build pipeline stages.
 
+## API Reference
+- [Entity Resolution](docs/api/fullmap.md): the lower-level `resolve()` and `quick_map()` API.
+- [Batch Resolution](docs/api/lib.md): the `resolve_many()` convenience function.
+- [Quality Control](docs/api/qc.md): the four-stage `fullmap_audit()` pipeline.
+- [Utilities](docs/api/utils.md): hashing, store keys, and deterministic edge UUIDs.
+
 ## Contributor Development
 - [Contributing Guide](CONTRIBUTING.md): setup, style conventions, checks, and PR expectations.
 - [Development](docs/development.md): docs-site contributor setup and the local `uv run mkdocs build --strict` docs gate.
@@ -38,7 +44,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 
 ## Implementation Map
 - [Agent Module](src/tablassert/agent.py): article fetching, config derivation, auditing, and improvement orchestration.
-- [Biolink Module](src/tablassert/biolink.py): Biolink-derived vocabularies (`Categories`, `Predicates`, `Qualifiers`, `KnowledgeLevels`, `AgentTypes`, `EdgeCategories`, `EffectTypes`, `ALLOWED_EDGE_FIELDS`, `validate_kgx` derived from the installed Biolink Model), edge fields, and KGX validation.
+- [Biolink Vocabulary](src/tablassert/biolink.py): `Categories`, `Predicates`, `Qualifiers`, `KnowledgeLevels`, `AgentTypes`, `EdgeCategories`, `EffectTypes`, `ALLOWED_EDGE_FIELDS`, and `validate_kgx` derived from the installed Biolink Model.
 - [Coercion Helpers](src/tablassert/coerce.py): annotation and value coercion helpers.
 - [Distillation Module](src/tablassert/distill.py): ChatML distillation record serialization.
 - [Distill Reward Module](src/tablassert/distill_reward.py): reward calculation, selection policies, record/outcome joins, outcome flattening, and training-row schema normalization alongside outcome assembly and config-provenance checks.
