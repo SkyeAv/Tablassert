@@ -129,6 +129,23 @@ def test_validate_kgx_help_documents_the_failure_example_cap() -> None:
     assert ".edges.ndjson" in text
 
 
+ALL_COMMANDS = ["agent", "build-fullmap", "build-kg", "distill-export", "distill-weigh", "quick-map", "validate", "validate-kgx"]
+
+
+def test_no_help_page_renders_a_phantom_empty_flag() -> None:
+    """No rendered help contains cyclopts' auto --empty-* list-negation rows.
+
+    Why: cyclopts auto-generates an ``--empty-<name>`` reset flag for every list
+    parameter and renders it as its own help row; on ``agent`` the row even carried
+    ``[required]``, reading as a real flag an agent must pass. List params now opt out
+    via ``Parameter(negative="")``, and this sweeps every command so a newly added list
+    parameter cannot reintroduce the noise.
+    """
+    for command in ALL_COMMANDS:
+        text = render_help([command])
+        assert "--empty-" not in text, f"{command} --help renders a phantom --empty-* row"
+
+
 def test_build_fullmap_babel_version_flag_binds_and_the_old_shadow_is_documented() -> None:
     """--babel-version selects the snapshot; the stale --version form stays app-owned.
 
