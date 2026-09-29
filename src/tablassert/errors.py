@@ -70,6 +70,7 @@ TablassertErrorCodes = Literal[
     "qualifier-unsatisfiable",
     "qualifier-nullable-literal",
     "qualifier-duplicated",
+    "qualifier-vocabulary-violation",
     "rig-bad-infores",
     "rig-bad-artifact-url",
     "rig-bad-access-location",

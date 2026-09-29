@@ -14,7 +14,7 @@ from pydantic import ValidationError
 import tablassert.cli as cli
 import tablassert.lib as lib
 from tablassert import rs
-from tablassert.biolink import ALLOWED_EDGE_FIELDS, EFFECT_TYPE_VALUES, UNSATISFIABLE_EDGE_FIELDS, Categories, validate_kgx
+from tablassert.biolink import ALLOWED_EDGE_FIELDS, EFFECT_TYPE_VALUES, ENUM_RANGED_QUALIFIERS, UNSATISFIABLE_EDGE_FIELDS, Categories, validate_kgx
 from tablassert.coerce import (
     _EFFECT_TYPE_ALIASES,
     _RULES,
@@ -24,6 +24,7 @@ from tablassert.coerce import (
     study_metadata_target,
 )
 from tablassert.enums import Repositories
+from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec
 from tablassert.ingests import from_yaml
 from tablassert.lib import (
@@ -53,6 +54,7 @@ from tablassert.lib import (
     parse_edge_name,
     publications,
     pvalue_target,
+    qualifier_vocabulary_audit,
     retrieval_sources,
     split_list,
     strip_nulls,
@@ -462,6 +464,86 @@ def test_tcode_collect_excludes_nullable_qualifier_from_audit(fixtures_path: Pat
 
     assert audit_cols == ["subject", "object", "anatomical_context_qualifier"]
     assert "disease_context_qualifier" not in audit_cols
+
+
+def test_qualifier_vocabulary_audit_passes_members_nulls_and_null_like_text() -> None:
+    """The vocabulary audit is a no-op for vocabulary members.
+
+    Nulls and null-like text ("", "NA") are exempt because the Rust strip_nulls drops them at
+    emission, so they never reach KGX; failing the build over them would reject builds whose
+    output is actually clean.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"object_direction_qualifier": ["increased", "decreased", None, "", "NA"]}).lazy()
+
+    result: pl.LazyFrame = qualifier_vocabulary_audit(lf, "object_direction_qualifier", ENUM_RANGED_QUALIFIERS["object_direction_qualifier"])
+
+    assert result.collect().height == 5
+
+
+def test_qualifier_vocabulary_audit_rejects_off_vocabulary_value() -> None:
+    """Off-vocabulary tokens fail the build with qualifier-vocabulary-violation.
+
+    Enum-ranged qualifiers bypass entity resolution, so this coded error is the only thing
+    standing between a mistyped source cell and KGX output that fails validation far later;
+    the message must name the qualifier, the offending values, and the permitted set.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"object_direction_qualifier": ["increased", "UMLS:C0205217", "bogus"]}).lazy()
+
+    with pytest.raises(TablassertError) as exc_info:
+        qualifier_vocabulary_audit(lf, "object_direction_qualifier", ENUM_RANGED_QUALIFIERS["object_direction_qualifier"])
+
+    assert exc_info.value.code == "qualifier-vocabulary-violation"
+    assert "object_direction_qualifier" in str(exc_info.value)
+    assert "'UMLS:C0205217'" in str(exc_info.value)
+    assert "'bogus'" in str(exc_info.value)
+    assert "'increased'" in str(exc_info.value)
+
+
+def test_qualifier_vocabulary_audit_checks_exploded_list_elements() -> None:
+    """An exploded (multivalued) enum column is audited element-wise.
+
+    explode_by turns a delimited cell into a list column; checking only whole-cell values
+    would let an off-vocabulary token hide inside a list.
+    """
+    bad: pl.LazyFrame = pl.DataFrame({"subject_part_qualifier": [["exon"], ["exon", "bogus_part"]]}).lazy()
+    good: pl.LazyFrame = pl.DataFrame({"subject_part_qualifier": [["exon"], ["exon", "promoter"]]}).lazy()
+    vocabulary: frozenset[str] = ENUM_RANGED_QUALIFIERS["subject_part_qualifier"]
+
+    ok: pl.LazyFrame = qualifier_vocabulary_audit(good, "subject_part_qualifier", vocabulary)
+    assert ok.collect().height == 2
+
+    with pytest.raises(TablassertError) as exc_info:
+        qualifier_vocabulary_audit(bad, "subject_part_qualifier", vocabulary)
+
+    assert "'bogus_part'" in str(exc_info.value)
+
+
+def test_tcode_collect_audits_enum_ranged_qualifier_vocabulary(fixtures_path: Path) -> None:
+    """collect appends a vocabulary audit to every enum-ranged qualifier's encoding ops.
+
+    CURIE-ranged qualifiers resolve through the fullmap and must get no audit; the enum
+    audit runs before trim (it needs the encoded column to exist) for both method: value
+    and method: column declarations.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_vocab_audit.parquet")
+    data["statement"]["qualifiers"] = [
+        {"qualifier": "object_direction_qualifier", "method": "column", "encoding": "D"},
+        {"qualifier": "anatomical_context_qualifier", "method": "value", "encoding": "UBERON:0000061"},
+    ]
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    vocab_ops: list[tuple[int, tuple[Any, ...]]] = [(i, op[1]) for i, op in enumerate(collected) if op[0].__name__ == "qualifier_vocabulary_audit"]
+    trim_idx: int = next(i for i, op in enumerate(collected) if op[0].__name__ == "trim")
+
+    assert len(vocab_ops) == 1
+    idx, args = vocab_ops[0]
+    assert args == ("object_direction_qualifier", ENUM_RANGED_QUALIFIERS["object_direction_qualifier"])
+    assert idx < trim_idx
 
 
 def test_tcode_collect_edge_ops_follow_resolve_batch(fixtures_path: Path) -> None:
