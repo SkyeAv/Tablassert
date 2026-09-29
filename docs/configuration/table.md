@@ -421,6 +421,8 @@ still emitted on resolved nodes.
 
 A qualifier inherits the full NodeEncoding surface, so it accepts the resolution filters `exclude_prefixes` and `exclude_regex` with the same matching rules subject/object encodings use: they filter the resolved CURIEs of the qualifiers that go through entity resolution (CURIE-ranged qualifiers; enum-ranged ones pass through verbatim). What differs is the consequence when filtering removes every candidate. A strict qualifier (`nullable: false`, the default) drops the row like an unresolved subject/object, while a `nullable: true` qualifier keeps the edge and omits the qualifier key for that row. See [Resolution Filters](#resolution-filters).
 
+**Enum-ranged qualifiers are validated at build time.** Some qualifiers (e.g. `object_direction_qualifier`, `subject_part_qualifier`, `association_basis_qualifier`) have a closed Biolink vocabulary instead of a CURIE range. Their values pass through unresolved, and the build audits every non-null value against the vocabulary after the column's full encoding chain: a `method: column` cell holding an off-vocabulary token, or a `method: value` literal mutated into one by `fill`/`regex`/`prefix`/`suffix`, fails the build with `qualifier-vocabulary-violation`, naming the offending and permitted values. Matching is exact (`increased`, not `Increased`); null and blank cells are exempt (they are stripped from the output), so `nullable: true` qualifiers keep working unchanged.
+
 **Example: required qualifier (dense column, default)**
 ```yaml
 qualifiers:

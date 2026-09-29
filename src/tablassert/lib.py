@@ -45,6 +45,7 @@ from tablassert.coerce import (
     study_size_target,
 )
 from tablassert.enums import EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
+from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
 from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section
@@ -1142,6 +1143,51 @@ def trim(lf: pl.LazyFrame, regex: str = r"^column_\d+$") -> pl.LazyFrame:
     return lf.select(pl.exclude(regex))
 
 
+def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: Iterable[str]) -> pl.LazyFrame:
+    """Fail the build when an enum-ranged qualifier column holds off-vocabulary tokens.
+
+    Enum-ranged qualifiers (``ENUM_RANGED_QUALIFIERS``) bypass entity resolution, so nothing
+    else checks that ``method: column`` cells -- or a ``method: value`` literal mutated by
+    fill/regex/prefix/suffix -- carry tokens from the closed Biolink vocabulary. This op runs
+    after the column's full encoding chain and raises a coded error naming the offending
+    values instead of emitting KGX that fails validation much later, far from the cause.
+
+    Args:
+        lf: Source LazyFrame.
+        col: The enum-ranged qualifier column (named after the qualifier key).
+        vocabulary: The closed set of permitted tokens (any iterable; sorted for the check).
+
+    Returns:
+        The LazyFrame unchanged; the op exists for its check.
+
+    Notes:
+        Nulls and null-like text (``""``, ``"NA"``, ...) are exempt: the Rust
+        ``strip_nulls`` drops them at emission, so they never reach the output. Matching is
+        exact -- the vocabularies are closed, and the config-time literal validator
+        (``qualifier-bad-value``) applies the same rule.
+    """
+    values: pl.Series = lf.select(pl.col(col)).collect().get_column(col)
+    if values.dtype.base_type() in (pl.List, pl.Array):
+        values = values.explode()
+    values = values.drop_nulls()
+    if values.len() == 0:
+        return lf
+    allowed: list[str] = sorted(vocabulary)
+    null_like: pl.Series = values.str.strip_chars().str.to_lowercase().is_in(list(_NULL_LIKE_TEXT))
+    offending: pl.Series = values.filter(~null_like & ~values.is_in(allowed)).unique().sort()
+    if offending.len() == 0:
+        return lf
+    shown: list[str] = offending.head(10).to_list()
+    more: str = "..." if offending.len() > len(shown) else ""
+    raise TablassertError(
+        f"{col} has a closed Biolink vocabulary; {offending.len()} offending value(s) found in the built column: "
+        f"{', '.join(repr(x) for x in shown)}{more}. Permitted values include: "
+        f"{', '.join(repr(x) for x in allowed[:8])}... Null or blank cells are exempt "
+        "(they are stripped from the output); fix the source table or the qualifier's encoding.",
+        code="qualifier-vocabulary-violation",
+    )
+
+
 def to_store(lf: pl.LazyFrame, p: Path, config_name: str) -> Path:
     """Collect and write a section LazyFrame to a parquet file.
 
@@ -1322,8 +1368,10 @@ class Tcode(Section):
         return [
             [self.node_prep(x, col) for x, col in node_columns],
             # Encode only: no pre-resolution snapshot and no NLP normalization, both of
-            # which exist to feed entity resolution these columns never undergo.
-            [self.encoding(x, x.qualifier) for x in literals],
+            # which exist to feed entity resolution these columns never undergo. Each enum-
+            # ranged column ends with a vocabulary audit: nothing else validates its cell
+            # values against the closed Biolink range before KGX emission.
+            [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
             # Raw ``column_<n>`` columns are dead weight once the encodings above have
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.
@@ -1472,6 +1520,7 @@ PHASE_OF: dict[Callable, str] = {
     resolve_batch: "resolve",
     fullmap_audit: "qc",
     column: "encode",
+    qualifier_vocabulary_audit: "encode",
     edge_category: "edge",
     publications: "provenance",
     retrieval_sources: "provenance",
