@@ -1143,7 +1143,7 @@ def trim(lf: pl.LazyFrame, regex: str = r"^column_\d+$") -> pl.LazyFrame:
     return lf.select(pl.exclude(regex))
 
 
-def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: frozenset[str]) -> pl.LazyFrame:
+def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: Iterable[str]) -> pl.LazyFrame:
     """Fail the build when an enum-ranged qualifier column holds off-vocabulary tokens.
 
     Enum-ranged qualifiers (``ENUM_RANGED_QUALIFIERS``) bypass entity resolution, so nothing
@@ -1155,7 +1155,7 @@ def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: frozenset
     Args:
         lf: Source LazyFrame.
         col: The enum-ranged qualifier column (named after the qualifier key).
-        vocabulary: The closed set of permitted tokens.
+        vocabulary: The closed set of permitted tokens (any iterable; sorted for the check).
 
     Returns:
         The LazyFrame unchanged; the op exists for its check.
@@ -1172,8 +1172,9 @@ def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: frozenset
     values = values.drop_nulls()
     if values.len() == 0:
         return lf
+    allowed: list[str] = sorted(vocabulary)
     null_like: pl.Series = values.str.strip_chars().str.to_lowercase().is_in(list(_NULL_LIKE_TEXT))
-    offending: pl.Series = values.filter(~null_like & ~values.is_in(sorted(vocabulary))).unique().sort()
+    offending: pl.Series = values.filter(~null_like & ~values.is_in(allowed)).unique().sort()
     if offending.len() == 0:
         return lf
     shown: list[str] = offending.head(10).to_list()
@@ -1181,7 +1182,7 @@ def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: frozenset
     raise TablassertError(
         f"{col} has a closed Biolink vocabulary; {offending.len()} offending value(s) found in the built column: "
         f"{', '.join(repr(x) for x in shown)}{more}. Permitted values include: "
-        f"{', '.join(repr(x) for x in sorted(vocabulary)[:8])}... Null or blank cells are exempt "
+        f"{', '.join(repr(x) for x in allowed[:8])}... Null or blank cells are exempt "
         "(they are stripped from the output); fix the source table or the qualifier's encoding.",
         code="qualifier-vocabulary-violation",
     )
@@ -1370,7 +1371,7 @@ class Tcode(Section):
             # which exist to feed entity resolution these columns never undergo. Each enum-
             # ranged column ends with a vocabulary audit: nothing else validates its cell
             # values against the closed Biolink range before KGX emission.
-            [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), x.vocabulary))] for x in literals],
+            [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
             # Raw ``column_<n>`` columns are dead weight once the encodings above have
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.

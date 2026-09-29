@@ -542,7 +542,7 @@ def test_tcode_collect_audits_enum_ranged_qualifier_vocabulary(fixtures_path: Pa
 
     assert len(vocab_ops) == 1
     idx, args = vocab_ops[0]
-    assert args == ("object_direction_qualifier", ENUM_RANGED_QUALIFIERS["object_direction_qualifier"])
+    assert args == ("object_direction_qualifier", sorted(ENUM_RANGED_QUALIFIERS["object_direction_qualifier"]))
     assert idx < trim_idx
 
 
