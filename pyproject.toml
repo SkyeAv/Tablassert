@@ -49,10 +49,11 @@ requires-python = ">=3.11"
 dependencies = [
     "biolink-model>=4.4.4",
     "polars>=2.0.0rc2",
+    "pyarrow>=21.0.0",
     "rapidfuzz>=3.14.3",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
-    "fastexcel>=0.20.2",
+    "fastexcel>=0.21.0",
 ]
 
 [project.urls]

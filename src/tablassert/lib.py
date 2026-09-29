@@ -892,6 +892,16 @@ def idx(lf: pl.LazyFrame, col: str = "extracted_from_row_number") -> pl.LazyFram
     return lf.with_row_index(col, offset=1)
 
 
+def _polars_auto_column_names(names: list[str]) -> bool:
+    """Return True when ``names`` is exactly polars' headerless auto-naming scheme.
+
+    Polars 2.0 autogenerates headerless column names as ``column_0``.. ``column_{n-1}``
+    (1.x used ``column_1``.. ``column_n``). Matching the full consecutive run keeps the
+    remap below strictly scoped to machine-generated names, never user data.
+    """
+    return bool(names) and all(name == f"column_{i}" for i, name in enumerate(names))
+
+
 def csv(p: Path, sep: str) -> pl.LazyFrame:
     """Read a CSV or TSV source as a LazyFrame.
 
@@ -901,8 +911,17 @@ def csv(p: Path, sep: str) -> pl.LazyFrame:
 
     Returns:
         LazyFrame over the file (no header inference; all columns raw).
+
+    Notes:
+        Headerless auto column names are remapped to the 1-based ``column_1``..
+        convention so existing table configs keep referencing the same names as
+        under polars 1.x (output parity).
     """
-    return pl.scan_csv(source=p, separator=sep, has_header=False, infer_schema_length=None, truncate_ragged_lines=True)
+    lf: pl.LazyFrame = pl.scan_csv(source=p, separator=sep, has_header=False, infer_schema_length=None, truncate_ragged_lines=True)
+    schema_names: list[str] = list(lf.collect_schema().names())
+    if _polars_auto_column_names(schema_names):
+        lf = lf.rename(dict(zip(schema_names, (f"column_{i + 1}" for i in range(len(schema_names))), strict=True)))
+    return lf
 
 
 def excel(p: Path, sheet: str, engine: str = "calamine") -> pl.LazyFrame:
@@ -915,6 +934,11 @@ def excel(p: Path, sheet: str, engine: str = "calamine") -> pl.LazyFrame:
 
     Returns:
         LazyFrame over the sheet contents (no header inference).
+
+    Notes:
+        Headerless auto column names are remapped to the 1-based ``column_1``..
+        convention so existing table configs keep referencing the same names as
+        under polars 1.x (output parity).
     """
     df: pl.DataFrame = pl.read_excel(
         source=p,
@@ -923,6 +947,8 @@ def excel(p: Path, sheet: str, engine: str = "calamine") -> pl.LazyFrame:
         has_header=False,
         infer_schema_length=None,
     )
+    if _polars_auto_column_names(df.columns):
+        df = df.rename(dict(zip(df.columns, (f"column_{i + 1}" for i in range(len(df.columns))), strict=True)))
     return df.lazy()
 
 
