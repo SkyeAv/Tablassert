@@ -292,7 +292,10 @@ def distinct(lf: pl.LazyFrame, l1: str, l2: str, col: str = "term") -> pl.LazyFr
     t2: pl.LazyFrame = lf.select(pl.col(l2).alias(col)).unique()
     t2 = t2.with_columns(pl.lit(2).alias("nlp_level"))
 
-    terms: pl.LazyFrame = pl.concat([t1, t2]).unique(subset=[col], keep="first")
+    # Level-1 wins per term. Group-by min instead of concat + unique(keep="first"):
+    # the streaming engine (polars 2.0 default) does not preserve row order for
+    # concat/unique, so first-seen tier selection would be scheduling-dependent.
+    terms: pl.LazyFrame = pl.concat([t1, t2]).group_by(col).agg(pl.col("nlp_level").min())
 
     bad: str = r"^\d+$|^(none|nan|na|null|unknown|not applicable|p_value|variable|result|exposure|expression|symbol)$|^$"
     return terms.filter(~pl.col(col).str.contains(bad))

@@ -48,11 +48,12 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "biolink-model>=4.4.4",
-    "polars>=1.39.0",
+    "polars>=2.0.0rc2",
+    "pyarrow>=21.0.0",
     "rapidfuzz>=3.14.3",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
-    "fastexcel>=0.20.2",
+    "fastexcel>=0.21.0",
 ]
 
 [project.urls]
@@ -81,7 +82,7 @@ cli = [
     "rich>=13.0.0",
 ]
 rt = [
-    "polars[rtcompat]>=1.40.1",
+    "polars[rtcompat]>=2.0.0rc2",
 ]
 # PyPI distribution "aria2" exposes import module "aria2c" with a bundled aria2c binary.
 aria2 = [
