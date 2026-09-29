@@ -1650,7 +1650,7 @@ def normalize(edges: pl.LazyFrame, col: str, names: list[str] | None = None, inf
     available: list[str] = edges.collect_schema().names()
     # `<col>_taxon_label` is not produced by every fullmap revision.
     pairs: list[tuple[str, str]] = [(c, n) for c, n in zip(cols, names, strict=True) if c in available]
-    nodes: pl.LazyFrame = edges.select([c for c, _ in pairs]).unique().rename(dict(pairs))
+    nodes: pl.LazyFrame = edges.select([c for c, _ in pairs]).unique(maintain_order=True).rename(dict(pairs))
     # Ensures category has biolink: prefix.
     nodes = nodes.with_columns(
         pl.when(pl.col("category").str.starts_with("biolink:"))
@@ -1943,7 +1943,7 @@ def _write_ndjson(
         on_phase("write-nodes")
     with nodes_tmp.open("a", encoding="utf-8") as f:
         for subnode in subnodes:
-            eagernode: pl.DataFrame = subnode.collect().unique()
+            eagernode: pl.DataFrame = subnode.collect().unique(maintain_order=True)
             eagernode.write_ndjson(f)
 
     # Phase: write-edges.
@@ -1951,7 +1951,7 @@ def _write_ndjson(
         on_phase("write-edges")
     with edges_tmp.open("a", encoding="utf-8") as f:
         for subedge in subedges:
-            eageredge: pl.DataFrame = subedge.collect().unique()
+            eageredge: pl.DataFrame = subedge.collect().unique(maintain_order=True)
             eageredge.write_ndjson(f)
 
     # Phase: dedup.
