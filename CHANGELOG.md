@@ -7,6 +7,13 @@ All notable changes to this project are documented in this file.
 ### Added
 - **Enum-ranged qualifiers are validated against their closed Biolink vocabulary at build time.** Non-CURIE qualifiers (`object_direction_qualifier`, `subject_part_qualifier`, `association_basis_qualifier`, and the rest of the enum-ranged set) pass through entity resolution untouched, so a `method: column` cell with a mistyped token used to reach the KGX output and fail validation much later, far from the cause. The build now audits every enum-ranged qualifier column after its full encoding chain and fails with `qualifier-vocabulary-violation`, naming the offending and permitted values; `method: value` literals are audited too, catching a valid literal mutated by `fill`/`regex`/`prefix`/`suffix`. Null and blank cells stay exempt, so `nullable: true` qualifiers are unaffected, and CURIE-ranged qualifiers never hit the check.
 
+### Changed
+- **`build-fullmap`'s BABEL snapshot flag is now `--babel-version` (`-v`).** The old `--version`
+  long form was dead on arrival: the app-level `--version` flag shadowed it, so `build-fullmap
+  --version <snapshot>` printed the app version and exited 0 without ever running the command.
+  The short form `-v` still works, `tablassert --version` is unchanged, and the stale
+  "two different `--version`s" docs warning is replaced by the rename explanation. ([#TBD](https://github.com/SkyeAv/Tablassert/pull))
+
 ## 19.3.0 - 2026-09-29
 
 ### Changed

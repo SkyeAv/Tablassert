@@ -127,3 +127,30 @@ def test_validate_kgx_help_documents_the_failure_example_cap() -> None:
     assert "every record is still validated" in text
     assert ".nodes.ndjson" in text
     assert ".edges.ndjson" in text
+
+
+def test_build_fullmap_babel_version_flag_binds_and_the_old_shadow_is_documented() -> None:
+    """--babel-version selects the snapshot; the stale --version form stays app-owned.
+
+    Why: the app-level --version flag shadowed build-fullmap's --version, so
+    `build-fullmap --version <snapshot>` printed the app version and exited 0 without
+    running anything. The rename gives the command a long flag that actually binds; the
+    remaining --version behavior (print the package version - by cyclopts design the app
+    version flag answers anywhere in the command chain) is pinned here and documented in
+    docs/cli.md's warning block so the old form's result is never mistaken for a build.
+    """
+    fn, bound, _ = cli.APP.parse_args(["build-fullmap", "--babel-version", "2026aug22"], exit_on_error=False)
+    assert fn is cli.build_fullmap
+    assert dict(bound.arguments) == {"version": "2026aug22"}
+
+    fn, bound, _ = cli.APP.parse_args(["build-fullmap", "-v", "2026aug22"], exit_on_error=False)
+    assert fn is cli.build_fullmap
+    assert dict(bound.arguments) == {"version": "2026aug22"}
+
+    # The stale form resolves to the app's version printer (a per-call App view), never
+    # to build_fullmap; compare by function name since the view's binding differs.
+    fn, bound, _ = cli.APP.parse_args(["build-fullmap", "--version"], exit_on_error=False)
+    assert getattr(fn, "__name__", "") == "version_print"
+
+    text = render_help(["build-fullmap"])
+    assert "--babel-version" in text

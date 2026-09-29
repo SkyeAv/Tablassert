@@ -1801,7 +1801,7 @@ def _prebuilt_fullmap_urls(babel_version: str) -> tuple[str, str]:
     installed-package metadata, never hardcoded, so a new release looks itself up.
 
     Args:
-        babel_version: BABEL snapshot label (the ``--version`` value), e.g. ``2026jul22``.
+        babel_version: BABEL snapshot label (the ``--babel-version`` value), e.g. ``2026jul22``.
 
     Returns:
         ``(archive_url, checksum_url)`` for ``fullmap.tar.zst`` and ``sha256sum.txt``.
@@ -2078,7 +2078,10 @@ def fullmap_matches_allowlist(output: Path, taxon_allowlist: list[int]) -> bool:
 def build_fullmap(
     output: Annotated[Path, cyclopts.Parameter(name=["--output", "-o"])] = Path("./fullmap/data/fullmap.redb"),
     cache: Annotated[Path, cyclopts.Parameter(name=["--cache", "-c"])] = Path("./fullmap/downloads"),
-    version: Annotated[str, cyclopts.Parameter(name=["--version", "-v"])] = BABEL_VERSION,
+    # Named --babel-version because the app-level --version flag shadowed the old --version
+    # long form: `build-fullmap --version <snapshot>` printed the app version and exited 0
+    # without ever running the command. -v keeps the short form.
+    version: Annotated[str, cyclopts.Parameter(name=["--babel-version", "-v"])] = BABEL_VERSION,
     force: Annotated[bool, cyclopts.Parameter(name=["--force", "-f"], negative="")] = False,
 ) -> None:
     """Build an embedded fullmap redb database, or download a prebuilt one from RENCI.
@@ -2105,7 +2108,8 @@ def build_fullmap(
     Args:
         output: Path to write the redb file (prebuilt extraction or build output).
         cache: Directory for downloaded BABEL files when building from scratch.
-        version: BABEL snapshot date to fetch (a RENCI stamp, NOT Tablassert's version).
+        version: BABEL snapshot date to fetch via ``--babel-version`` (a RENCI stamp, NOT
+            Tablassert's version).
         force: Skip the prebuilt download and always rebuild from BABEL outputs.
     """
     allowlist_ids: list[int] = load_taxon_allowlist()

@@ -63,8 +63,8 @@ the Python downloader is used otherwise.
 
 Two facts matter most when planning a build:
 
-- The BABEL **version** flag selects a RENCI BABEL snapshot date (default `2026jul22`), *not*
-  Tablassert's package version. Bumping it fetches a different snapshot and requires rebuilding; the
+- The BABEL **version** flag (`--babel-version`, `-v`) selects a RENCI BABEL snapshot date (default
+  `2026jul22`), *not* Tablassert's package version. Bumping it fetches a different snapshot and requires rebuilding; the
   value used is recorded in the primary's `meta` table (`source_version`).
 - The build **parallelizes automatically** across all available CPU threads: the Rust build caps
   workers at `min(available_CPUs, MemAvailable_GB / 2)` on Linux (reading `MemAvailable:` from

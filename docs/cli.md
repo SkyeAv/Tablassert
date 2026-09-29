@@ -28,9 +28,11 @@ These are flags on the root `tablassert` command, **not** subcommands.
 | `--version` | Print the installed package version as `tablassert <version>` (e.g. `tablassert 10.1.0`) and exit |
 | `--help`, `-h` | Show help for the app or a subcommand |
 
-!!! warning "Two different `--version`s"
-    The app `--version` prints **Tablassert's package version**. The [`build-fullmap --version`](#build-fullmap)
-    flag is unrelated: it selects a **RENCI BABEL snapshot date** (default `2026jul22`).
+!!! warning "Two different versions"
+    The app `--version` prints **Tablassert's package version**. The [`build-fullmap --babel-version`](#build-fullmap)
+    flag is unrelated: it selects a **RENCI BABEL snapshot date** (default `2026jul22`). It is deliberately
+    not named `--version`, because the app-level `--version` flag shadowed that long form: `build-fullmap
+    --version <snapshot>` printed the app version and exited 0 without running the command.
 
 ---
 
@@ -181,7 +183,7 @@ tablassert build-fullmap [ARGS]
 | --- | --- | --- | --- | --- |
 | `--output`, `-o` | Path | No | `./fullmap/data/fullmap.redb` | Path to write the redb file (prebuilt extraction or build output) |
 | `--cache`, `-c` | Path | No | `./fullmap/downloads` | Directory for downloaded BABEL files when building from scratch (`classes/`, `synonyms/`) |
-| `--version`, `-v` | str | No | `2026jul22` | BABEL snapshot date to fetch (a RENCI stamp, **not** Tablassert's version) |
+| `--babel-version`, `-v` | str | No | `2026jul22` | BABEL snapshot date to fetch (a RENCI stamp, **not** Tablassert's version) |
 | `--force`, `-f` | Flag | No | `False` | Skip the prebuilt download and always rebuild from BABEL outputs |
 
 ```bash
