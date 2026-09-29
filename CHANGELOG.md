@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Changed
-- **The engine is now polars 2.0 (`polars>=2.0.0rc2`).** All lazy queries run on the polars 2.0 streaming engine by default, which lowers memory use on large builds. Output parity is preserved: headerless CSV/Excel sources keep the 1.x `column_1`-based auto column names (existing table configs are unaffected), NLP tier selection is order-independent, and KGX NDJSON emission order is pinned to scan order, so a build is byte-for-byte reproducible run to run. `pyarrow` joins the core dependencies (polars' eager Excel path and a fix for the 2.0 stream-interface reader) and `fastexcel` is bumped to `>=0.21.0`. Verified equivalent-or-better: a 150k-row end-to-end build runs ~1% faster on 2.0, and the Rust dedup and file-hash benchmarks are unchanged.
+- **The engine is now polars 2.0 (`polars>=2.0.0rc2`).** All lazy queries run on the polars 2.0 streaming engine by default, which lowers memory use on large builds. Output parity is preserved: headerless CSV/Excel sources keep the 1.x `column_1`-based auto column names (existing table configs are unaffected), NLP tier selection is order-independent, and KGX NDJSON emission order is pinned to scan order, so a build is byte-for-byte reproducible run to run. `pyarrow` joins the core dependencies (polars' eager Excel path and a fix for the 2.0 stream-interface reader) and `fastexcel` is bumped to `>=0.21.0`. Verified equivalent-or-better: a 150k-row end-to-end build runs ~1% faster on 2.0, and the Rust dedup and file-hash benchmarks are unchanged. ([#197](https://github.com/SkyeAv/Tablassert/pull/197))
 
 ## 19.2.0 - 2026-09-21
 
