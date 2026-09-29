@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- **Enum-ranged qualifiers are validated against their closed Biolink vocabulary at build time.** Non-CURIE qualifiers (`object_direction_qualifier`, `subject_part_qualifier`, `association_basis_qualifier`, and the rest of the enum-ranged set) pass through entity resolution untouched, so a `method: column` cell with a mistyped token used to reach the KGX output and fail validation much later, far from the cause. The build now audits every enum-ranged qualifier column after its full encoding chain and fails with `qualifier-vocabulary-violation`, naming the offending and permitted values; `method: value` literals are audited too, catching a valid literal mutated by `fill`/`regex`/`prefix`/`suffix`. Null and blank cells stay exempt, so `nullable: true` qualifiers are unaffected, and CURIE-ranged qualifiers never hit the check.
+
 ## 19.3.0 - 2026-09-29
 
 ### Changed
