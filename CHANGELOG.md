@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 19.4.0 - 2026-09-29
 
 ### Added
 - **Enum-ranged qualifiers are validated against their closed Biolink vocabulary at build time.** Non-CURIE qualifiers (`object_direction_qualifier`, `subject_part_qualifier`, `association_basis_qualifier`, and the rest of the enum-ranged set) pass through entity resolution untouched, so a `method: column` cell with a mistyped token used to reach the KGX output and fail validation much later, far from the cause. The build now audits every enum-ranged qualifier column after its full encoding chain and fails with `qualifier-vocabulary-violation`, naming the offending and permitted values; `method: value` literals are audited too, catching a valid literal mutated by `fill`/`regex`/`prefix`/`suffix`. Null and blank cells stay exempt, so `nullable: true` qualifiers are unaffected, and CURIE-ranged qualifiers never hit the check.
@@ -13,6 +13,29 @@ All notable changes to this project are documented in this file.
   --version <snapshot>` printed the app version and exited 0 without ever running the command.
   The short form `-v` still works, `tablassert --version` is unchanged, and the stale
   "two different `--version`s" docs warning is replaced by the rename explanation. ([#201](https://github.com/SkyeAv/Tablassert/pull/201))
+
+### Fixed
+- **`distill-weigh` help is now self-sufficient for agents.** `--policy` becomes a `Literal`
+  so cyclopts renders `[choices:]` and rejects an unknown policy at parse time instead of
+  after the corpus is loaded and joined (a parity test keeps the inline Literal in lockstep
+  with `distill_reward.POLICIES`), and the command docstring gains a full Args section so
+  every flag renders a description in `--help`, including `--purpose`'s dynamic vocabulary
+  and exit-2 behavior; `docs/cli.md` drops the now-stale "validated at runtime" wording.
+  ([#199](https://github.com/SkyeAv/Tablassert/pull/199))
+- **`build-kg`, `validate`, and `validate-kgx` render per-flag help.** All three commands
+  rendered bare parameter rows (`--release -r`) because their docstrings had no Args
+  section, so `--help` could not tell an agent what `--release`, `--head`, `--log`,
+  `--schema`, or `--limit` actually do; each docstring gains an Args section whose wording
+  matches the `docs/cli.md` flag tables (the SSOT), including `--head`'s 5-row sample
+  contract, `--log`'s `[log]`-extra requirement, and `--limit`'s examples-not-coverage cap.
+  ([#200](https://github.com/SkyeAv/Tablassert/pull/200))
+- **No phantom `--empty-*` flags in help.** Cyclopts auto-generates an `--empty-<name>`
+  reset flag for every list parameter and gives it its own help row; `agent`'s
+  `--empty-pmc-ids` even rendered `[required]`, reading as a mandatory flag. `quick-map`'s
+  `terms` and filter lists and `agent`'s `pmc_ids`/`local` now set `Parameter(negative="")`
+  to opt out, and a sweep test asserts no command's `--help` contains an `--empty-` row so
+  a future list parameter cannot reintroduce the noise.
+  ([#202](https://github.com/SkyeAv/Tablassert/pull/202))
 
 ## 19.3.0 - 2026-09-29
 
