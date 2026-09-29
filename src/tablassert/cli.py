@@ -1375,7 +1375,9 @@ def distill_weigh(
     *,
     distill_dir: Annotated[Path, cyclopts.Parameter(name=["--distill-dir", "-dd"])],
     out: Annotated[Path, cyclopts.Parameter(name=["--out", "-o"])],
-    policy: Annotated[str, cyclopts.Parameter(name=["--policy", "-p"])] = "threshold",
+    # Literal mirrors tablassert.distill_reward.POLICIES (kept inline so the CLI stays
+    # import-light); tests/test_cli_help_friendly.py enforces the two stay in lockstep.
+    policy: Annotated[Literal["threshold", "best-of-n", "replication"], cyclopts.Parameter(name=["--policy", "-p"])] = "threshold",
     threshold: Annotated[float, cyclopts.Parameter(name=["--threshold", "-t"])] = 0.75,
     top_n: Annotated[int, cyclopts.Parameter(name=["--top-n", "-tn"])] = 2,
     replication_k: Annotated[int, cyclopts.Parameter(name=["--replication-k", "-rk"])] = 2,
@@ -1385,7 +1387,39 @@ def distill_weigh(
     final_call_only: Annotated[bool, cyclopts.Parameter(name="--final-call-only", negative="")] = False,
     manifest: Annotated[Path | None, cyclopts.Parameter(name="--manifest")] = None,
 ) -> None:
-    """Join distillation records to outcomes and write deterministic training rows."""
+    """Join distillation records to outcomes and write deterministic training rows.
+
+    Data selection for LoRA/QLoRA supervised fine-tuning, not RLHF: one flat training row per
+    input record, weighted by the deterministic reward, plus a reproducibility manifest.
+    Malformed input, invalid knobs, unmatched records, or an ``--out`` inside
+    ``--distill-dir`` fail with exit 2 and an actionable message.
+
+    Args:
+        distill_dir: Input directory holding the raw ``records.ndjson``/``outcomes.ndjson``
+            written by ``tablassert agent --distill``.
+        out: Training NDJSON destination. Must be a file OUTSIDE ``--distill-dir``:
+            ``distill-export`` loads every ``*.ndjson`` there, so an output inside it would
+            duplicate raw records and mix schemas.
+        policy: Row-selection policy. ``threshold`` keeps rows with ``weight >= --threshold``;
+            ``best-of-n`` keeps the top ``--top-n`` rows per ``pmc_id`` group; ``replication``
+            weights repeat occurrences by ``--replication-k``.
+        threshold: Hard weight floor for the ``threshold`` policy, in ``[0, 1]``.
+        top_n: Rows retained per ``pmc_id`` group for the ``best-of-n`` policy (at least 1).
+        replication_k: Replication slope for the ``replication`` policy, bounded to ``[0, 3]``.
+        reward_config: Optional YAML/JSON overriding the default deterministic
+            :class:`tablassert.distill_reward.RewardConfig`.
+        edge_ref: Breadth reference override (finite positive number). Defaults to the
+            corpus median edge count; when the corpus has no comparable build the source is
+            ``null`` and breadth contributes ``0.0`` (warned on stderr).
+        purpose: Keep only records with this ``purpose`` (default ``agent``, the supervisor's
+            own calls), or ``all`` to disable filtering. Any other value must match a purpose
+            present in the corpus; an unknown value exits 2 naming the live purposes.
+        final_call_only: Keep only the highest ``call_index`` record per ``run_id`` (the
+            run's final LLM call). Records with no rankable ``run_id``/``call_index`` pair
+            are retained and counted in a warning, never silently dropped.
+        manifest: Reproducibility-manifest destination (default ``<out>.manifest.json``).
+            Must differ from ``--out`` and stay outside ``--distill-dir``.
+    """
     from tablassert.distill_reward import (
         OUTCOME_COLUMN_PREFIX,
         POLICIES,

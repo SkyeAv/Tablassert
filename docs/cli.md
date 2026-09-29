@@ -145,7 +145,7 @@ tablassert distill-export --distill-dir ./training --out ./hf-dataset
 | --- | --- | --- | --- | --- |
 | `--distill-dir`, `-dd` | Path | Yes | n/a | Input directory containing record and outcome `*.ndjson` files |
 | `--out`, `-o` | Path | Yes | n/a | Training NDJSON destination; must be outside `--distill-dir` |
-| `--policy`, `-p` | string (`threshold`, `best-of-n`, or `replication`) | No | `threshold` | Selection policy; validated at runtime |
+| `--policy`, `-p` | string (`threshold`, `best-of-n`, or `replication`) | No | `threshold` | Selection policy; an unknown value is rejected at parse time |
 | `--threshold`, `-t` | float | No | `0.75` | Minimum weight for the `threshold` policy |
 | `--top-n`, `-tn` | int | No | `2` | Number retained per `pmc_id` group for `best-of-n` |
 | `--replication-k`, `-rk` | int | No | `2` | Replication slope for `replication`, bounded to 0–3 |

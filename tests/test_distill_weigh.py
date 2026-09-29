@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -105,7 +106,7 @@ def test_distill_weigh_writes_a_weighted_dataset_and_manifest(tmp_path: Path, ca
 
 
 @pytest.mark.parametrize("policy", ["threshold", "best-of-n", "replication"])
-def test_distill_weigh_supports_every_selection_policy(tmp_path: Path, policy: str) -> None:
+def test_distill_weigh_supports_every_selection_policy(tmp_path: Path, policy: Literal["threshold", "best-of-n", "replication"]) -> None:
     """Each documented selection policy writes the canonical annotations.
 
     Why: policy dispatch is a CLI boundary, so pure selector coverage alone would not catch a
