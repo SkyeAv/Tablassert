@@ -2,9 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 19.3.0 - 2026-09-29
 
 ### Changed
+- **The repo and docs front doors no longer drift from the shipped CLI and site.** README and `llms.txt` were corrected against the real surface (the quick start installs `tablassert[cli]`, the edge-output example matches `docs/tutorial.md`'s NDJSON shape, and the CLI count is eight with the entry point linked to `src/tablassert/cli_entry.py`), the badge wall was trimmed to the four core badges, `llms.txt` was made llmstxt.org-conformant with every link target appearing exactly once, and the landing page (`docs/index.md`) now routes by need (Learn / How-to / Reference / Contribute) at nav parity. ([#196](https://github.com/SkyeAv/Tablassert/pull/196))
 - **The engine is now polars 2.0 (`polars>=2.0.0rc2`).** All lazy queries run on the polars 2.0 streaming engine by default, which lowers memory use on large builds. Output parity is preserved: headerless CSV/Excel sources keep the 1.x `column_1`-based auto column names (existing table configs are unaffected), NLP tier selection is order-independent, and KGX NDJSON emission order is pinned to scan order, so a build is byte-for-byte reproducible run to run. `pyarrow` joins the core dependencies (polars' eager Excel path and a fix for the 2.0 stream-interface reader) and `fastexcel` is bumped to `>=0.21.0`. Verified equivalent-or-better: a 150k-row end-to-end build runs ~1% faster on 2.0, and the Rust dedup and file-hash benchmarks are unchanged. ([#197](https://github.com/SkyeAv/Tablassert/pull/197))
 
 ## 19.2.0 - 2026-09-21
