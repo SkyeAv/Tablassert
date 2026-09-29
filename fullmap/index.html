@@ -1349,8 +1349,8 @@ When the optional <code>[aria2]</code> extra is installed, the bundled aria2c fr
 the Python downloader is used otherwise.</p>
 <p>Two facts matter most when planning a build:</p>
 <ul>
-<li>The BABEL <strong>version</strong> flag selects a RENCI BABEL snapshot date (default <code>2026jul22</code>), <em>not</em>
-  Tablassert's package version. Bumping it fetches a different snapshot and requires rebuilding; the
+<li>The BABEL <strong>version</strong> flag (<code>--babel-version</code>, <code>-v</code>) selects a RENCI BABEL snapshot date (default
+  <code>2026jul22</code>), <em>not</em> Tablassert's package version. Bumping it fetches a different snapshot and requires rebuilding; the
   value used is recorded in the primary's <code>meta</code> table (<code>source_version</code>).</li>
 <li>The build <strong>parallelizes automatically</strong> across all available CPU threads: the Rust build caps
   workers at <code>min(available_CPUs, MemAvailable_GB / 2)</code> on Linux (reading <code>MemAvailable:</code> from

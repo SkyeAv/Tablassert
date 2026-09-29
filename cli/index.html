@@ -1495,9 +1495,11 @@ for the live surface.</p>
 </tbody>
 </table>
 <div class="admonition warning">
-<p class="admonition-title">Two different <code>--version</code>s</p>
-<p>The app <code>--version</code> prints <strong>Tablassert's package version</strong>. The <a href="#build-fullmap"><code>build-fullmap --version</code></a>
-flag is unrelated: it selects a <strong>RENCI BABEL snapshot date</strong> (default <code>2026jul22</code>).</p>
+<p class="admonition-title">Two different versions</p>
+<p>The app <code>--version</code> prints <strong>Tablassert's package version</strong>. The <a href="#build-fullmap"><code>build-fullmap --babel-version</code></a>
+flag is unrelated: it selects a <strong>RENCI BABEL snapshot date</strong> (default <code>2026jul22</code>). It is deliberately
+not named <code>--version</code>, because the app-level <code>--version</code> flag shadowed that long form: <code>build-fullmap
+--version &lt;snapshot&gt;</code> printed the app version and exited 0 without running the command.</p>
 </div>
 <hr />
 <h2 id="agent">agent<a class="headerlink" href="#agent" title="Permanent link">&para;</a></h2>
@@ -1892,7 +1894,7 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 <td>Directory for downloaded BABEL files when building from scratch (<code>classes/</code>, <code>synonyms/</code>)</td>
 </tr>
 <tr>
-<td><code>--version</code>, <code>-v</code></td>
+<td><code>--babel-version</code>, <code>-v</code></td>
 <td>str</td>
 <td>No</td>
 <td><code>2026jul22</code></td>
