@@ -18,14 +18,20 @@ from tablassert.distill_reward import POLICIES
 
 
 def render_help(tokens: list[str]) -> str:
-    """Render a command's help page into a string (rich markup resolved to plain text)."""
+    """Render a command's help page as wrap-insensitive plain text.
+
+    Rich wraps the panel at the console width, which would otherwise split asserted
+    phrases across lines; collapsing all whitespace makes the substring checks stable.
+    """
     import io
 
     from rich.console import Console
 
     buffer = io.StringIO()
     cli.APP.help_print(tokens, console=Console(file=buffer, width=120, legacy_windows=False))
-    return buffer.getvalue()
+    # Drop the help panel's box-drawing borders, then collapse whitespace (rich wraps at
+    # the console width), so substring assertions are stable against rewrapping.
+    return " ".join(buffer.getvalue().replace("│", " ").split())
 
 
 def test_distill_weigh_policy_literal_matches_policies() -> None:
@@ -82,3 +88,42 @@ def test_distill_weigh_policy_rejects_unknown_value_at_parse_time() -> None:
     """
     with pytest.raises(CoercionError, match="best-of-n"):
         cli.APP.parse_args(["distill-weigh", "--distill-dir", "x", "--out", "y", "--policy", "bogus"], exit_on_error=False)
+
+
+def test_build_kg_help_documents_the_build_mode_flags() -> None:
+    """build-kg renders a description for every build-mode flag.
+
+    Why: this command previously rendered bare ``RELEASE --release -r`` rows with no
+    description, so an agent could not tell --release (slim, significant-only graph) from
+    --head (5-row preview) without reading the source or the docs site.
+    """
+    text = render_help(["build-kg"])
+    assert "Graph YAML" in text
+    assert "not_significant" in text  # --release's concrete effect
+    assert "five rows" in text  # --head's sample size
+    assert "verbose per-section logging" in text
+    assert "[qc]" in text
+
+
+def test_validate_help_documents_the_schema_choice() -> None:
+    """validate renders what each --schema value checks.
+
+    Why: the two schema values run different pipelines (graph validates referenced tables
+    too); without per-flag help an agent cannot predict what it is about to run.
+    """
+    text = render_help(["validate"])
+    assert "every referenced table" in text
+    assert "section syntax" in text
+
+
+def test_validate_kgx_help_documents_the_failure_example_cap() -> None:
+    """validate-kgx renders what --limit caps (examples, not validation coverage).
+
+    Why: a caller could reasonably read ``--limit`` as 'validate only the first N records';
+    the help must state that every record is validated and only the examples are capped.
+    """
+    text = render_help(["validate-kgx"])
+    assert "example failures" in text
+    assert "every record is still validated" in text
+    assert ".nodes.ndjson" in text
+    assert ".edges.ndjson" in text

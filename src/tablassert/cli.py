@@ -912,6 +912,20 @@ def build_kg(
     demoted edges from unpinned sections (a row escaped its pin and shipped without the
     class-specific slots ``prune_to_class`` nulled into ``has_supporting_studies``) --
     and fails the build (non-zero exit) when any assertion is violated.
+
+    Args:
+        graph_configuration_file: Path to the Graph YAML that orchestrates one or more table
+            configs into a single knowledge-graph build (accepted positionally or via
+            ``--configuration-file``/``-f``).
+        release: Emit release-mode artifacts: a slim, significant-only graph that drops
+            ``not_significant`` edges before resolution (cached under its own ``.release``
+            store, so it never reuses a default build).
+        qc: Run quality-control audits and the final study stage over the emitted NDJSON;
+            requires the ``[qc]`` extra and exits non-zero when any assertion is violated.
+        log: Enable verbose per-section logging (requires the ``[log]`` extra; without it
+            Tablassert produces no logs).
+        head: Fast output-shape preview: a random sample of up to five rows per section,
+            cached under its own ``.head`` store, so it never reuses or replaces a full build.
     """
     if qc:
         extras.require("qc", required_by="--qc")
@@ -928,6 +942,12 @@ def validate(
     ``--schema graph`` validates the Graph model AND every referenced table; ``--schema
     table`` validates section syntax only. The schema is selected explicitly rather than
     sniffed from the YAML, so a config is always checked against the schema you expected.
+
+    Args:
+        configuration_file: Path to the YAML configuration file to validate (accepted
+            positionally or via ``--configuration-file``/``-f``).
+        schema: Which schema to validate against: ``graph`` checks the Graph model and every
+            referenced table; ``table`` checks section syntax of a single table YAML only.
     """
     if schema == "graph":
         run(2, validate_graph_pipeline, configuration_file)
@@ -947,6 +967,13 @@ def validate_kgx_command(
     ``category`` -- the same classes ``NCATSTranslator/translator-ingests`` builds --
     and reports failures grouped by field and error type. Exits non-zero when any
     record fails, so a build can be gated in CI.
+
+    Args:
+        nodes: Path to the built nodes NDJSON file (``<name>_<version>.nodes.ndjson``).
+        edges: Path to the built edges NDJSON file (``<name>_<version>.edges.ndjson``).
+        limit: Maximum example failures retained per file for the ``e.g.`` report lines;
+            every record is still validated regardless of this cap. A missing file is
+            reported and fails the run rather than reading as a pass.
     """
     from tablassert.biolink import validate_kgx
 
