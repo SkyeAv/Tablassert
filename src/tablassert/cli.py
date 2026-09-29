@@ -1002,14 +1002,16 @@ def validate_kgx_command(
 
 @APP.command(name="quick-map")
 def quick_map_command(
-    terms: Annotated[list[str], cyclopts.Parameter(allow_leading_hyphen=False)],
+    # negative="" suppresses cyclopts' auto-generated --empty-terms help row: the reset
+    # negation is unused noise that rendered as a phantom flag on the help page.
+    terms: Annotated[list[str], cyclopts.Parameter(allow_leading_hyphen=False, negative="")],
     *,
     fullmap: Annotated[Path, cyclopts.Parameter(name=["--fullmap", "-f"])],
     taxon: Annotated[int | None, cyclopts.Parameter(name=["--taxon", "-t"])] = 9606,
-    prioritize: Annotated[list[str] | None, cyclopts.Parameter(name=["--prioritize", "-p"])] = None,
-    avoid: Annotated[list[str] | None, cyclopts.Parameter(name=["--avoid", "-a"])] = None,
-    exclude_prefixes: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-prefixes", "-ep"])] = None,
-    exclude_regex: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-regex", "-er"])] = None,
+    prioritize: Annotated[list[str] | None, cyclopts.Parameter(name=["--prioritize", "-p"], negative="")] = None,
+    avoid: Annotated[list[str] | None, cyclopts.Parameter(name=["--avoid", "-a"], negative="")] = None,
+    exclude_prefixes: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-prefixes", "-ep"], negative="")] = None,
+    exclude_regex: Annotated[list[str] | None, cyclopts.Parameter(name=["--exclude-regex", "-er"], negative="")] = None,
 ) -> None:
     """Show what fullmap entity resolution does with one or more terms, as a build would see it.
 
@@ -1123,7 +1125,9 @@ def quick_map_command(
 
 @APP.command(name="agent")
 def agent(
-    pmc_ids: Annotated[list[str], cyclopts.Parameter(allow_leading_hyphen=False)],
+    # negative="" suppresses cyclopts' auto-generated --empty-pmc-ids help row, which
+    # rendered as a phantom REQUIRED flag on the help page.
+    pmc_ids: Annotated[list[str], cyclopts.Parameter(allow_leading_hyphen=False, negative="")],
     *,
     graph_configuration_file: Annotated[Path, cyclopts.Parameter(name=["--configuration-file", "-f"])],
     model_id: Annotated[str | None, cyclopts.Parameter(name=["--model-id", "-m"])] = None,
@@ -1139,7 +1143,7 @@ def agent(
     judge_model: Annotated[str | None, cyclopts.Parameter(name=["--judge-model"])] = None,
     judge_threshold: Annotated[float | None, cyclopts.Parameter(name=["--judge-threshold"])] = None,
     biolink_threshold: Annotated[float, cyclopts.Parameter(name=["--biolink-threshold"])] = 0.0,
-    local: Annotated[list[str] | None, cyclopts.Parameter(name=["--local", "-l"])] = None,
+    local: Annotated[list[str] | None, cyclopts.Parameter(name=["--local", "-l"], negative="")] = None,
     optimize: Annotated[bool, cyclopts.Parameter(name=["--optimize", "-o"], negative="")] = False,
     distill: Annotated[bool, cyclopts.Parameter(name=["--distill", "-d", "-dt"], negative="")] = False,
     instructions_file: Annotated[Path | None, cyclopts.Parameter(name=["--instructions-file"])] = None,

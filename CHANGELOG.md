@@ -12,7 +12,7 @@ All notable changes to this project are documented in this file.
   long form was dead on arrival: the app-level `--version` flag shadowed it, so `build-fullmap
   --version <snapshot>` printed the app version and exited 0 without ever running the command.
   The short form `-v` still works, `tablassert --version` is unchanged, and the stale
-  "two different `--version`s" docs warning is replaced by the rename explanation. ([#TBD](https://github.com/SkyeAv/Tablassert/pull))
+  "two different `--version`s" docs warning is replaced by the rename explanation. ([#201](https://github.com/SkyeAv/Tablassert/pull/201))
 
 ## 19.3.0 - 2026-09-29
 
