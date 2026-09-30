@@ -5,19 +5,22 @@ title: Tablassert
 version: 19.5.0
 license: Apache-2.0
 repository-code: https://github.com/SkyeAv/Tablassert
-abstract: Tablassert is a highly performant declarative knowledge graph backend for bioinformatics that extracts knowledge assertions from tabular data, performs entity resolution and data quality control, and exports NCATS Translator-compliant Knowledge Graph Exchange (KGX) NDJSON.
+abstract: Tablassert is a declarative knowledge graph backend for bioinformatics that extracts knowledge assertions from tabular data, performs entity resolution and data quality control, and exports NCATS Translator-compliant Knowledge Graph Exchange (KGX) NDJSON. Its mapping layer is a Rust extension with parallel, memory-capped builds.
 authors:
   - given-names: Skye Lane
     family-names: Goetz
     email: sgoetz@isbscience.org
     affiliation: Institute for Systems Biology
+    orcid: "https://orcid.org/0009-0007-8373-2352"
   - given-names: "Gwênlyn"
     family-names: Glusman
     email: gglusman@isbscience.org
     affiliation: Institute for Systems Biology
+    orcid: "https://orcid.org/0000-0001-8060-5955"
   - given-names: Jared C.
     family-names: Roach
     affiliation: Institute for Systems Biology
+    orcid: "https://orcid.org/0000-0003-4524-0107"
 references:
   - type: article
     title: "MicrobiomeKG: bridging microbiome research and host health through knowledge graphs"
