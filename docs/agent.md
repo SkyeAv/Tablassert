@@ -1,4 +1,9 @@
-# Autonomous Agent (`[agent]` extra)
+# Autonomous Agent (`[agent]` extra, experimental)
+
+!!! warning "Experimental"
+    Everything on this page is experimental: the `tablassert agent` flags, the state-directory
+    layout, the tools, and the prompt-optimization/distillation surfaces may change without notice
+    or a deprecation cycle. The core build pipeline is unaffected and stays stable.
 
 **Why this exists:** hand-authoring a Tablassert config for every PMC supplementary table does not scale.
 The optional `[agent]` extra makes it autonomous: point it at **PubMed Central (PMC)** article IDs and it

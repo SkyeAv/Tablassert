@@ -20,7 +20,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Tutorial Table Example](docs/examples/tutorial-table.yaml): minimal table configuration.
 - [Tutorial Graph Example](docs/examples/tutorial-graph.yaml): minimal graph configuration.
 - [Advanced Example](docs/configuration/advanced-example.md): complex regex, filtering, annotations, and section overrides.
-- [Agent Guide](docs/agent.md): autonomous article-to-graph pipeline, checkpoints, and tooling.
+- [Agent Guide](docs/agent.md): autonomous article-to-graph pipeline, checkpoints, and tooling. Experimental surface: `agent`, `--optimize`, `--distill`, and the `distill-export` / `distill-weigh` commands may change their API without notice.
 
 ## CLI and Runtime
 - [Fullmap Guide](docs/fullmap.md): entity-resolution database build pipeline and redb schema.

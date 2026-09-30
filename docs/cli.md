@@ -10,11 +10,11 @@ for the live surface.
 
 | Command | Use this to… |
 | --- | --- |
-| [`agent`](#agent) | Autonomously derive, build, audit, and improve KG configs from PMC articles |
+| [`agent`](#agent) | Autonomously derive, build, audit, and improve KG configs from PMC articles (experimental) |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
-| [`distill-export`](#distill-export) | Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset |
-| [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows |
+| [`distill-export`](#distill-export) | Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset (experimental) |
+| [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows (experimental) |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model |
@@ -37,6 +37,11 @@ These are flags on the root `tablassert` command, **not** subcommands.
 ---
 
 ## agent
+
+!!! warning "Experimental"
+    The agent surface (`tablassert agent`, its flags, and the workspace layout it writes) is
+    experimental: the API may change without notice or a deprecation cycle. The core pipeline
+    (`build-kg`, `validate`, `validate-kgx`, `build-fullmap`, `quick-map`) is stable.
 
 Use this to autonomously turn one or more PMC articles into audited, improved KG configs and graphs
 (fetch → derive config → build + audit → improve until coverage maps). Requires the `[agent]` extra
@@ -96,6 +101,11 @@ tablassert agent PMC11708054 -f ./graph.yaml
 
 ## distill-export
 
+!!! warning "Experimental"
+    The distillation surface (`--distill` recording, `distill-export`, `distill-weigh`, and the
+    record/outcome NDJSON schemas) is experimental: the API and file formats may change without
+    notice or a deprecation cycle.
+
 Use this to convert a distillation dataset recorded with
 [`agent --distill`](#agent) into an on-disk Hugging Face dataset (`save_to_disk`). Requires the
 `[distill]` extra (`pip install "tablassert[distill]"`, pulls `datasets`). The raw NDJSON already
@@ -131,6 +141,9 @@ tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dat
 | `--out`, `-o` | Path | Yes | n/a | Destination directory for the `save_to_disk` dataset |
 
 ## distill-weigh
+
+Experimental, like [`distill-export`](#distill-export): the record/outcome schemas and flags may
+change without notice.
 
 Join `agent --distill` records to their sibling outcomes, compute deterministic reward weights, and
 write one flat training row per input record for LoRA/QLoRA supervised fine-tuning. This is data

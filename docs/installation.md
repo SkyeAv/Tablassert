@@ -65,9 +65,9 @@ pip install "tablassert[cli]"
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact → fuzzy → abbreviation → SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
-| `agent` | Autonomous PMC → KG agent (`tablassert agent`) | `smolagents`, `litellm` |
-| `optimize` | GEPA prompt optimization (`tablassert agent --optimize`) | `dspy` |
-| `distill` | Distillation dataset export (`tablassert distill-export` → on-disk Hugging Face dataset) | `datasets>=3.0.0` |
+| `agent` | Autonomous PMC → KG agent (`tablassert agent`); experimental, API may change | `smolagents`, `litellm` |
+| `optimize` | GEPA prompt optimization (`tablassert agent --optimize`); experimental, API may change | `dspy` |
+| `distill` | Distillation dataset export (`tablassert distill-export` → on-disk Hugging Face dataset); experimental, API may change | `datasets>=3.0.0` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
 ```bash

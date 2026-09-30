@@ -1,5 +1,9 @@
 # Agent prompt-optimization artifacts
 
+Experimental: these artifacts belong to the experimental `[agent]` surface
+(`--optimize`, `--distill`, the QC scripts). Their formats, flags, and paths may change without
+notice or a deprecation cycle.
+
 These artifacts come from running the Tablassert `[agent]` GEPA prompt-optimization path
 (`tablassert agent --optimize`) against a Qwen OpenAI-compatible endpoint.
 

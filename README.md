@@ -98,7 +98,8 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
   low-confidence mappings
 - **KGX compliance**: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories
   and predicates
-- **Autonomous agent**: `tablassert agent` derives, builds, and refines configs for whole papers
+- **Autonomous agent (experimental)**: `tablassert agent` derives, builds, and refines configs for
+  whole papers
 - **Performance & reproducibility**: lazy Polars pipelines and a deterministic UV-based
   development environment
 
@@ -117,9 +118,9 @@ install `[cli]` to use the `tablassert` command and optional extras for addition
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) | `pip install "tablassert[qc]"` |
-| `agent` | autonomous agent (smolagents, litellm, article/table context) | `pip install "tablassert[agent]"` |
-| `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) | `pip install "tablassert[optimize]"` |
-| `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) | `pip install "tablassert[distill]"` |
+| `agent` | autonomous agent (smolagents, litellm, article/table context) -- experimental, API may change | `pip install "tablassert[agent]"` |
+| `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) -- experimental, API may change | `pip install "tablassert[optimize]"` |
+| `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) -- experimental, API may change | `pip install "tablassert[distill]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
 The `tablassert` command requires `[cli]`; without it, the console launcher reports the exact install command. QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never

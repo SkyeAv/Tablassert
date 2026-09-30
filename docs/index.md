@@ -21,6 +21,7 @@ graphs, declaratively, with entity resolution built in and optional quality cont
   `validate-kgx`, `quick-map`, `agent`, `distill-export`, `distill-weigh`
 - **[Fullmap](fullmap.md)**: obtain and build the entity-resolution database
 - **[Agent](agent.md)**: run the autonomous PMC-to-graph pipeline, with checkpoints and tooling
+  (experimental: API may change)
 
 **Reference**
 
