@@ -27,7 +27,7 @@ Shortcut:
 make setup
 ```
 
-## Daily edit → check loop
+## Daily edit -> check loop
 
 ```bash
 # after changing Rust code, or when the extension may be stale

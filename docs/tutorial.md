@@ -158,7 +158,7 @@ tablassert build-kg tutorial-graph.yaml --qc --log
    - Reads the source file from disk
    - Applies row slicing
    - Resolves entities (genes and diseases)
-   - Validates with the QC pipeline when `--qc` is passed (exact → fuzzy → abbreviation → SapBERT)
+   - Validates with the QC pipeline when `--qc` is passed (exact -> fuzzy -> abbreviation -> SapBERT)
    - Creates subgraph parquet file
 3. Aggregates all subgraphs
 4. Exports NDJSON files and the RIG
@@ -202,7 +202,7 @@ The Resource Ingest Guide records the graph's source metadata and terms of use (
 
 ## Understanding the Transformation
 
-Entity resolution maps text to CURIEs ("TP53" → `HGNC:11998` Gene, "lung cancer" → `MONDO:0008903` Disease); when `--qc` is passed, the QC pipeline validates each mapping across four stages (exact → fuzzy → abbreviation → SapBERT). The output is KGX-compliant nodes and edges with standardized CURIEs, Biolink categories and predicates, provenance, and edge annotations.
+Entity resolution maps text to CURIEs ("TP53" -> `HGNC:11998` Gene, "lung cancer" -> `MONDO:0008903` Disease); when `--qc` is passed, the QC pipeline validates each mapping across four stages (exact -> fuzzy -> abbreviation -> SapBERT). The output is KGX-compliant nodes and edges with standardized CURIEs, Biolink categories and predicates, provenance, and edge annotations.
 
 ## Next Steps
 

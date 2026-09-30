@@ -147,7 +147,7 @@ template:
 
 **Key techniques:**
 
-- **Regex pipeline** cleans raw taxonomic strings (`d__Bacteria;p__Firmicutes;g__Lactobacillus` → `Lactobacillus`). Patterns must be Polars `str.replace_all()`-compatible (Rust `regex` engine): no backreferences (`\1`, `\2`, …) or lookarounds (`(?=...)`, `(?<=...)`, `(?!...)`, `(?<!...)`); plain and non-capturing groups are supported, so chain several simple substitutions when needed.
+- **Regex pipeline** cleans raw taxonomic strings (`d__Bacteria;p__Firmicutes;g__Lactobacillus` -> `Lactobacillus`). Patterns must be Polars `str.replace_all()`-compatible (Rust `regex` engine): no backreferences (`\1`, `\2`, ...) or lookarounds (`(?=...)`, `(?<=...)`, `(?!...)`, `(?<!...)`); plain and non-capturing groups are supported, so chain several simple substitutions when needed.
 - **Avoid list** (`avoid: [Gene]`) prevents organism names resolving to gene entities; **fixed-value object** (`method: value`) assigns the same metabolite CURIE to all rows.
 
 ---

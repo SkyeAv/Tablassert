@@ -177,7 +177,7 @@ from tablassert.biolink import Categories
 db = Path("/path/to/fullmap/data/fullmap.redb")
 lf = pl.LazyFrame({"gene": ["TP53", "BRCA1", "EGFR", "KRAS"]})
 lf = level_one(lf, "gene")   # canonical tokenize, stem, deduplicate, and sort
-lf = level_two(lf, "gene")   # remove non-word chars → "gene_two" column
+lf = level_two(lf, "gene")   # remove non-word chars -> "gene_two" column
 
 result = resolve(lf=lf, col="gene", db=db, taxon="9606",
                  prioritize=[Categories.GENE], log=False).collect()
@@ -198,7 +198,7 @@ print(result.select(["gene", "gene_name", "gene_category"]))
 Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.
 
 **`level_two` output** (column: `col + "_two"`):
-- All non-word characters removed (`\W+` → `""`) from the `level_one` result
+- All non-word characters removed (`\W+` -> `""`) from the `level_one` result
 - Used as fallback when `level_one` produces no match
 - Preferred for disease names and free text
 
@@ -218,7 +218,7 @@ See [Quality Control](qc.md) for details.
 
 Single-shot inspection core behind the `tablassert quick-map` CLI command: resolve raw terms
 against a fullmap exactly as a build would, one result frame per input term. It runs the same op
-chain a build runs per node column (normalization → probe keys → one batched redb fetch →
+chain a build runs per node column (normalization -> probe keys -> one batched redb fetch ->
 filter/rank/dedup), so the returned rows are the rows `build-kg` would emit for a cell holding
 that term under a `NodeEncoding` with the same settings. The whole input is ONE batched lookup,
 never a round trip per term.

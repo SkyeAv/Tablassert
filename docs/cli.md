@@ -8,7 +8,7 @@ for the live surface.
 
 ## Command index
 
-| Command | Use this to… |
+| Command | Use this to... |
 | --- | --- |
 | [`agent`](#agent) | Autonomously derive, build, audit, and improve KG configs from PMC articles (experimental) |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
@@ -44,7 +44,7 @@ These are flags on the root `tablassert` command, **not** subcommands.
     (`build-kg`, `validate`, `validate-kgx`, `build-fullmap`, `quick-map`) is stable.
 
 Use this to autonomously turn one or more PMC articles into audited, improved KG configs and graphs
-(fetch → derive config → build + audit → improve until coverage maps). Requires the `[agent]` extra
+(fetch -> derive config -> build + audit -> improve until coverage maps). Requires the `[agent]` extra
 (`pip install "tablassert[agent]"`); `--optimize` additionally needs the `[optimize]` extra
 (`pip install "tablassert[optimize]"`, pulls `dspy`). Both are checked after flag validation and
 before any model is built or article fetched, so a missing extra is reported with its install
@@ -109,11 +109,11 @@ tablassert agent PMC11708054 -f ./graph.yaml
 Use this to convert a distillation dataset recorded with
 [`agent --distill`](#agent) into an on-disk Hugging Face dataset (`save_to_disk`). Requires the
 `[distill]` extra (`pip install "tablassert[distill]"`, pulls `datasets`). The raw NDJSON already
-loads directly in Unsloth Studio and via `datasets.load_dataset("json", ...)` — this export is
+loads directly in Unsloth Studio and via `datasets.load_dataset("json", ...)`; this export is
 only needed for `datasets`-native workflows.
 
 Outcome files are skipped: export recognizes `outcomes.ndjson` by its **content** (a first line
-whose `record_type` is `outcome`), not its name, and loads only the record files — a directory
+whose `record_type` is `outcome`), not its name, and loads only the record files, so a directory
 holding nothing else exits 2 with a message that says so. A directory with no `*.ndjson` at all
 still fails with the original empty-directory error. Keep derived training output (e.g.
 `distill-weigh`'s `train.ndjson`) in a separate directory: export loads every record `*.ndjson`
@@ -124,8 +124,8 @@ The corpus is schema-normalized before loading: export reads every record file, 
 seen anywhere in the corpus, and re-emits every row with an explicit `null` for absent keys into
 one uniform temporary file (outside the input directory) that is what actually gets passed to
 `load_dataset`. `datasets` otherwise infers its schema from the **first block of the first file
-only** and dies with a `CastError` the moment a later file carries a column that block lacked —
-which an append-only corpus spanning schema versions (v1 rows without `run_id` next to v2 rows)
+only** and dies with a `CastError` the moment a later file carries a column that block lacked, which an
+append-only corpus spanning schema versions (v1 rows without `run_id` next to v2 rows)
 would always trigger. Normalization makes the schema correct by construction, so a v1-only
 corpus still exports. A column whose type varies across rows (say `"2"` in one line and `2` in
 another) is **rejected** with exit 2 naming the column and the types: `datasets` would otherwise
@@ -163,7 +163,7 @@ tablassert distill-export --distill-dir ./training --out ./hf-dataset
 | `--policy`, `-p` | string (`threshold`, `best-of-n`, or `replication`) | No | `threshold` | Selection policy; an unknown value is rejected at parse time |
 | `--threshold`, `-t` | float | No | `0.75` | Minimum weight for the `threshold` policy |
 | `--top-n`, `-tn` | int | No | `2` | Number retained per `pmc_id` group for `best-of-n` |
-| `--replication-k`, `-rk` | int | No | `2` | Replication slope for `replication`, bounded to 0–3 |
+| `--replication-k`, `-rk` | int | No | `2` | Replication slope for `replication`, bounded to 0-3 |
 | `--reward-config`, `-rc` | Path | No | `None` | YAML/JSON reward configuration override |
 | `--edge-ref` | float | No | `None` | Breadth reference override; otherwise the corpus median |
 | `--purpose` | str | No | `agent` | Keep this purpose, or use literal `all` to disable filtering |
@@ -183,7 +183,7 @@ are counts on rows, not physical row duplication.
 ## build-fullmap
 
 Use this to obtain the embedded `fullmap.redb` entity-resolution database. Every database this
-command installs is filtered by the built-in **top-100 experimental-taxon allowlist** — there is no
+command installs is filtered by the built-in **top-100 experimental-taxon allowlist**; there is no
 flag for it. By default it first tries to **download a prebuilt database** published for this
 Tablassert version; `--force` skips that and builds from RENCI BABEL exports instead (download class
 + synonym files, then build a single redb).
@@ -216,15 +216,15 @@ Every one of those invocations produces a database filtered by the checked-in
 By default `build-fullmap` looks for a prebuilt `fullmap.tar.zst` at
 `https://stars.renci.org/var/babel_outputs/<babel-version>/fullmap/<tablassert-version>/` (the version
 directory is the **installed Tablassert package version**, never hardcoded), verifies it against the
-published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming zstd →
+published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming zstd ->
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
 primary + shards against the force-build contract (exact `v6` schema, a recorded `build_id`, the exact
 shard set, per-shard `build_id` equality, and a `META.taxon_allowlist` identity matching the built-in
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
-warning — an archive published without the current filter is never installed.
+warning: an archive published without the current filter is never installed.
 
-The downloader is chosen automatically — there is no flag to pass: with the optional `[aria2]` extra
+The downloader is chosen automatically; there is no flag to pass. With the optional `[aria2]` extra
 installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), both the prebuilt archive
 and the BABEL files download through the bundled aria2c binary with resumable segmented downloads;
 without the extra, Tablassert's Python downloader is used. The extra ships no macOS wheels, so a
@@ -237,7 +237,7 @@ A database already present at `--output` is reused only when it carries that sam
 an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
 Pass `--force` to rebuild unconditionally.
 
-A from-scratch build parallelizes automatically across all available CPU threads — on Linux the
+A from-scratch build parallelizes automatically across all available CPU threads: on Linux the
 worker count is capped by available memory (~2 GB per thread, read from `/proc/meminfo`) to avoid
 OOMs. There is no flag to tune.
 
@@ -247,12 +247,12 @@ See [Fullmap](fullmap.md) for the data pipeline, output schema, and graph-config
 
 ## quick-map
 
-Use this to see what fullmap entity resolution will do with one or more terms — the rows a
+Use this to see what fullmap entity resolution will do with one or more terms (the rows a
 `build-kg` run would emit for a cell holding that term under the filters shown. Each term runs
-through the exact build path (level-one/level-two normalization → probe-key extraction → redb
-fetch → filter, rank, dedup), one `rich` table per term in input order, with the term's normalized
+through the exact build path (level-one/level-two normalization -> probe-key extraction -> redb
+fetch -> filter, rank, dedup), one `rich` table per term in input order, with the term's normalized
 probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
-never one per term. A term with no matches prints a `no matches` line and still exits 0 — a miss is
+never one per term. A term with no matches prints a `no matches` line and still exits 0: a miss is
 a finding, not a failure; only usage errors and an unreadable fullmap exit 2.
 
 ```bash
@@ -284,14 +284,14 @@ tablassert quick-map "TNF-alpha" -f ./fullmap -t 9606 -p Gene -a Disease -ep OMI
 ```
 
 !!! note "The `--prioritize` / `--avoid` vocabulary"
-    These flags accept the **live Biolink entity category names** — the same vocabulary the
-    `prioritize` / `avoid` config keys accept — validated at run time rather than enumerated in
+    These flags accept the **live Biolink entity category names** (the same vocabulary the
+    `prioritize` / `avoid` config keys accept), validated at run time rather than enumerated in
     `--help`, because the `Categories` enum is built dynamically from the installed biolink-model.
     An invalid value exits 2 naming the nearest valid names.
 
 !!! note "`-f` means `--fullmap` here"
     On `build-kg`, `validate`, and `agent`, `-f` is `--configuration-file`; on `build-fullmap` it is
-    `--force`. Aliases are per-command, and `quick-map` takes no config and has no force mode —
+    `--force`. Aliases are per-command, and `quick-map` takes no config and has no force mode.
     `-f` is its one required input path.
 
 ---
@@ -311,15 +311,15 @@ The positional `GRAPH-CONFIGURATION-FILE` (also `--configuration-file`, `-f`) is
 | --- | --- | --- | --- | --- |
 | `GRAPH-CONFIGURATION-FILE` (`--configuration-file`, `-f`) | Path | Yes | n/a | Graph YAML |
 | `--release`, `-r` | Flag | No | `False` | Emit a slim, significant-only graph (drops `not_significant` edges before resolution) |
-| `--qc`, `-q` | Flag | No | `False` | Audit resolved mappings (exact → fuzzy → abbreviation → SapBERT) so low-confidence edges are flagged; requires the `[qc]` extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty `id` and `name`, every edge has a non-empty `subject`, `predicate`, and `object`, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim `original_*` fields excepted from the whitespace check, since they are faithful source copies), and -- when any section declares a `category_override` -- no edge demoted to bare `biolink:Association` (a row escaped its pin and shipped without the class-specific slots `prune_to_class` nulled into `has_supporting_studies`; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation |
+| `--qc`, `-q` | Flag | No | `False` | Audit resolved mappings (exact -> fuzzy -> abbreviation -> SapBERT) so low-confidence edges are flagged; requires the `[qc]` extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty `id` and `name`, every edge has a non-empty `subject`, `predicate`, and `object`, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim `original_*` fields excepted from the whitespace check, since they are faithful source copies), and, when any section declares a `category_override`, no edge demoted to bare `biolink:Association` (a row escaped its pin and shipped without the class-specific slots `prune_to_class` nulled into `has_supporting_studies`; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation |
 | `--log`, `-l` | Flag | No | `False` | Enable verbose per-section logging; requires the `[log]` extra, and without it Tablassert produces no logs |
-| `--head`, `-hd` | Flag | No | `False` | Fast output-shape preview: ≤5 random rows/section, cached to `.head.parquet`, never clobbers a full build |
+| `--head`, `-hd` | Flag | No | `False` | Fast output-shape preview: <=5 random rows/section, cached to `.head.parquet`, never clobbers a full build |
 
 ```bash
 tablassert build-kg graph.yaml --qc --log
 ```
 
-The parallel fullmap reads behind entity resolution are automatic: large lookup batches (≥ 1024
+The parallel fullmap reads behind entity resolution are automatic: large lookup batches (>= 1024
 terms) fan out across the record-shard files on all available CPU threads (redb readers share-lock,
 so they never contend), while smaller batches stay serial. There is no flag to tune, and results are
 identical at any worker count.
@@ -334,8 +334,8 @@ incomplete RIG fails the build with `[rig-validation-failed]` and nothing is emi
 [Graph Configuration](configuration/graph.md).
 
 ??? info "Build progress & stages"
-    The build runs six parallel stages (Loading Tables → Extracting Sections → Building TCode →
-    Collecting Instructions → Building Subgraphs → Compiling Graph) plus a seventh, Studying Graph,
+    The build runs six parallel stages (Loading Tables -> Extracting Sections -> Building TCode ->
+    Collecting Instructions -> Building Subgraphs -> Compiling Graph) plus a seventh, Studying Graph,
     only when `--qc` is passed. They run under a three-row live progress block (stage header;
     section bar with count/elapsed/ETA; in-flight item detail). Each completed
     stage prints a green `✓ Stage N · NAME · elapsed` line above the live block. During Building
@@ -453,4 +453,4 @@ once a model release drops the requirement.
 - **[Tutorial](tutorial.md)**: complete example walkthrough
 - **[Configuration Guide](configuration/graph.md)**: YAML configuration reference
 - **[Fullmap](fullmap.md)**: entity-resolution database build and schema
-- **[Agent](agent.md)**: autonomous PMC → KG pipeline depth
+- **[Agent](agent.md)**: autonomous PMC -> KG pipeline depth

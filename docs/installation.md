@@ -36,10 +36,10 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 | `cli` | `tablassert` command and rich terminal progress | `cyclopts`, `rich` |
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
-| `qc` | QC runtime (exact → fuzzy → abbreviation → SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
-| `agent` | Autonomous PMC → KG agent (`tablassert agent`); experimental, API may change | `smolagents`, `litellm` |
+| `qc` | QC runtime (exact -> fuzzy -> abbreviation -> SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
+| `agent` | Autonomous PMC -> KG agent (`tablassert agent`); experimental, API may change | `smolagents`, `litellm` |
 | `optimize` | GEPA prompt optimization (`tablassert agent --optimize`); experimental, API may change | `dspy` |
-| `distill` | Distillation dataset export (`tablassert distill-export` → on-disk Hugging Face dataset); experimental, API may change | `datasets>=3.0.0` |
+| `distill` | Distillation dataset export (`tablassert distill-export` -> on-disk Hugging Face dataset); experimental, API may change | `datasets>=3.0.0` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
 Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
@@ -77,7 +77,7 @@ fails, not a failure report):
 | `tablassert agent` | `[agent]` | After flag validation, before any model is built or any article fetched |
 | `tablassert agent --optimize` | `[agent]` + `[optimize]` | Same point; both are reported at once |
 | `tablassert distill-export` | `[distill]` | After the recorded-NDJSON input check (an empty `--distill-dir` is reported first, since that typo is the faster loop to close) and before `datasets` is imported |
-| `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader — bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
+| `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example
