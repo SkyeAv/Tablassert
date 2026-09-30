@@ -67,7 +67,7 @@ def _shown(name: str, target: str) -> str:
     return f"`{name}` (coerced to `{target}`)" if target != name else f"`{name}`"
 
 
-def _section_source_label(source: Excel | Text) -> str:
+def _section_source_label(source: Excel | Text | Parquet) -> str:
     """Render a section's source for a diagnostic message: the local path, plus the sheet for Excel.
 
     Args:
@@ -172,6 +172,12 @@ class Excel(BaseSource):
 class Text(BaseSource):
     kind: Literal[Files.TEXT] = Field(Files.TEXT, description="Source kind; must be 'text'.")
     delimiter: str | None = Field(",", description="Field delimiter for headerless text/CSV scanning.", examples=[",", "\t", "|"])
+
+
+# Parquet is self-describing (typed columns, real headers, no sheets or delimiters), so unlike
+# `Text`/`Excel` it adds no format-specific fields beyond `BaseSource`.
+class Parquet(BaseSource):
+    kind: Literal[Files.PARQUET] = Field(Files.PARQUET, description="Source kind; must be 'parquet'.")
 
 
 class Regex(TablaBase):
@@ -791,7 +797,7 @@ class Annotation(Encoding):
 class Section(TablaBase):
     """Pydantic section model and coercion target for a single table configuration."""
 
-    source: Excel | Text = Field(..., description="Input source definition for reading tabular rows.")
+    source: Excel | Text | Parquet = Field(..., description="Input source definition for reading tabular rows.")
     statement: Statement = Field(..., description="Subject-object statement mapping for this section.")
     provenance: Provenance = Field(..., description="Provenance metadata applied to all produced edges.")
     annotations: list[Annotation] | None = Field(None, description="Optional extra encoded columns added to each row.")

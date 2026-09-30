@@ -52,6 +52,7 @@ class Functions(str, Enum):
 class Files(str, Enum):
     TEXT = "text"
     EXCEL = "excel"
+    PARQUET = "parquet"
 
 
 class EncodingMethods(str, Enum):
