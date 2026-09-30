@@ -80,6 +80,7 @@ from tablassert.models import (
     Graph,
     ManualProvenance,
     NodeEncoding,
+    Parquet,
     Provenance,
     Qualifier,
     Reindex,
@@ -585,6 +586,7 @@ class ModelTableBinding:
 CONFIG_MODEL_BINDINGS: tuple[ModelTableBinding, ...] = (
     ModelTableBinding(Excel, TABLE_CONFIGURATION, ("Excel Source",)),
     ModelTableBinding(Text, TABLE_CONFIGURATION, ("Text Source (CSV/TSV)",)),
+    ModelTableBinding(Parquet, TABLE_CONFIGURATION, ("Parquet Source",)),
     ModelTableBinding(Reindex, TABLE_CONFIGURATION, ("Reindexing (Conditional Filtering)",)),
     ModelTableBinding(Statement, TABLE_CONFIGURATION, ("Statement (Triple Definition)",)),
     ModelTableBinding(NodeEncoding, TABLE_CONFIGURATION, ("NodeEncoding",)),
