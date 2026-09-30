@@ -1,6 +1,6 @@
 # Installation
 
-Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `agent` / `optimize` / `distill` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging).
+Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `agent` / `optimize` / `distill` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging). The `agent`, `optimize`, and `distill` extras back experimental surfaces: their APIs may change without notice.
 
 ## Prerequisites
 
@@ -21,40 +21,12 @@ pip install uv
 
 ## Installation Methods
 
-### Method 1: Development Installation with UV (Recommended for contributors)
-
-Best for development, testing, and active work on Tablassert.
-
-```bash
-# Clone the repository
-git clone https://github.com/SkyeAv/Tablassert.git
-cd Tablassert
-
-# Install development dependencies, CLI runtime, and optional QC/logging runtimes
-uv sync --group dev --extra cli --extra qc --extra log
-
-# Build the editable Rust extension into the uv environment
-uv run maturin develop --manifest-path rust/Cargo.toml
-
-# Verify the CLI
-uv run tablassert --help
-```
-
-This creates a virtual environment in `.venv/`, installs the development dependencies, and builds the local PyO3 extension. The `tablassert` command is available through `uv run`. See [Development](development.md) and the repository `CONTRIBUTING.md` for the daily edit/check loop.
-
-### Method 2: Install from PyPI
+### Method 1: Install from PyPI
 
 Recommended for most users. The base install exposes Tablassert's Python API; add `[cli]` to install the `tablassert` command. QC and other extras are opt-in.
 
 ```bash
-# Option A: Install the command-line tool with UV
-uv tool install "tablassert[cli]"
-
-# Option B: Install the Python API with pip
-pip install tablassert
-
-# Add the command-line interface to a pip install
-pip install "tablassert[cli]"
+uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 ```
 
 #### Optional Extras
@@ -70,30 +42,9 @@ pip install "tablassert[cli]"
 | `distill` | Distillation dataset export (`tablassert distill-export` → on-disk Hugging Face dataset); experimental, API may change | `datasets>=3.0.0` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
-```bash
-# Install the command-line interface
-uv tool install "tablassert[cli]"
-pip install "tablassert[cli]"
-
-# Install with runtime-compatible Polars
-# (for CPUs without the required Polars instructions)
-uv tool install "tablassert[rt]"
-
-# pip equivalents
-pip install "tablassert[rt]"
-
-# Install the bundled aria2c downloader
-uv tool install "tablassert[aria2]"
-pip install "tablassert[aria2]"
-
-# Install the QC runtime
-uv tool install "tablassert[qc]"
-pip install "tablassert[qc]"
-
-# Install the autonomous agent
-uv tool install "tablassert[agent]"
-pip install "tablassert[agent]"
-```
+Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
+`pip install "tablassert[<extra>]"`, and combine them as `"tablassert[cli,qc]"`. Wheels ship for
+Linux and macOS; elsewhere pip builds from the sdist, which needs a Rust toolchain.
 
 !!! note "`[aria2]` platform and license notes"
     The `[aria2]` extra depends on the PyPI `aria2` package, which imports as `aria2c` and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, so a normal macOS install resolves to Tablassert's Python downloader.
@@ -145,27 +96,31 @@ no logs: it does not create `.tablassert/log/`, write `tablassert.log`, forward 
 progress display, honor `build-kg --log`, or warn about the missing extra. Install
 `pip install "tablassert[log]"` for loguru-backed file and progress logging (rotation, enqueue).
 
-### Method 3: Install from GitHub main
+### Method 2: Install from GitHub main
 
 Use this when you want the latest main-branch build.
 
 ```bash
-# Install from main branch
 uv tool install "tablassert[cli] @ git+https://github.com/SkyeAv/Tablassert.git@main"
 ```
 
-### Method 4: Install from local source
+### Method 3: Development install from source (contributors)
 
-For contributors testing local repository changes.
+Editable install plus the development tools; needs `uv` and a Rust toolchain.
 
 ```bash
-# Clone the repository
 git clone https://github.com/SkyeAv/Tablassert.git
 cd Tablassert
-
-# Install Tablassert CLI tool from local source
-uv tool install ".[cli]"
+uv sync --group dev --extra cli --extra qc --extra log
+uv run maturin develop --manifest-path rust/Cargo.toml
+uv run tablassert --help
 ```
+
+This creates `.venv/`, installs the development dependencies, and builds the local PyO3 extension;
+the `tablassert` command is available through `uv run`. To install the CLI as a tool from a local
+checkout instead, use `uv tool install ".[cli]"`. See [Development](development.md) and
+[`CONTRIBUTING.md`](https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md) for the daily
+edit/check loop.
 
 ## Verifying Installation
 
@@ -179,33 +134,22 @@ You should see the Tablassert CLI help message with available commands.
 
 ## Development Setup
 
-For contributing to Tablassert, use the source install above, then run the local task runner:
+For a source checkout, use Method 3 above, then the task runner:
 
 ```bash
 make setup
 make check
 ```
 
-The underlying stable gates are `ruff check` / `ruff format --check`, `pyright`, `pytest`, and `cargo fmt --check` / `cargo test` / `cargo clippy --all-targets -- -D warnings` (see [Development](development.md)).
-
-Install pre-commit hooks to run the fast lint/format checks automatically before commits (the full gates run in CI):
-
 ```bash
 uv run pre-commit install
 ```
 
-## Upgrading Development Installation
-
-To upgrade to the latest version:
-
-```bash
-# Pull latest changes
-git pull origin main
-
-# Update dependencies and rebuild the editable extension
-uv sync --group dev --extra cli --extra qc --extra log
-uv run maturin develop --manifest-path rust/Cargo.toml
-```
+`make setup` syncs dependencies and builds the editable extension; `make check` runs the whole gate;
+the hook install wires the fast lint/format hooks for commit and push. Gate contents, the daily loop,
+and the docs build live in [Development](development.md) and
+[`CONTRIBUTING.md`](https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md). To pick up
+`main`, re-run Method 3's `uv sync` and `maturin develop`.
 
 ## Troubleshooting
 

@@ -138,8 +138,8 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 pip install tablassert
 ```
 
-Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API;
-install `[cli]` to use the `tablassert` command and optional extras for additional runtime and pipeline capabilities:
+Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API; `[cli]`
+provides the `tablassert` command. Other extras are opt-in:
 
 | Extra | Adds | Install |
 | ----- | ---- | ------- |
@@ -152,12 +152,11 @@ install `[cli]` to use the `tablassert` command and optional extras for addition
 | `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) -- experimental, API may change | `pip install "tablassert[distill]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
-The `tablassert` command requires `[cli]`; without it, the console launcher reports the exact install command. QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never
-produces a bare `ModuleNotFoundError`: the failure names the missing package and the exact install
-command, and for `build-kg --qc` and `tablassert agent` it arrives before the run starts rather than
-partway through. Logging is the exception: without the `log` extra Tablassert produces no logs
-instead of failing. See the
-[Installation guide](https://skyeav.github.io/Tablassert/installation/) for the full matrix and the
+Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
+names the missing package and the install command that fixes it. QC is opt-in at build time
+(`build-kg --qc`). See the
+[Installation guide](https://skyeav.github.io/Tablassert/installation/) for the full matrix,
+per-command preflight behavior, and the
 [CLI Reference](https://skyeav.github.io/Tablassert/cli/) for every flag.
 
 ## Entity Resolution API
