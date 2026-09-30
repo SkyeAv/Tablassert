@@ -16,6 +16,35 @@ KGX-compliant nodes and edges.
 **[Full Documentation](https://skyeav.github.io/Tablassert/)**: installation guides, tutorial,
 configuration reference, and API docs.
 
+## Statement of need
+
+Biomedical knowledge lives in spreadsheets: association tables, assay results, curated gene-disease
+lists. Getting those rows into an NCATS Translator knowledge graph means writing an ingest that maps
+columns to Biolink statements, resolves free text ("TP53", "lung cancer") to standard CURIEs, and
+records provenance, terms of use, and statistical annotations. Today that ingest is Python code
+maintained per source, and entity resolution usually means calling a hosted name-resolution service
+at build time.
+
+Tablassert replaces the per-source code with a declarative YAML mapping plus an embedded, offline
+entity-resolution database built from RENCI BABEL exports, so a build is reproducible, auditable,
+and network-free. It is aimed at Translator ingest authors and knowledge-graph data engineers who
+hold tabular biomedical sources, and at bioinformatics groups that want a validated KGX output
+without writing a transform pipeline. The configuration model and the Biolink/KGX contracts it
+emits follow current [`NCATSTranslator/translator-ingests`](https://github.com/NCATSTranslator/translator-ingests)
+practice, and each build can emit the Resource Ingest Guide (RIG) metadata those submissions require.
+
+## Getting help
+
+- **Questions and bug reports:** open an issue at
+  [github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues) (use the
+  `question` label for usage questions). Include the command you ran, its output, and your
+  `tablassert --version`.
+- **Contributing code or docs:** see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the local quality
+  gates, and pull-request expectations.
+- **Reference:** the [CLI Reference](https://skyeav.github.io/Tablassert/cli/) and
+  [configuration guides](https://skyeav.github.io/Tablassert/configuration/graph/) document every
+  flag and field.
+
 ## Quick Start
 
 ```bash
@@ -44,14 +73,17 @@ template:
 ```
 
 Wrap it in a graph config (`graph.yaml`) pointing at your fullmap entity-resolution database
-and carrying the required `rig:` metadata for the generated Resource Ingest Guide:
+and carrying the required `rig:` metadata for the generated Resource Ingest Guide. Build or
+download that database once first (`tablassert build-fullmap`, a multi-GB download; see the
+[Fullmap guide](https://skyeav.github.io/Tablassert/fullmap/)), which makes `./fullmap` below the
+right path:
 
 ```yaml
 name: MY_KG
 version: 1.0.0
 tables:
   - ./table.yaml
-fullmap: /path/to/fullmap
+fullmap: ./fullmap
 rig:
   source_info:
     infores_id: infores:my-kg
@@ -98,7 +130,8 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
   low-confidence mappings
 - **KGX compliance**: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories
   and predicates
-- **Autonomous agent**: `tablassert agent` derives, builds, and refines configs for whole papers
+- **Autonomous agent (experimental)**: `tablassert agent` derives, builds, and refines configs for
+  whole papers
 - **Performance & reproducibility**: lazy Polars pipelines and a deterministic UV-based
   development environment
 
@@ -108,8 +141,8 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 pip install tablassert
 ```
 
-Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API;
-install `[cli]` to use the `tablassert` command and optional extras for additional runtime and pipeline capabilities:
+Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API; `[cli]`
+provides the `tablassert` command. Other extras are opt-in:
 
 | Extra | Adds | Install |
 | ----- | ---- | ------- |
@@ -117,17 +150,16 @@ install `[cli]` to use the `tablassert` command and optional extras for addition
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) | `pip install "tablassert[qc]"` |
-| `agent` | autonomous agent (smolagents, litellm, article/table context) | `pip install "tablassert[agent]"` |
-| `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) | `pip install "tablassert[optimize]"` |
-| `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) | `pip install "tablassert[distill]"` |
+| `agent` | autonomous agent (smolagents, litellm, article/table context) -- experimental, API may change | `pip install "tablassert[agent]"` |
+| `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) -- experimental, API may change | `pip install "tablassert[optimize]"` |
+| `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) -- experimental, API may change | `pip install "tablassert[distill]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
-The `tablassert` command requires `[cli]`; without it, the console launcher reports the exact install command. QC is opt-in at build time (`build-kg --qc`). Reaching a feature whose extra is not installed never
-produces a bare `ModuleNotFoundError`: the failure names the missing package and the exact install
-command, and for `build-kg --qc` and `tablassert agent` it arrives before the run starts rather than
-partway through. Logging is the exception: without the `log` extra Tablassert produces no logs
-instead of failing. See the
-[Installation guide](https://skyeav.github.io/Tablassert/installation/) for the full matrix and the
+Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
+names the missing package and the install command that fixes it. QC is opt-in at build time
+(`build-kg --qc`). See the
+[Installation guide](https://skyeav.github.io/Tablassert/installation/) for the full matrix,
+per-command preflight behavior, and the
 [CLI Reference](https://skyeav.github.io/Tablassert/cli/) for every flag.
 
 ## Entity Resolution API

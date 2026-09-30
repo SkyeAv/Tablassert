@@ -1,5 +1,9 @@
 # Agent prompt-optimization artifacts
 
+Experimental: these artifacts belong to the experimental `[agent]` surface
+(`--optimize`, `--distill`, the QC scripts). Their formats, flags, and paths may change without
+notice or a deprecation cycle.
+
 These artifacts come from running the Tablassert `[agent]` GEPA prompt-optimization path
 (`tablassert agent --optimize`) against a Qwen OpenAI-compatible endpoint.
 
@@ -58,7 +62,7 @@ library default (the coverage-scoring builds stay serialized on the process-wide
 ## QC state-directory requirement
 
 Configs generated from `gepa-dataset.yaml` point `source.local` at tables under the **GEPA run's state
-dir** (here `.tablassert/gepa/downloads/…`, since the dataset's `workdir` is `.tablassert/gepa`), but
+dir** (here `.tablassert/gepa/downloads/...`, since the dataset's `workdir` is `.tablassert/gepa`), but
 `qc/qc_reviewer.py` only reads a config's `source.local` when it resolves INSIDE its own
 `STATE_DIR/downloads` allowlist (an injection defense, see `get_table_summary`). So the QC scripts must
 be pointed at the SAME state dir that holds `downloads/`, or the tables must be staged there:

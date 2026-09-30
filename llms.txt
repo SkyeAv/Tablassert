@@ -9,7 +9,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## Quickstart
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
 - [Documentation Site Home](docs/index.md): docs landing page and navigation context.
-- [Installation Guide](docs/installation.md): local/dev/tool installation paths. Optional extras: `cli` (Cyclopts and Rich command-line runtime), `rt` (runtime-compatible Polars), `aria2` (bundled aria2c downloader), `qc` (quality-control runtime), `agent` (autonomous agent), `optimize` (GEPA prompt optimization), `distill` (distillation dataset export), and `log` (loguru-backed logging).
+- [Installation Guide](docs/installation.md): three install paths (PyPI, GitHub main, development from source), platform and Rust-toolchain notes, and the missing-extra behavior. Optional extras: `cli`, `rt`, `aria2`, `qc`, `agent`, `optimize`, `distill`, and `log`; the last three back experimental surfaces whose APIs may change.
 - [CLI Reference](docs/cli.md): the eight commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
@@ -20,7 +20,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Tutorial Table Example](docs/examples/tutorial-table.yaml): minimal table configuration.
 - [Tutorial Graph Example](docs/examples/tutorial-graph.yaml): minimal graph configuration.
 - [Advanced Example](docs/configuration/advanced-example.md): complex regex, filtering, annotations, and section overrides.
-- [Agent Guide](docs/agent.md): autonomous article-to-graph pipeline, checkpoints, and tooling.
+- [Agent Guide](docs/agent.md): autonomous article-to-graph pipeline, checkpoints, and tooling. Experimental surface: `agent`, `--optimize`, `--distill`, and the `distill-export` / `distill-weigh` commands may change their API without notice.
 
 ## CLI and Runtime
 - [Fullmap Guide](docs/fullmap.md): entity-resolution database build pipeline and redb schema.

@@ -116,7 +116,7 @@ or fuzz.partial_token_sort_ratio(original, preferred) >= 80
 _is_abbrev(original, preferred_name) or _is_abbrev(preferred_name, original)
 ```
 
-The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss: `AML` ↔ `acute myeloid leukemia`.
+The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss: `AML` <-> `acute myeloid leukemia`.
 
 **Performance:** O(n) character scans per row, no model inference.
 
@@ -181,10 +181,10 @@ validated = fullmap_audit(
 ```
 Input: 1000 rows with entity mappings
 
-Stage 1 (Exact): 700 pass → 300 pending
-Stage 2 (Fuzzy): 250 pass → 50 pending
-Stage 3 (Abbreviation): 10 pass → 40 pending
-Stage 4 (SapBERT): 30 pass → 10 rejected
+Stage 1 (Exact): 700 pass -> 300 pending
+Stage 2 (Fuzzy): 250 pass -> 50 pending
+Stage 3 (Abbreviation): 10 pass -> 40 pending
+Stage 4 (SapBERT): 30 pass -> 10 rejected
 
 Output: 990 rows (700 + 250 + 10 + 30)
 ```
@@ -195,7 +195,7 @@ Output: 990 rows (700 + 250 + 10 + 30)
 |-------|--------|-----------|----------|
 | 1 | Exact match / rule-based | Highest | Standardized IDs, acronyms, CURIE-like inputs |
 | 2 | Fuzzy | Medium | Typos, word reordering |
-| 3 | Abbreviation expansion | High | Abbreviation ↔ full-name pairs |
+| 3 | Abbreviation expansion | High | Abbreviation <-> full-name pairs |
 | 4 | SapBERT | High | Synonyms, paraphrases |
 
 ### Rejection Logging

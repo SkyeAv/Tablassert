@@ -74,19 +74,19 @@ whole table or `method: column` to pull per-row notes from the source (see
 
 - **Excel column letters**: `encoding: A`/`B`/`C` reference the first/second/third columns of the
   headerless source (organism names, Spearman rho, p-value).
-- **Regex pipeline**: the subject runs three substitutions in order: `.*g__` → ``
-  (`d__Bacteria;p__Firmicutes;g__Lactobacillus` → `Lactobacillus`), then `;s__` → ` `
-  (`Lactobacillus;s__rhamnosus` → `Lactobacillus rhamnosus`), then `sp` → `sp. `.
+- **Regex pipeline**: the subject runs three substitutions in order: `.*g__` -> ``
+  (`d__Bacteria;p__Firmicutes;g__Lactobacillus` -> `Lactobacillus`), then `;s__` -> ` `
+  (`Lactobacillus;s__rhamnosus` -> `Lactobacillus rhamnosus`), then `sp` -> `sp. `.
 - **Taxonomic filtering**: `prioritize: [OrganismTaxon]` + `avoid: [Gene]` stop "Lactobacillus"
   resolving to a similarly-named gene.
 - **Mixed annotations**: `method: value` for constants (same every row), `method: column` for
   per-row values.
 - **Subject-predicate-object**: subject varies per row (column), predicate `correlated_with` is
-  fixed, object `CHEBI:41774` is fixed → `Lactobacillus rhamnosus --[correlated_with]--> 13C-tamoxifen`.
+  fixed, object `CHEBI:41774` is fixed -> `Lactobacillus rhamnosus --[correlated_with]--> 13C-tamoxifen`.
 
 ??? note "Regex dialect constraint"
     Each `pattern` is handed to Polars `str.replace_all()` (Rust `regex` crate). **Backreferences
-    (`\1`, `\2`, …) and lookarounds (`(?=...)`, `(?<=...)`, `(?!...)`, `(?<!...)`) are not allowed**
+    (`\1`, `\2`, ...) and lookarounds (`(?=...)`, `(?<=...)`, `(?!...)`, `(?<!...)`) are not allowed**
     and fail validation; plain `(...)` and non-capturing `(?:...)` groups are supported. Express
     transformations as a chain of simple substitutions, or capture leftover context in a
     `miscellaneous_notes` annotation. See [Text Transformations](table.md#text-transformations).
@@ -177,7 +177,7 @@ Produces two edge sets from one table: rho > 0 and rho < 0.
 ## Dual-Column Mapping
 
 Both subject and object come from columns, so both nodes undergo entity resolution. **Use case:**
-correlation tables linking two biological entities per row (e.g., metabolite ↔ microbe).
+correlation tables linking two biological entities per row (e.g., metabolite <-> microbe).
 
 ```yaml
 template:
@@ -203,7 +203,7 @@ template:
       encoding: B  # Column B: microbe names
       prioritize: [OrganismTaxon]
       regex:
-        - {pattern: _, replacement: ' '}   # "Lactobacillus_rhamnosus" → "Lactobacillus rhamnosus"
+        - {pattern: _, replacement: ' '}   # "Lactobacillus_rhamnosus" -> "Lactobacillus rhamnosus"
 
   provenance:
     repo: PMC
@@ -216,7 +216,7 @@ template:
 ```
 
 Each column-mapped node gets its own `prioritize` list to guide disambiguation. `remove` strips each
-listed pattern (replace with empty string); `regex` applies an ordered `pattern`→`replacement` list;
+listed pattern (replace with empty string); `regex` applies an ordered `pattern`->`replacement` list;
 both transform cell text in place before resolution, and neither drops rows.
 
 ---

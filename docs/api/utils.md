@@ -150,7 +150,7 @@ Before hashing, the record is normalized so that only *meaning* reaches the dige
 ### Namespace
 
 The domain defaults to `"TABLASSERT"`. When `uuid_fields` is declared it becomes the graph's
-`rig.source_info.infores_id`, so two graphs asserting the same triple can never mint the same id —
+`rig.source_info.infores_id`, so two graphs asserting the same triple can never mint the same id:
 the uniqueness that full-record hashing provided by accident becomes structural. `uuid_domain`
 overrides it for graphs that must deliberately share an id space.
 
@@ -160,14 +160,14 @@ Edges deduplicate on their derived id, so an output file can never carry the sam
 exact repeat collapses; two genuinely different edges deriving one id abort the build with
 `uuid-fields-not-a-key`, naming the fields that would disambiguate them.
 
-A graph that *expects* such collisions — e.g. one whose `uuid_fields` are the resolved statement,
-so two rows with different raw mention spellings resolve to the same CURIE — can instead set
+A graph that *expects* such collisions (e.g. one whose `uuid_fields` are the resolved statement,
+so two rows with different raw mention spellings resolve to the same CURIE) can instead set
 `uuid_on_collision: merge` (requires `uuid_fields`). Divergent same-id records are then folded
 into one edge: list fields are unioned, deduplicated by content, and sorted (so the merged edge is
 identical regardless of row order), conflicting scalars keep the first record's value, and a
 build-log summary reports how many records merged and how many scalar conflicts were arbitrated.
-Merge mode buffers one full record per unique id until end-of-stream — the memory cost the default
-streaming path avoids — which is why it is opt-in. See
+Merge mode buffers one full record per unique id until end-of-stream (the memory cost the default
+streaming path avoids), which is why it is opt-in. See
 [Merging collisions instead](../configuration/graph.md#merging-collisions-instead).
 
 ### KGX Compliance

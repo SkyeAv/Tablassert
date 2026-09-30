@@ -34,15 +34,15 @@ The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation
 | `uuid_fields` | List[str] | Edge fields that constitute edge identity. Only these feed the derived edge `id` (see [Stable edge ids](#stable-edge-ids)) |
 | `uuid_domain` | String | Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise |
 | `uuid_on_collision` | `error` \| `merge` | What to do when two different edges derive one id. `error` (default) aborts; `merge` folds them into one edge. Requires `uuid_fields` (see [Merging collisions instead](#merging-collisions-instead)) |
-| `qc_similarity_threshold` | Float 0–1 | SapBERT cosine threshold used by QC |
-| `qc_fuzzy_ratio_threshold` | Float 0–100 | RapidFuzz ratio threshold used by QC |
-| `qc_fuzzy_partial_threshold` | Float 0–100 | RapidFuzz partial/token-set threshold used by QC |
+| `qc_similarity_threshold` | Float 0-1 | SapBERT cosine threshold used by QC |
+| `qc_fuzzy_ratio_threshold` | Float 0-100 | RapidFuzz ratio threshold used by QC |
+| `qc_fuzzy_partial_threshold` | Float 0-100 | RapidFuzz partial/token-set threshold used by QC |
 | `qc_aliases` | Mapping[String, String] | Source-text aliases applied before QC similarity stages |
 
 ## Stable edge ids
 
 Every edge gets a deterministic `id`: a UUID v3 derived from the edge itself. By default it is
-derived from the **whole record**, which makes it maximally brittle — a corrected `p_value`, a new
+derived from the **whole record**, which makes it maximally brittle: a corrected `p_value`, a new
 `supporting_text` entry, a reordered source row, or a Biolink release that renames a slot all mint a
 brand-new id. Downstream Translator consumers then see a new edge where they should see the same
 edge with updated attributes.
@@ -59,14 +59,14 @@ Everything else is then free to change without moving the id.
 
 Start from what identifies an assertion, and what each entry buys you:
 
-- **`subject` / `predicate` / `object`** — the assertion itself.
-- **`publications`** — the evidence it rests on.
-- **`has_supporting_studies`** — carries `has_study_results[].id` (`row:<N>`), the **row
+- **`subject` / `predicate` / `object`**: the assertion itself.
+- **`publications`**: the evidence it rests on.
+- **`has_supporting_studies`**: carries `has_study_results[].id` (`row:<N>`), the **row
   discriminator**. Include it whenever one table contributes several rows that share a subject,
   predicate, and object. It also carries the `study_*` metadata, but those come from per-section
   config and are far more stable than `p_value` or `effect_size`.
 
-Add qualifiers (`object_direction_qualifier`, `anatomical_context_qualifier`, …) when they
+Add qualifiers (`object_direction_qualifier`, `anatomical_context_qualifier`, ...) when they
 *distinguish* assertions rather than merely describe them.
 
 Leave out anything that is an observation *about* the edge rather than the edge's identity:
@@ -74,7 +74,7 @@ Leave out anything that is an observation *about* the edge rather than the edge'
 `sources`, `category`, `knowledge_level`, `agent_type`.
 
 **Then build, and let the failure tell you what is missing.** That list is a starting point, not an
-answer — whether it is a key depends on your data, and the only way to find out is to run it. On a
+answer: whether it is a key depends on your data, and the only way to find out is to run it. On a
 real 1.27M-edge graph the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
 predicate, object, publication and row were identical, differing only in the NLP level recorded in
 `supporting_text` because two raw strings had resolved onto the same CURIE. Adding
@@ -90,8 +90,8 @@ every row) and rebuilding:
 
 | | edge ids that changed |
 |---|---|
-| no `uuid_fields` (whole-record hash) | 930,081 of 1,265,355 — **73%** |
-| `uuid_fields` declared | 0 of 1,265,355 — **none** |
+| no `uuid_fields` (whole-record hash) | 930,081 of 1,265,355 (**73%**) |
+| `uuid_fields` declared | 0 of 1,265,355 (**none**) |
 
 ### The field set must be a key
 
@@ -109,15 +109,15 @@ Add a discriminating field to `uuid_fields` (...).
 
 The fix is whatever the message names: add the qualifier that separates them,
 `has_supporting_studies` for the source row, or the statistic that genuinely differs. Two rows with
-an identical subject, predicate, and object that differ only in `p_value` are exactly this case —
-and were previously producing two ids for what config claimed was one assertion.
+an identical subject, predicate, and object that differ only in `p_value` are exactly this case,
+and were previously producing two ids for what the config claimed was one assertion.
 
 An exact duplicate is *not* a violation: identical edges collapse, as they always have.
 
 ### Merging collisions instead
 
 Sometimes a collision is not a config mistake but the data working as intended: two rows with
-different raw mention spellings resolve to the same CURIE, so they derive one id — and the right
+different raw mention spellings resolve to the same CURIE, so they derive one id, and the right
 answer is one edge with the combined evidence, not a failed build. Opt in with:
 
 ```yaml
@@ -128,22 +128,22 @@ uuid_on_collision: merge
 Under `merge`, a divergent same-id record is folded into the first record that claimed the id:
 
 - **list fields** (`publications`, `sources`, `source_record_urls`, `supporting_text`, `category`,
-  `upstream_resource_ids`, `has_supporting_studies`, …) are unioned, deduplicated, and **sorted**,
+  `upstream_resource_ids`, `has_supporting_studies`, ...) are unioned, deduplicated, and **sorted**,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
-  `sources[]` dedup by content — key order alone never keeps two copies.
+  `sources[]` dedup by content; key order alone never keeps two copies.
 - **scalar fields** keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.
-- fields only the later record carries are copied over — first-wins arbitrates *conflicts*, not
+- fields only the later record carries are copied over: first-wins arbitrates *conflicts*, not
   additions.
 - **one scalar is exempt from first-wins:** when the merged record carries the build-internal
-  `supporting_case_ids` list — the case IDs behind a `number_of_cases` count — the merged count
+  `supporting_case_ids` list (the case IDs behind a `number_of_cases` count), the merged count
   becomes the length of the unioned list, so a case ID shared by both records counts once where
   first-wins would under-report and summing would double-count. The superseded divergence is not
   reported as a scalar conflict, and the carrier list is stripped from every edge before write in
   both modes, so it never ships in the final NDJSON.
 
 `merge` requires `uuid_fields` (under the whole-record hash every field is an identity field, so
-two different records can never share an id — there would be nothing to merge) and is rejected
+two different records can never share an id; there would be nothing to merge) and is rejected
 without it as `uuid-merge-without-fields`.
 
 The trade-off is memory: merge mode buffers one full record per unique id and writes edges only at
@@ -156,8 +156,8 @@ Because a narrow field set no longer distinguishes graphs by accident, declaring
 moves the UUID namespace onto the graph's own `rig.source_info.infores_id`. Two graphs asserting
 the same triple from the same publication then still derive different ids, structurally.
 
-Set `uuid_domain` only when graphs must deliberately **share** an id space — a KG compiled in
-shards, or one renamed across versions that has to keep its published ids:
+Set `uuid_domain` only when graphs must deliberately **share** an id space: a KG compiled in
+shards, or one renamed across versions that has to keep its published ids.
 
 ```yaml
 uuid_domain: infores:multiomicskg

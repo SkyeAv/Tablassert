@@ -1,9 +1,14 @@
-# Autonomous Agent (`[agent]` extra)
+# Autonomous Agent (`[agent]` extra, experimental)
+
+!!! warning "Experimental"
+    Everything on this page is experimental: the `tablassert agent` flags, the state-directory
+    layout, the tools, and the prompt-optimization/distillation surfaces may change without notice
+    or a deprecation cycle. The core build pipeline is unaffected and stays stable.
 
 **Why this exists:** hand-authoring a Tablassert config for every PMC supplementary table does not scale.
 The optional `[agent]` extra makes it autonomous: point it at **PubMed Central (PMC)** article IDs and it
-**derives the config for you**, then builds, audits, and iteratively improves the graph — the
-improve loop is deterministic supervisor Python, not more LLM calls — until the entity
+**derives the config for you**, then builds, audits, and iteratively improves the graph (the
+improve loop is deterministic supervisor Python, not more LLM calls) until the entity
 resolution *maps* (coverage threshold). The outcome is an **NCATS Translator-compliant KGX knowledge
 graph** per article, a claim the loop verifies rather than asserts, by constructing every emitted
 record as its own Biolink class (see [Biolink validity](#biolink-validity)), with the whole loop
@@ -57,13 +62,13 @@ failing fast (cheap checks before any large download and before any model call):
 1. Enumerates version prefixes via S3 `list-objects-v2` (`?list-type=2&prefix=PMC<n>.&delimiter=/`) and
    selects the **latest** version (numeric, so `PMC<n>.10` beats `PMC<n>.2`); older versions are ignored.
 2. Checks the latest version's `.json` metadata for open access (`is_pmc_openaccess` / a `CC*`
-   `license_code`), **before** any large download (not open access ⇒ `PermissionError` immediately).
+   `license_code`), **before** any large download (not open access => `PermissionError` immediately).
 3. Enumerates the version's objects (`?list-type=2&prefix=PMC<n>.<v>/`) and confirms a data table is
-   present (a file with extension `.xlsx .xls .csv .tsv`), **before** any large download (none ⇒
+   present (a file with extension `.xlsx .xls .csv .tsv`), **before** any large download (none =>
    `FileNotFoundError`).
 4. Downloads only the **useful** files to `outdir/<prefix>/<file>` and returns their paths: the main text
    (`.xml`/`.nxml`/`.txt`), the `.json` metadata, and every data table. Binary media (images,
-   `.docx`, the article `.pdf` — every version ships JATS `.xml`, so the PDF is redundant) are skipped.
+   `.docx`, the article `.pdf`; every version ships JATS `.xml`, so the PDF is redundant) are skipped.
    `fetch_pmc_tables` remains as a thin wrapper returning only the table files.
 
 The main text and every candidate table are wired into the agent TWICE, deliberately: the supervisor
@@ -73,7 +78,7 @@ per-column **`column_digest`** block per previewed table/worksheet directly into
 (`render_task_context`), so the agent can author a config with **zero inspection tool calls**. Each
 digest scans the first **500 data rows** and reports, per column, the **fraction of non-null cells
 containing each separator** (`;`, `|`, `,`, `/`) plus non-null/distinct counts, max cell length, and
-sample values — enough for `explode_by`/`split_by` detection without a single tool call. Previews and
+sample values: enough for `explode_by`/`split_by` detection without a single tool call. Previews and
 digests are rendered inside the data fences (untrusted data, never instructions; see
 [Prompt-injection defenses](#prompt-injection-defenses)). The
 `pmc_article_context` / `read_table` tools stay registered as fallbacks for rows beyond a preview or a
@@ -89,12 +94,12 @@ in the config). Small tables and worksheets are filtered before this context is 
 
 !!! note "Coverage + licensing"
     Only the **open-access subset** of PMC (~half) is available here. Articles are **CC-BY**: cite the
-    source and DOI (e.g. PMC11708054 → [10.1128/mbio.01679-24](https://doi.org/10.1128/mbio.01679-24)).
+    source and DOI (e.g. PMC11708054 -> [10.1128/mbio.01679-24](https://doi.org/10.1128/mbio.01679-24)).
 
 ## Network resilience
 
-Every network call the agent makes — the PMC-AWS object listing, article metadata, and file downloads
-— routes through one stdlib-only seam, `tablassert.net`, which classifies each failure as transient
+Every network call the agent makes (the PMC-AWS object listing, article metadata, and file downloads)
+routes through one stdlib-only seam, `tablassert.net`, which classifies each failure as transient
 (worth retrying) or permanent (fail fast) and retries the transient ones with bounded jittered
 backoff. The fleet run that motivated this lost 2,194 of 2,507 queue failures (87.5%) to DNS-shaped
 errors (`[Errno -2] Name or service not known`): single-attempt fetches turned a recoverable
@@ -106,13 +111,13 @@ resolver blip into a terminal `SKIPPED` for the whole article.
 | Connection loss (`ConnectionError`, `ssl.SSLError`, `http.client.HTTPException`) | `PermissionError` (metadata not CC-licensed), `FileNotFoundError` (no OA versions / no table files) |
 | Timeouts (`TimeoutError`; `socket.timeout` *is* `TimeoutError` on Python 3.10+) | Any 4xx except 408 / 425 / 429 |
 | HTTP 408 / 425 / 429 and every 5xx | A bare `OSError` with a local errno (`ENOSPC`, `EACCES`, `ENOENT`) |
-| A bare `OSError` with a network errno (`ECONNRESET`, `EPIPE`, `ENETUNREACH`, `EMFILE`, …) | |
-| Rate-limit / quota errors from optional libraries (`openai`, `litellm`, `httpx`), matched by exception **name** — never imported — or by a `rate limit` / `429` / `too many requests` message token; a `(reset after …)` hint then sets the wait, not the classification | |
+| A bare `OSError` with a network errno (`ECONNRESET`, `EPIPE`, `ENETUNREACH`, `EMFILE`, ...) | |
+| Rate-limit / quota errors from optional libraries (`openai`, `litellm`, `httpx`), matched by exception **name** (never imported) or by a `rate limit` / `429` / `too many requests` message token; a `(reset after ...)` hint then sets the wait, not the classification | |
 
 The HTTP retry budget is 4 attempts per call, sleeping 1.0 s before the second attempt and doubling
 per attempt up to 20.0 s, with the **sum** of sleeps inside one call capped at 60.0 s. When the
 failure carries a `Retry-After` header (or a `(reset after 90s)` quota hint in its message), the
-longer of that hint and the jittered doubling step is slept — the hint overrides the schedule only
+longer of that hint and the jittered doubling step is slept; the hint overrides the schedule only
 when it is longer, capped at 60 s. The worst case for one HTTP round
 trip is therefore 4 x 120 s timeout + 60 s backoff = 540 s before the call raises for good; the
 article is then `SKIPPED` with `error_code: network-transient` (see
@@ -120,24 +125,24 @@ article is then `SKIPPED` with `error_code: network-transient` (see
 
 Article file downloads are idempotent, atomic, and bounded-parallel: a file that already exists
 non-empty is skipped **without any request** (a torn zero-length file re-downloads), each download
-writes a `.part` sibling that is atomically `os.replace`d into place on completion — and removed
-even on `KeyboardInterrupt`, so no half-written file survives — and up to 8 files fetch concurrently
+writes a `.part` sibling that is atomically `os.replace`d into place on completion, and removed
+even on `KeyboardInterrupt`, so no half-written file survives, and up to 8 files fetch concurrently
 by default, with results collected in submission order. `concurrency < 1` fails before any network
 call is made.
 
 **Exactly one retry layer exists for LLM calls.** Smolagents' own rate-limit retryer is disabled
 (`retry=False`) and the OpenAI client's transport retries are off (`max_retries: 0`); the shared
-seam retries transient LLM failures — DNS, timeouts, 429, 5xx — with the same 4 attempts but a
+seam retries transient LLM failures (DNS, timeouts, 429, 5xx) with the same 4 attempts but a
 45-second per-call backoff budget. LiteLLM's internal backend retry is not exposed by its
 constructor and remains outside this control.
 
-**Worst-case wall clock.** The fleet forensic run recorded ~13–18 HTTP round trips per article
+**Worst-case wall clock.** The fleet forensic run recorded ~13-18 HTTP round trips per article
 (3 sequential listing/metadata calls plus one per downloaded file). At the per-call worst case of
 540 s (which includes the 120 s socket timeout on each attempt, not just the backoff), three serial
 calls plus ceil(15/8) = 2 parallel download waves bound the fetch phase at 5 x 540 s = 2,700 s =
 45 min; the LLM layer adds at most 29 logical calls x 45 s = 1,305 s ~
 21.8 min. Together that is ~67 min of the 90-minute per-article budget, leaving ~23 min for the
-real work of deriving, building, and auditing configs — and a fully-down article never hangs a
+real work of deriving, building, and auditing configs, and a fully-down article never hangs a
 worker: every call either succeeds, retries within budget, or raises, and an exhausted article is
 skipped with `network-transient` for requeue.
 
@@ -232,33 +237,33 @@ control flow over agentic decisions. For each PMC id it:
    `SKIPPED` before constructing the inner model.
 2. Runs the **inner `CodeAgent`** to *derive* an initial table config. The task already contains the
    article summary, head previews, and `column_digest` separator statistics of every table/worksheet,
-   so the canonical path is a fixed **derive → build → answer** workflow over the four-tool surface
-   (`derive_config` → `build_and_audit` → final answer, target: 3 steps or fewer); `read_table` /
+   so the canonical path is a fixed **derive -> build -> answer** workflow over the four-tool surface
+   (`derive_config` -> `build_and_audit` -> final answer, target: 3 steps or fewer); `read_table` /
    `pmc_article_context` remain fallbacks only for rows beyond a digest's 500-row scan window. The
-   agent rebuilds **only on a coded build error** — fixing exactly the field the error names, at most
-   twice — and never loops on coverage: coverage improvement is the supervisor's job (step 4). Every
+   agent rebuilds **only on a coded build error**, fixing exactly the field the error names, at most
+   twice, and never loops on coverage: coverage improvement is the supervisor's job (step 4). Every
    section is gated by the Section JSON schema. The agent maps **each** mappable table/worksheet as its
    own section, **one config per paper** (see below).
-3. **Builds + audits** in one deterministic mega-tool (`build_and_audit`: validate → build → QC → coverage
-   → **Biolink validity**). The LLM sees a **compact** observation — exactly the 12 high-signal keys
+3. **Builds + audits** in one deterministic mega-tool (`build_and_audit`: validate -> build -> QC -> coverage
+   -> **Biolink validity**). The LLM sees a **compact** observation, exactly the 12 high-signal keys
    (verdict, coded errors + codes, coverage/Biolink/demoted-edge scores, `predicate_advice`,
    `multivalued_suspects`, node/edge counts, the `head` flag, and `unresolved` capped at 20 entries
-   with a visible `+N more` marker) — while the pure `build_and_audit` function still hands the
+   with a visible `+N more` marker), while the pure `build_and_audit` function still hands the
    supervisor the **full** report (artifact paths, bookkeeping, strict-Biolink internals). The report is
    *actionable*, not just a score: a nonzero `demoted_edge_pct`
    comes with `predicate_advice` (the legal predicates for the demoted category pair), unresolved terms
    that still contain a separator surface as `multivalued_suspects` (a missed `explode_by`), and every
    report carries a `head` fidelity flag so sampled edge counts are never compared against full builds.
-4. **Improves** coverage with **deterministic Python — never the LLM** — while coverage `< map_threshold`
+4. **Improves** coverage with **deterministic Python** (never the LLM) while coverage `< map_threshold`
    and budget remains: tier 1 feeds `map_coverage` feedback (called as a pure function) to a **ranked**
    list of distinct `propose_config_edit` candidates (also pure), scores them with fast head builds, and
-   accepts the first full build that is **strictly better — iff no worse on coverage *or* Biolink
-   validity and strictly better on one** (monotonic:
-   regressions on either axis are rejected, so a coverage win can no longer be bought with invalid KGX) —
+   accepts the first full build that is **strictly better** (iff no worse on coverage *or* Biolink
+   validity and strictly better on one; monotonic, so
+   regressions on either axis are rejected and a coverage win can no longer be bought with invalid KGX),
    and an edit that shrinks the full-build **edge count** by more than 25% is rejected even with a gain
    (the detail-first objective: the biggest solid config wins). The deterministic proposer covers
    **four** knob families: NodeEncoding knobs (`prioritize`/`avoid`/`regex`/`remove`/`exclude_*`),
-   **`explode_by`** (added when unresolved terms still carry a separator), and — fed the audit report —
+   **`explode_by`** (added when unresolved terms still carry a separator), and, fed the audit report,
    a **demoted-predicate fix** (the first legal predicate from `predicate_advice`). Only tier 2, the
    OPT-IN `--reflexion` path, spends an LLM call, and only after tier 1 stalls; it
    may additionally change qualifiers, `split_by`, node categories, and the source.
@@ -289,22 +294,22 @@ endpoint; neither is required):
   [Biolink validity](#biolink-validity) below.
 
 Both LLM-facing prompts are hard-bounded so a pathological article cannot outgrow the model's
-context window. The reflexion prompt caps its three interpolated blocks — current config at 8,000
+context window. The reflexion prompt caps its three interpolated blocks (current config at 8,000
 chars (`MAX_PROMPT_CONFIG_CHARS`), coverage report at 8,000 chars (`COVERAGE_PROMPT_CHARS`),
-article/table context at 40,000 chars (`MAX_PROMPT_CONTEXT_CHARS`) — and the judge prompt
+article/table context at 40,000 chars (`MAX_PROMPT_CONTEXT_CHARS`); and the judge prompt
 serializes the compact audit report bounded at 8,000 chars (`MAX_PROMPT_REPORT_CHARS`). Every
 `unresolved` term list keeps only its first 20 entries (`UNRESOLVED_CAP`) plus a visible `+N more`
 marker and an `unresolved_count` naming the original length, so truncation is never silent and the
 scale signal survives; the worst-case prompt is ~58,000 chars, about 15,000 tokens. The fleet distill
 telemetry that motivated this recorded reflexion prompts of 1.6M and 2.3M characters (689,241 and
-524,336 input tokens) — past every model's window, failing outright after paying for the
+524,336 input tokens) past every model's window, failing outright after paying for the
 serialization. Compaction happens only at prompt serialization: `map_coverage`, `build_and_audit`,
 and the supervisor's deterministic proposer still see the full uncapped reports.
 
 ### Distilling a fine-tuning dataset (`--distill`)
 
-`--distill` (short: `-d`, `-dt`) records **every LLM call of the run** — the inner agent's
-multi-turn conversations, plus the judge and reflexion calls when those gates are enabled — as one
+`--distill` (short: `-d`, `-dt`) records **every LLM call of the run**: the inner agent's
+multi-turn conversations, plus the judge and reflexion calls when those gates are enabled, as one
 ChatML JSON object per line, appended to `<state-dir>/distill/records.ndjson`. Every record line
 carries the same canonical 13-key v2 set, with an explicit `null` where a value is unknown, so a
 key never first appears partway down an append-only file:
@@ -315,7 +320,7 @@ key never first appears partway down an append-only file:
 
 Alongside the records, the supervisor appends **one outcome line per run** to a sibling
 `outcomes.ndjson` in the same directory: the terminal status, the build/audit figures, the
-tool-call tallies, the gate thresholds, and the package versions — the full 35-key outcome set,
+tool-call tallies, the gate thresholds, and the package versions (the full 35-key outcome set),
 schema-uniform with explicit nulls in the same way (abbreviated here):
 
 ```json
@@ -324,8 +329,8 @@ schema-uniform with explicit nulls in the same way (abbreviated here):
 
 `run_id` (`<invocation-id>:<pmc-id>`) is the join key between the two files. They are separate
 because the two halves exist at different times: a record is appended the moment each model call
-completes, mid-run, while the outcome — build verdict, coverage, Biolink validity, demoted-edge
-fraction — is only known once the supervisor has decided the run's terminal status, so it is
+completes, mid-run, while the outcome (build verdict, coverage, Biolink validity, demoted-edge
+fraction) is only known once the supervisor has decided the run's terminal status, so it is
 written exactly once, at the end of the run. Both files are **append-only** and never rewritten in
 place: a corpus accumulates over many batches, and retuning a weight never requires re-recording
 it. The `messages` column is plain ChatML, which Unsloth Studio auto-detects on JSONL upload (no
@@ -339,39 +344,39 @@ training row per input record plus a reproducibility manifest. Flags: `--distill
 `--out`/`-o` (both required), `--policy`/`-p` (default `threshold`), `--threshold`/`-t` (`0.75`),
 `--top-n`/`-tn` (`2`), `--replication-k`/`-rk` (`2`), `--reward-config`/`-rc` (a YAML/JSON policy
 override), `--edge-ref` (a breadth-reference override), `--purpose` (default `agent`; the literal
-`all` disables filtering), `--final-call-only` (keep only each run's highest `call_index` — the
+`all` disables filtering), `--final-call-only` (keep only each run's highest `call_index`: the
 most complete conversation), and `--manifest` (default `<out>.manifest.json`). Keep `--out`
 **outside** `--distill-dir`: [`tablassert distill-export`](cli.md#distill-export) loads every
 `*.ndjson` in its input directory, so a weighed file placed there would be re-ingested as raw
-corpus. The weigh → export composition (export requires the `[distill]` extra):
+corpus. The weigh -> export composition (export requires the `[distill]` extra):
 
 ```bash
 tablassert distill-weigh --distill-dir .tablassert/agent/distill --out ./training/train.ndjson
 tablassert distill-export --distill-dir ./training --out ./hf-dataset
 ```
 
-**The reward** is a deterministic function of the captured outcome — same outcome in, same weight
-out — and it is **tunable policy with documented defaults**, not a law: every knob is a
+**The reward** is a deterministic function of the captured outcome: same outcome in, same weight
+out. It is **tunable policy with documented defaults**, not a law: every knob is a
 `RewardConfig` field overridable via `--reward-config`, and retuning never touches the corpus. The
 defaults are Tablassert's own policy (they mirror the shape of the supervisor's quality score with
 its two degenerate terms replaced), not a borrowed standard. Five additive terms whose
 coefficients sum to 1.00:
 
-- `coverage_pct` — completeness / entity-resolution success — **0.40**
-- `biolink_valid_pct` — semantic validity of the built edges — **0.28**
-- `specificity = 1 - demoted_edge_pct` — predicate specificity vs generic fallback — **0.17**
-- `cleanliness = 1 - (failed + wrong) / total tool calls` — tool-call correctness — **0.07**
-- `breadth = clamp(log1p(edge_count) / log1p(edge_ref), 0, 1)` — non-degeneracy — **0.08**
+- `coverage_pct` (completeness / entity-resolution success): **0.40**
+- `biolink_valid_pct` (semantic validity of the built edges): **0.28**
+- `specificity = 1 - demoted_edge_pct` (predicate specificity vs generic fallback): **0.17**
+- `cleanliness = 1 - (failed + wrong) / total tool calls` (tool-call correctness): **0.07**
+- `breadth = clamp(log1p(edge_count) / log1p(edge_ref), 0, 1)` (non-degeneracy): **0.08**
 
 The hard gates then apply **multiplicatively**, never additively: `ok is not True`, `head is
 True`, or a `SKIPPED`/`FAILED` status zero the row outright; `BUILT_UNMEASURED` (or coverage never
-measured) floors the row at `unmeasured_weight` (default `0.0`) — the record is kept, just not
+measured) floors the row at `unmeasured_weight` (default `0.0`); the record is kept, just not
 selectable. On top of the raw score, two farming penalties multiply: `demoted_edge_pct > 0.50`
 scales by **0.5** (generic-predicate farming), and a redundant tool-call share above **0.30**
 scales by **0.7**. The breadth reference `edge_ref` defaults to the **corpus median** edge count
 over comparable builds (head builds and failed builds excluded, deduplicated to the last outcome
 per run id); `--edge-ref` or the config file pins it instead, and a corpus with no comparable
-build warns and lets breadth contribute 0.0. The reward reads only deterministic fields — never
+build warns and lets breadth contribute 0.0. The reward reads only deterministic fields, never
 the judge score, `qc_pass_rate`, or `provenance_ok`, which are recorded as metadata only.
 
 **Selection policies.** All three are computed at weigh time (re-recording is never needed) and
@@ -380,37 +385,37 @@ annotate every row with the same five keys (`weight`, `selected`, `replicas`, `p
 
 | Policy | What it does | Prefer when | Caveat |
 | --- | --- | --- | --- |
-| `threshold` (default) | `selected = weight >= --threshold` (0.75); each selected row counts once | The zero-code path — the only selection TRL consumes with no trainer code | A miscalibrated corpus can empty the selection; the manifest's `selected_count` makes that visible |
-| `best-of-n` | Groups by `pmc_id`, ranks each group by weight (ties: fewer attempts, fewer failed tool calls, earlier call), keeps the top `--top-n` (2) | Several attempts per article: keep the best trajectory per prompt while preserving distinct paths | **No weight floor**: a prompt whose every trajectory weighs 0.0 still contributes its top-ranked row, so gated-failed trajectories can be selected — the manifest's `selected_zero_weight` exposes this |
-| `replication` | `selected = weight > 0`; `replicas` scales from 1 to `1 + --replication-k` (default 2, capped at 3) across the selected rows' weight spread | Soft importance weighting with no custom loss code | `replicas` is a **count on one row**, never physical duplication — the training sampler must expand the rows |
+| `threshold` (default) | `selected = weight >= --threshold` (0.75); each selected row counts once | The zero-code path (the only selection TRL consumes with no trainer code) | A miscalibrated corpus can empty the selection; the manifest's `selected_count` makes that visible |
+| `best-of-n` | Groups by `pmc_id`, ranks each group by weight (ties: fewer attempts, fewer failed tool calls, earlier call), keeps the top `--top-n` (2) | Several attempts per article: keep the best trajectory per prompt while preserving distinct paths | **No weight floor**: a prompt whose every trajectory weighs 0.0 still contributes its top-ranked row, so gated-failed trajectories can be selected; the manifest's `selected_zero_weight` exposes this |
+| `replication` | `selected = weight > 0`; `replicas` scales from 1 to `1 + --replication-k` (default 2, capped at 3) across the selected rows' weight spread | Soft importance weighting with no custom loss code | `replicas` is a **count on one row**, never physical duplication: the training sampler must expand the rows |
 
-**The goal is LoRA/QLoRA supervised fine-tuning — explicitly not RLHF.** There is no reward model,
+**The goal is LoRA/QLoRA supervised fine-tuning (explicitly not RLHF).** There is no reward model,
 no PPO/GRPO, and no online RL anywhere in this pipeline; the reward is a deterministic scoring
 function used for data selection. The weight drives row filtering, ranking, and replication
-because TRL's `SFTConfig` has **no per-example sample-weight column** — selection and replication
+because TRL's `SFTConfig` has **no per-example sample-weight column**: selection and replication
 are the only zero-code weighting mechanisms an SFT trainer offers.
 
 Consumption caveats that are easy to get wrong:
 
 - `SFTConfig.max_length` defaults to **1024** with `truncation_mode="keep_start"`: long multi-turn
   agent trajectories are silently truncated, and TRL then **drops** examples left fully masked.
-  Size it from the recorded `n_messages`/`tokens_total` metadata — set `max_length=None` or to at
+  Size it from the recorded `n_messages`/`tokens_total` metadata; set `max_length=None` or to at
   least the corpus's p99.
-- `assistant_only_loss=True` trains on the assistant (agent) turns only — usually what you want
+- `assistant_only_loss=True` trains on the assistant (agent) turns only (usually what you want)
   for a config-authoring agent.
 - `packing=True` makes any effective weight **token-proportional rather than row-proportional**
   and destroys per-example identity, which quietly undermines replication.
 - Extra metadata columns (every `outcome_*` column, `weight`, `selected`, and friends) are
-  **ignored** by TRL, not fatal — safe to keep them in the file.
+  **ignored** by TRL, not fatal; safe to keep them in the file.
 
 Honest limitations. SFT on curated optimal trajectories stabilizes output **format and schema
-compliance** — for a YAML-config-writing agent whose supervisor is deterministic Python, that is
+compliance**: for a YAML-config-writing agent whose supervisor is deterministic Python, that is
 the honest deliverable of a LoRA. It is **not** evidence-backed for out-of-distribution
 generalization (Chu et al., arXiv:2501.17161, App. C.1); do not promise OOD gains. Two
 reward-hacking caveats: `demoted_edge_pct` gating exists because coverage can be **farmed with a
-generic predicate** — a predicate the derived association class forbids never raises, it silently
-demotes the edge, so a config can map perfectly while emitting bare `biolink:Association` edges —
-and over-hard selection is a measured Goodhart risk (Gao et al., arXiv:2210.10760). Hold out a
+generic predicate**: a predicate the derived association class forbids never raises; it silently
+demotes the edge, so a config can map perfectly while emitting bare `biolink:Association` edges.
+Over-hard selection is a measured Goodhart risk (Gao et al., arXiv:2210.10760). Hold out a
 differently-scored validation set rather than trusting the same weight that selected the training
 rows.
 
@@ -428,8 +433,8 @@ the same check [`tablassert validate-kgx`](cli.md#validate-kgx) runs, and the sa
 | `biolink_valid_pct_strict` | Pass rate with no exemptions, so the pending gap stays visible |
 | `biolink_problems` | Top `"field: error-type"` failures with counts, for self-correction |
 | `demoted_edge_pct` | Fraction of edges that fell back to bare `biolink:Association` |
-| `predicate_advice` | Per demoted (predicate, subject, object) group: the derived association class and the **legal predicates** — the exact fix, not just the symptom |
-| `multivalued_suspects` | Entity columns whose unresolved terms still contain a separator (`;`, `\|`, `,`) — a missed `explode_by`, with the literal separator to declare |
+| `predicate_advice` | Per demoted (predicate, subject, object) group: the derived association class and the **legal predicates**: the exact fix, not just the symptom |
+| `multivalued_suspects` | Entity columns whose unresolved terms still contain a separator (`;`, `\|`, `,`): a missed `explode_by`, with the literal separator to declare |
 
 **`demoted_edge_pct` is the predicate signal.** Tablassert derives an edge's association class from
 the (subject category, object category) pair, then `resolve_association_class` gives up as much of
@@ -445,8 +450,8 @@ cannot drift from the model the build validates against:
 
 ```text
 - Gene ~ Disease -> GeneToDiseaseAssociation: affects, associated_with, contributes_to
-- SequenceVariant ~ Gene -> VariantToGeneAssociation: condition_associated_with_gene, …
-- any predicate is safe for: Gene~Gene, Gene~Pathway, ChemicalEntity~Disease, …
+- SequenceVariant ~ Gene -> VariantToGeneAssociation: condition_associated_with_gene, ...
+- any predicate is safe for: Gene~Gene, Gene~Pathway, ChemicalEntity~Disease, ...
 ```
 
 - An annotation like `supporting_study_size` or `sample_size` names study-level metadata.
@@ -510,14 +515,14 @@ and unrelated table entries are preserved.
 
 Before the accepted best config is persisted it is also **compacted deterministically**
 (`compact_config`), after normalization: provably no-op entries (keys equal to the Pydantic model
-defaults) are removed while semantics are preserved — the compacted config builds the identical KGX
+defaults) are removed while semantics are preserved: the compacted config builds the identical KGX
 and scores the identical `quality_score` (pinned by the offline accuracy-invariance test). Compaction
 can only shrink a config or leave it alone, never corrupt it: any failure writes the normalized
-uncompacted config and the status is unaffected. Each record tracks `config_chars` — the character
-count of what was actually written to `configs/<pmc_id>.yaml` — in `state.json`, so size deltas are
+uncompacted config and the status is unaffected. Each record tracks `config_chars` (the character
+count of what was actually written to `configs/<pmc_id>.yaml`, in `state.json`), so size deltas are
 auditable per article.
 
-Each record also carries `error_code` — the stable kebab-case `code` of the exception that caused a
+Each record also carries `error_code` (the stable kebab-case `code` of the exception that caused a
 `SKIPPED` record, or `null` for a deterministic gate, an uncoded error, or a pre-field `state.json`.
 It describes the **most recent attempt**: starting an attempt clears it, so a later `MAPPED` result
 cannot retain a stale transient code. Consumers should inspect it only when `status == "SKIPPED"`.
@@ -562,8 +567,8 @@ another's entries and a same-PMC rerun has deterministic last-writer-wins replac
 
 ## The tools
 
-Full mode registers **exactly four** LLM tools — `read_table`, `pmc_article_context`, `derive_config`,
-`build_and_audit` — the derive → build → answer surface. `map_coverage` and `propose_config_edit` are
+Full mode registers **exactly four** LLM tools: `read_table`, `pmc_article_context`, `derive_config`,
+`build_and_audit`: the derive -> build -> answer surface. `map_coverage` and `propose_config_edit` are
 **not** in the full-mode agent's surface: they are pure helpers the deterministic supervisor calls
 itself in its improve loop (coverage improvement is the supervisor's job, after the agent answers).
 Two batch derive modes vary the surface: `derive_only` registers only the three
@@ -577,7 +582,7 @@ can pick the best sheet/columns).
 | `pmc_article_context` | tool | parse the JATS main text into a **data-fenced** summary (title/abstract/sections/supplementary manifest); `.txt` renders a fenced excerpt |
 | `read_table` | tool | render a table as **data-fenced, spotlighted** text; lists **all worksheets** of an Excel file (`sheet=`) |
 | `derive_config` | tool | author a table config (`template` + one section per table); each section must satisfy `Section.model_json_schema()` |
-| `build_and_audit` | tool | **one** deterministic validate→build→QC→coverage→**Biolink-validity** mega-tool; the LLM observation is the **compact** 12-key report (`unresolved` capped at 20 + `+N more`), while direct/supervisor callers of the pure function get the **full** report; the report's `predicate_advice` / `multivalued_suspects` fields make demotions and missed `explode_by`s directly actionable |
+| `build_and_audit` | tool | **one** deterministic validate->build->QC->coverage->**Biolink-validity** mega-tool; the LLM observation is the **compact** 12-key report (`unresolved` capped at 20 + `+N more`), while direct/supervisor callers of the pure function get the **full** report; the report's `predicate_advice` / `multivalued_suspects` fields make demotions and missed `explode_by`s directly actionable |
 | `map_coverage` | tool (`derive_coverage` mode only) / supervisor pure helper | fullmap term-resolution coverage (per-column + overall); in full mode ONLY the deterministic supervisor calls the pure function (improve loop + per-section recording), never the LLM |
 | `propose_config_edit` | supervisor pure helper | deterministic, constrained edits + rationale used ONLY by the supervisor's improve loop (never an LLM tool): `NodeEncoding` knobs, `explode_by` from separator-carrying unresolved terms, and (given the audit report) a demoted-predicate fix |
 
@@ -590,25 +595,25 @@ gate can only answer true/false and would otherwise swallow the reason.
 
 The agent's `instructions` make the techniques explicit:
 
-- **Detail-first goal ordering**: the goals are (1) BREADTH + DETAIL — every mappable sheet as its own
+- **Detail-first goal ordering**: the goals are (1) BREADTH + DETAIL (every mappable sheet as its own
   section, every evidence slot captured, multi-valued cells exploded, direction/aspect columns
-  qualified; (2) coverage; (3) Biolink validity / QC; (4) efficiency LAST — the prompt states plainly
+  qualified; (2) coverage; (3) Biolink validity / QC; (4) efficiency LAST; the prompt states plainly
   that a mappable sheet or evidence column is never sacrificed to save a tool call.
 - **Digest-first `explode_by`/`split_by` detection**: every previewed table/worksheet ships its
   injected `column_digest` (separator fractions over the first 500 data rows), and the prompt directs
-  the agent to read those statistics FIRST — an entity column with a dominant separator gets
+  the agent to read those statistics FIRST: an entity column with a dominant separator gets
   `explode_by` for exactly that separator; `read_table` is justified only for rows beyond the digest's
   scan window.
 - **ReAct, planning off**: `CodeAgent` is a ReAct loop, but periodic re-planning is disabled
   (`planning_interval=None`): each planning turn is a whole extra LLM round trip carrying the full
-  prompt, and the task already prescribes a fixed short workflow (derive → build → answer): on a
+  prompt, and the task already prescribes a fixed short workflow (derive -> build -> answer): on a
   coded build error the agent fixes exactly the named field and rebuilds (at most twice) and never
-  loops on coverage — the supervisor's deterministic improve loop keeps raising coverage after the
+  loops on coverage; the supervisor's deterministic improve loop keeps raising coverage after the
   agent finishes.
 - **Structured / constrained output**: `derive_config` injects the Section JSON schema; a
   `final_answer_checks=[validate_table_config]` gate means the agent can only terminate with a config
   whose **every section** is schema-valid (multi-section configs are validated section-by-section).
-- **A regex cookbook**: the prompt teaches the actual semantics agents get wrong — Rust-regex
+- **A regex cookbook**: the prompt teaches the actual semantics agents get wrong: Rust-regex
   substitutions (no backreferences, no lookarounds), single-quoted YAML so backslashes stay literal,
   `regex` vs `remove` vs `exclude_regex`, and that CURIEs come from resolution or `prefix`/`suffix`,
   never from capture groups.
@@ -617,16 +622,16 @@ The agent's `instructions` make the techniques explicit:
   take literal tokens; `qualified_predicate: biolink:causes` is the one CURIE-taking exception;
   `species_context_qualifier` stays banned.
 - **Predicate specificity**: pick the most-specific predicate the derived association class permits,
-  chosen from the generated legal-predicate table — never a generic default and never a predicate the
+  chosen from the generated legal-predicate table, never a generic default and never a predicate the
   class forbids; `predicate_advice` in the audit report names the exact fix when demotion happens.
 - **Few-shot exemplars**: the tutorial gene~disease section, the ALAMV6 organism~chemical section, a
   multi-section config (one config, two tables, each section its own source/url), and a **rich
   exemplar** combining `explode_by: ";"`, a column qualifier, a regex strip, and the paired
-  `effect_size`/`effect_type` annotations — every exemplar's predicate is a legal, specific choice for
+  `effect_size`/`effect_type` annotations; every exemplar's predicate is a legal, specific choice for
   its category pair (guarded by tests).
 - **Reflexion-style self-critique (supervisor-side)**: the deterministic `propose_config_edit` /
   `reflexion_improve` reflect on failing rows,
-  error codes, and unresolved terms, then make a targeted, schema-valid edit — in the supervisor's
+  error codes, and unresolved terms, then make a targeted, schema-valid edit. In the supervisor's
   improve loop, never inside the agent's tool surface.
 - **Error-recovery prompting**: tools return rich coded errors; the prompt directs the agent to read the
   code + message and fix precisely that field, never repeating an unchanged config.
@@ -655,7 +660,7 @@ The harness scores every run on three objectives and optimizes them as a black b
 - **Cost**: `RunResult.token_usage` + step count (the API is free; tokens are the proxy).
 - **Reliability**: failed / wrong / redundant tool-call counts from the `ActionStep` logs.
 
-**LLM-as-judge (semantic dimensions only):** a pointwise **0–3** rubric over schema validity, coverage,
+**LLM-as-judge (semantic dimensions only):** a pointwise **0-3** rubric over schema validity, coverage,
 **Biolink validity**, QC pass, predicate/category appropriateness, provenance completeness, efficiency,
 and tool-call cleanliness, with **position** (both orderings averaged) and **verbosity** bias mitigation. Deterministic
 metrics gate the rest; the judge only scores what a metric cannot. Without a judge model, an offline
@@ -664,14 +669,14 @@ deterministic heuristic is used.
 **Optimizers:**
 
 - **Reflexion**: the simple first-increment retry (`reflexion_improve`).
-- **GEPA**: `dspy.GEPA(metric=gepa_metric, candidate_selection_strategy="pareto", …)` optimizes the
+- **GEPA**: `dspy.GEPA(metric=gepa_metric, candidate_selection_strategy="pareto", ...)` optimizes the
   agent's `instructions` + tool `description`s + exemplars as a **black box** from textual feedback
   (`gepa_metric` returns `dspy.Prediction(score=weighted_quality, feedback="<failing rows + error codes +
   Biolink problems + demoted-edge fraction + the legal predicates from predicate_advice + missed
   explode_by suspects + wrong-call list>")`). It is system-agnostic, Pareto-native, and needs few rollouts.
 
-**Reporting:** `pareto_frontier(runs)` returns the **non-dominated set** over (quality ↑, cost ↓,
-wrong-calls ↓) and its **knee** (best quality per unit cost).
+**Reporting:** `pareto_frontier(runs)` returns the **non-dominated set** over (quality ^, cost v,
+wrong-calls v) and its **knee** (best quality per unit cost).
 
 ### Real-run prompt optimization (`--optimize`)
 
@@ -711,7 +716,7 @@ tablassert agent PMC11708054 --configuration-file ./graph.yaml \
 `--max-metric-calls` bounds the GEPA metric budget. `save_optimized_instructions` /
 `load_optimized_instructions` persist and reload the prompt (a `{instructions, descriptions}` mapping).
 Without `--instructions-file` the built-in `INSTRUCTIONS` prompt is used. The committed
-`examples/agent/optimized_instructions.yaml` is a GEPA **artifact** from an older seed — do not hand-edit
+`examples/agent/optimized_instructions.yaml` is a GEPA **artifact** from an older seed: do not hand-edit
 it; rerun `--optimize` so GEPA starts from the current (detail-first) seed prompt instead. (A real
 optimization run needs a live model; the offline suite exercises this path via an injectable `gepa_cls`
 stub.)

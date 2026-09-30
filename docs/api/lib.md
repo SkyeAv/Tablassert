@@ -110,8 +110,8 @@ result: list[dict[str, Any]] = resolve_many(
     prioritize=[Categories.GENE],
 )
 
-# result[0] → {"original_gene": "TP53", "gene": "HGNC:11998", "gene_name": "TP53", ...}
-# result[1] → {"original_gene": "BRCA1", "gene": "HGNC:1100", "gene_name": "BRCA1", ...}
+# result[0] -> {"original_gene": "TP53", "gene": "HGNC:11998", "gene_name": "TP53", ...}
+# result[1] -> {"original_gene": "BRCA1", "gene": "HGNC:1100", "gene_name": "BRCA1", ...}
 ```
 
 #### Consuming Results
@@ -136,7 +136,7 @@ df: pl.DataFrame = pl.DataFrame(result)
 
 # Or iterate over resolved rows
 for row in result:
-    print(f"{row['gene_name']} → {row['gene']}")
+    print(f"{row['gene_name']} -> {row['gene']}")
 ```
 
 ### Comparison With resolve()
