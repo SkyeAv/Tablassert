@@ -115,7 +115,7 @@ def is_lazy() -> bool:
 PMC_BUCKET: str = "pmc-oa-opendata"
 PMC_HTTPS_BASE: str = "https://pmc-oa-opendata.s3.amazonaws.com"
 PMC_S3API_BASE: str = "https://pmc-oa-opendata.s3.us-east-1.amazonaws.com"
-TABLE_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".xls", ".csv", ".tsv"})
+TABLE_EXTENSIONS: frozenset[str] = frozenset({".xlsx", ".xls", ".csv", ".tsv", ".parquet"})
 #: Default minimum number of non-empty data rows for agent table candidates.
 #:
 #: Counts use the same header inference as the production readers, so the header is not included.
@@ -662,8 +662,9 @@ def _load_table(path: Path, sheet: str | None = None) -> pl.DataFrame:
     """Dispatch a local table file to the right polars reader by suffix.
 
     ``.csv`` -> ``read_csv``; ``.tsv``/``.txt`` -> ``read_csv(separator="\\t")``;
-    ``.xlsx``/``.xls`` -> :func:`_read_excel` (``sheet`` selects a worksheet by name;
-    ignored for csv/tsv). Any polars parse failure becomes a clear ``ValueError``; an
+    ``.parquet`` -> ``read_parquet`` (typed columns read as-is); ``.xlsx``/``.xls`` ->
+    :func:`_read_excel` (``sheet`` selects a worksheet by name; ignored for
+    csv/tsv/parquet). Any polars parse failure becomes a clear ``ValueError``; an
     unknown suffix is a ``ValueError`` too (never a silent mis-read).
     """
     suffix: str = path.suffix.lower()
@@ -674,6 +675,8 @@ def _load_table(path: Path, sheet: str | None = None) -> pl.DataFrame:
             return pl.read_csv(path)
         if suffix in {".tsv", ".txt"}:
             return pl.read_csv(path, separator="\t")
+        if suffix == ".parquet":
+            return pl.read_parquet(path)
     except Exception as e:
         raise ValueError(f"Could not read table {path}: {e}") from e
     raise ValueError(f"Could not read table {path}: unsupported extension {suffix!r}")
@@ -685,14 +688,19 @@ def _effective_rows_cached(path: str, mtime_ns: int, size: int, sheet: str | Non
 
     ``path``, ``mtime_ns``, and ``size`` form the cache key so a re-fetched or rewritten file
     cannot reuse a stale count. Delimited files are counted by the parser rather than physical
-    lines, which handles quoted embedded newlines correctly. Excel uses the same reader as
-    :func:`_load_table` and removes rows that are null in every column (formatted blank rows).
+    lines, which handles quoted embedded newlines correctly. Excel and parquet use the same
+    reader as :func:`_load_table` and remove rows that are null in every column (formatted
+    blank rows).
     """
     table_path: Path = Path(path)
     suffix: str = table_path.suffix.lower()
     if suffix in {".xlsx", ".xls"}:
         frame: pl.DataFrame = _read_excel(table_path, sheet)
         return frame.filter(~pl.all_horizontal(pl.all().is_null())).height
+
+    if suffix == ".parquet":
+        pq: pl.DataFrame = pl.read_parquet(table_path)
+        return pq.filter(~pl.all_horizontal(pl.all().is_null())).height
 
     if suffix == ".csv":
         separator: str = ","
@@ -1233,7 +1241,7 @@ def normalize_agent_table_config(config_yaml: str, *, base_dirs: Sequence[Path] 
 # hand-maintained guess table), so a model default change automatically changes
 # what counts as removable. Semantic guards: the ``provenance`` subtree is never
 # touched (legal attribution), ``kind`` is never dropped (it discriminates the
-# ``Excel | Text`` source union), a non-default null such as ``taxon: null``
+# ``Excel | Text | Parquet`` source union), a non-default null such as ``taxon: null``
 # (default 9606) is preserved, and in ``{template, sections}`` configs a section
 # entry equal to a model default is only removed when the template cannot change
 # the merged result (fastmerge lets section scalars override template values, so
@@ -1245,7 +1253,7 @@ _COMPACT_ABSENT: object = object()
 
 #: Keys compaction never removes and never recurses into: ``provenance`` values are
 #: the edge's legal attribution (untouched even when they equal a model default),
-#: and ``kind`` discriminates the ``Excel | Text`` source union — dropping it could
+#: and ``kind`` discriminates the ``Excel | Text | Parquet`` source union — dropping it could
 #: flip which model a re-parsed source validates as.
 _COMPACT_UNTOUCHED_KEYS: frozenset[str] = frozenset({"provenance", "kind"})
 

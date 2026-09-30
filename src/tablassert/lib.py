@@ -953,6 +953,26 @@ def excel(p: Path, sheet: str, engine: str = "calamine") -> pl.LazyFrame:
     return df.lazy()
 
 
+def parquet(p: Path) -> pl.LazyFrame:
+    """Read a parquet source as a LazyFrame with positional ``column_<n>`` names.
+
+    Args:
+        p: Path to the parquet file.
+
+    Returns:
+        LazyFrame whose columns are renamed to ``column_1..`` in schema order.
+
+    Notes:
+        Parquet carries its own column names, but the config contract addresses columns
+        positionally (Excel-style ``A-ZZ`` encoding letters resolve to ``column_<n>``), so
+        the reader renames whatever names the file carries to ``column_1..`` -- the same
+        convention the headerless ``csv``/``excel`` readers produce.
+    """
+    lf: pl.LazyFrame = pl.scan_parquet(source=p)
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1296,6 +1316,7 @@ class Tcode(Section):
         return [
             (csv, (self.source.local, self.source.delimiter)) if self.source.kind == Files.TEXT else None,  # pyright: ignore
             (excel, (self.source.local, self.source.sheet)) if self.source.kind == Files.EXCEL else None,  # pyright: ignore
+            (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
@@ -1507,6 +1528,7 @@ PHASE_OF: dict[Callable, str] = {
     # Maps each Tcode op callable to a short lowercase phase label for progress UX.
     csv: "load",
     excel: "load",
+    parquet: "load",
     idx: "load",
     crop: "filter",
     pick: "filter",

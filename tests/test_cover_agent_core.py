@@ -18,11 +18,20 @@ import json
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 import pytest
 import yaml
 
 from tablassert import rs
-from tablassert.agent import _count_ndjson_lines, build_and_audit, is_open_access, parse_jats_summary, read_table, supplementary_materials_from_jats
+from tablassert.agent import (
+    _count_ndjson_lines,
+    _load_table,
+    build_and_audit,
+    is_open_access,
+    parse_jats_summary,
+    read_table,
+    supplementary_materials_from_jats,
+)
 
 # --------------------------------------------------------------------------- #
 # JATS parsers: _nearest_label/_nearest_caption (233) + supplementary (277)
@@ -154,6 +163,38 @@ def test_read_table_unsupported_suffix_raises_valueerror(tmp_path: Path) -> None
     path.write_text("a,b\n1,2\n")
     with pytest.raises(ValueError, match="unsupported extension"):
         read_table(path)
+
+
+def test_read_table_reads_parquet_payload(tmp_path: Path) -> None:
+    """``read_table`` renders a ``.parquet`` payload through ``_load_table`` -> ``read_parquet``.
+
+    Parquet payloads downloaded from supplements must reach the agent context like csv/tsv do:
+    the suffix dispatches to ``pl.read_parquet`` (typed columns as-is), the preview renders the
+    cells, and the shape line reports the real height/width. No ``sheets:`` note appears --
+    that annotation is Excel-only and parquet has no worksheets.
+    """
+    path: Path = tmp_path / "table.parquet"
+    pl.DataFrame({"gene": ["brca1", "mapk1"], "score": [0.5, 0.9]}).write_parquet(path)
+
+    rendered: str = read_table(path)
+    assert "shape: 2x2" in rendered
+    assert "brca1" in rendered
+    assert "mapk1" in rendered
+    assert "sheets:" not in rendered
+
+
+def test_load_table_reads_parquet_directly(tmp_path: Path) -> None:
+    """``_load_table`` returns the parquet frame as-is (real names, no positional remap).
+
+    Unlike the pipeline reader (``lib.parquet``, which renames to ``column_1..`` for the
+    positional config contract), the agent reads tables to SHOW them, so the frame keeps the
+    file's own column names; only the rendered preview reaches the model.
+    """
+    path: Path = tmp_path / "table.parquet"
+    pl.DataFrame({"gene": ["brca1"]}).write_parquet(path)
+    frame: pl.DataFrame = _load_table(path)
+    assert frame.columns == ["gene"]
+    assert frame["gene"].to_list() == ["brca1"]
 
 
 # --------------------------------------------------------------------------- #

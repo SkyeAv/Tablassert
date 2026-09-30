@@ -84,6 +84,7 @@ def test_contributions_values() -> None:
 def test_files_values() -> None:
     assert Files.TEXT == "text"
     assert Files.EXCEL == "excel"
+    assert Files.PARQUET == "parquet"
 
 
 def test_comparisons_membership() -> None:

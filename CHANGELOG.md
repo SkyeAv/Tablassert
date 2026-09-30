@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- **`parquet` is now a first-class source kind.** Table sections accept `source: {kind: parquet, local: ..., url: [...]}`: the file is scanned lazily with polars and its columns are renamed to the positional `column_1`..`column_n` convention in schema order, exactly what the headerless `text`/`excel` readers produce, so `method: column` encodings keep addressing columns with Excel-style letters (`A` is the first column). Parquet is self-describing (typed columns, real headers, no sheets or delimiters), so the source adds no format-specific fields beyond the shared `rows`/`row_slice`/`reindex` controls. The autonomous agent accepts `.parquet` payloads as tables too: fetch bucketing, previews, and row counts all dispatch on the extension.
+
 ## 19.4.0 - 2026-09-29
 
 ### Added
