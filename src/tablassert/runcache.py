@@ -252,6 +252,7 @@ OP_COST: dict[Callable, int] = {
     # to resolution.
     lib.csv: 2,
     lib.excel: 2,
+    lib.parquet: 2,
     # Filter: single lazy row predicates/slices.
     lib.idx: 1,
     lib.crop: 1,

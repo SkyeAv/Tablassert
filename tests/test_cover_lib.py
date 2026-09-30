@@ -118,6 +118,25 @@ def test_excel_reads_sheet_without_header(tmp_path: Path) -> None:
     assert df.rows() == [("a", "b"), ("c", "d")]
 
 
+def test_parquet_reads_schema_and_renames_columns_positionally(tmp_path: Path) -> None:
+    """``parquet`` scans lazily and maps the file's real names to positional ``column_<n>``.
+
+    The config contract addresses columns positionally (``method: column`` encodings accept
+    only Excel-style ``A-ZZ`` letters, resolved to ``column_<n>``), so the reader must rename
+    whatever names the parquet carries to ``column_1..`` in schema order -- the same convention
+    the headerless ``csv``/``excel`` readers produce -- and stay lazy for ``Tcode`` composition.
+    """
+    pp: Path = tmp_path / "data.parquet"
+    pl.DataFrame({"gene_a": ["brca1", "brca1"], "gene_b": ["mapk1", "mapk1"], "p": [0.5, 0.01]}).write_parquet(pp)
+
+    lf: pl.LazyFrame = lib.parquet(pp)
+    assert isinstance(lf, pl.LazyFrame)
+    df: pl.DataFrame = lf.collect()
+    assert df.columns == ["column_1", "column_2", "column_3"]
+    assert df["column_1"].to_list() == ["brca1", "brca1"]
+    assert df["column_3"].to_list() == [0.5, 0.01]
+
+
 def test_crop_slices_contiguous_range() -> None:
     """Lines 435-442: ``crop`` resolves integer ``[start, stop]`` bounds to a slice."""
     lf: pl.LazyFrame = pl.LazyFrame({"c": [1, 2, 3, 4]})
