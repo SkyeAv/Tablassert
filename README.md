@@ -40,7 +40,8 @@ practice, and each build can emit the Resource Ingest Guide (RIG) metadata those
   `question` label for usage questions). Include the command you ran, its output, and your
   `tablassert --version`.
 - **Contributing code or docs:** see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the local quality
-  gates, and pull-request expectations.
+  gates, and pull-request expectations. By participating in this project you agree to follow the
+  [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Reference:** the [CLI Reference](https://skyeav.github.io/Tablassert/cli/) and
   [configuration guides](https://skyeav.github.io/Tablassert/configuration/graph/) document every
   flag and field.

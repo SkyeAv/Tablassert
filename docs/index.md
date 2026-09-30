@@ -19,7 +19,9 @@ submissions require.
 
 **Questions or bugs?** Open an issue at
 [github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues); see
-[CONTRIBUTING.md](https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md) to contribute.
+[CONTRIBUTING.md](https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md) to contribute and the
+[Code of Conduct](https://github.com/SkyeAv/Tablassert/blob/main/CODE_OF_CONDUCT.md) for community
+expectations.
 
 ## Documentation Sections
 
