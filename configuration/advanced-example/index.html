@@ -1356,19 +1356,19 @@ whole table or <code>method: column</code> to pull per-row notes from the source
 <ul>
 <li><strong>Excel column letters</strong>: <code>encoding: A</code>/<code>B</code>/<code>C</code> reference the first/second/third columns of the
   headerless source (organism names, Spearman rho, p-value).</li>
-<li><strong>Regex pipeline</strong>: the subject runs three substitutions in order: <code>.*g__</code> → <code>`
-  (</code>d__Bacteria;p__Firmicutes;g__Lactobacillus<code>→</code>Lactobacillus<code>), then</code>;s__<code>→</code> <code>(</code>Lactobacillus;s__rhamnosus<code>→</code>Lactobacillus rhamnosus<code>), then</code>sp<code>→</code>sp. `.</li>
+<li><strong>Regex pipeline</strong>: the subject runs three substitutions in order: <code>.*g__</code> -&gt; <code>`
+  (</code>d__Bacteria;p__Firmicutes;g__Lactobacillus<code>-&gt;</code>Lactobacillus<code>), then</code>;s__<code>-&gt;</code> <code>(</code>Lactobacillus;s__rhamnosus<code>-&gt;</code>Lactobacillus rhamnosus<code>), then</code>sp<code>-&gt;</code>sp. `.</li>
 <li><strong>Taxonomic filtering</strong>: <code>prioritize: [OrganismTaxon]</code> + <code>avoid: [Gene]</code> stop "Lactobacillus"
   resolving to a similarly-named gene.</li>
 <li><strong>Mixed annotations</strong>: <code>method: value</code> for constants (same every row), <code>method: column</code> for
   per-row values.</li>
 <li><strong>Subject-predicate-object</strong>: subject varies per row (column), predicate <code>correlated_with</code> is
-  fixed, object <code>CHEBI:41774</code> is fixed → <code>Lactobacillus rhamnosus --[correlated_with]--&gt; 13C-tamoxifen</code>.</li>
+  fixed, object <code>CHEBI:41774</code> is fixed -&gt; <code>Lactobacillus rhamnosus --[correlated_with]--&gt; 13C-tamoxifen</code>.</li>
 </ul>
 <details class="note">
 <summary>Regex dialect constraint</summary>
 <p>Each <code>pattern</code> is handed to Polars <code>str.replace_all()</code> (Rust <code>regex</code> crate). <strong>Backreferences
-(<code>\1</code>, <code>\2</code>, …) and lookarounds (<code>(?=...)</code>, <code>(?&lt;=...)</code>, <code>(?!...)</code>, <code>(?&lt;!...)</code>) are not allowed</strong>
+(<code>\1</code>, <code>\2</code>, ...) and lookarounds (<code>(?=...)</code>, <code>(?&lt;=...)</code>, <code>(?!...)</code>, <code>(?&lt;!...)</code>) are not allowed</strong>
 and fail validation; plain <code>(...)</code> and non-capturing <code>(?:...)</code> groups are supported. Express
 transformations as a chain of simple substitutions, or capture leftover context in a
 <code>miscellaneous_notes</code> annotation. See <a href="../table/#text-transformations">Text Transformations</a>.</p>
@@ -1446,7 +1446,7 @@ non-Biolink-slot name such as <code>assertion_method</code>, <code>multiple_test
 <hr />
 <h2 id="dual-column-mapping">Dual-Column Mapping<a class="headerlink" href="#dual-column-mapping" title="Permanent link">&para;</a></h2>
 <p>Both subject and object come from columns, so both nodes undergo entity resolution. <strong>Use case:</strong>
-correlation tables linking two biological entities per row (e.g., metabolite ↔ microbe).</p>
+correlation tables linking two biological entities per row (e.g., metabolite &lt;-&gt; microbe).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">template</span><span class="p">:</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">excel</span>
@@ -1470,7 +1470,7 @@ correlation tables linking two biological entities per row (e.g., metabolite ↔
 <a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">B</span><span class="w">  </span><span class="c1"># Column B: microbe names</span>
 <a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">OrganismTaxon</span><span class="p p-Indicator">]</span>
 <a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">      </span><span class="nt">regex</span><span class="p">:</span>
-<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="nv">_</span><span class="p p-Indicator">,</span><span class="nt"> replacement</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;</span><span class="nv"> </span><span class="s">&#39;</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># &quot;Lactobacillus_rhamnosus&quot; → &quot;Lactobacillus rhamnosus&quot;</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">pattern</span><span class="p">:</span><span class="w"> </span><span class="nv">_</span><span class="p p-Indicator">,</span><span class="nt"> replacement</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;</span><span class="nv"> </span><span class="s">&#39;</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># &quot;Lactobacillus_rhamnosus&quot; -&gt; &quot;Lactobacillus rhamnosus&quot;</span>
 <a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>
 <a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">  </span><span class="nt">provenance</span><span class="p">:</span>
 <a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">    </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PMC</span>
@@ -1482,7 +1482,7 @@ correlation tables linking two biological entities per row (e.g., metabolite ↔
 <a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">annotation</span><span class="p">:</span><span class="w"> </span><span class="nv">effect_type</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">value</span><span class="p p-Indicator">,</span><span class="nt"> encoding</span><span class="p">:</span><span class="w"> </span><span class="nv">correlation_coefficient</span><span class="p p-Indicator">}</span>
 </code></pre></div>
 <p>Each column-mapped node gets its own <code>prioritize</code> list to guide disambiguation. <code>remove</code> strips each
-listed pattern (replace with empty string); <code>regex</code> applies an ordered <code>pattern</code>→<code>replacement</code> list;
+listed pattern (replace with empty string); <code>regex</code> applies an ordered <code>pattern</code>-&gt;<code>replacement</code> list;
 both transform cell text in place before resolution, and neither drops rows.</p>
 <hr />
 <h2 id="template-sections-wide-table">Template + Sections (wide table)<a class="headerlink" href="#template-sections-wide-table" title="Permanent link">&para;</a></h2>

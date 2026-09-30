@@ -1751,17 +1751,17 @@
 </tr>
 <tr>
 <td><code>qc_similarity_threshold</code></td>
-<td>Float 0–1</td>
+<td>Float 0-1</td>
 <td>SapBERT cosine threshold used by QC</td>
 </tr>
 <tr>
 <td><code>qc_fuzzy_ratio_threshold</code></td>
-<td>Float 0–100</td>
+<td>Float 0-100</td>
 <td>RapidFuzz ratio threshold used by QC</td>
 </tr>
 <tr>
 <td><code>qc_fuzzy_partial_threshold</code></td>
-<td>Float 0–100</td>
+<td>Float 0-100</td>
 <td>RapidFuzz partial/token-set threshold used by QC</td>
 </tr>
 <tr>
@@ -1773,7 +1773,7 @@
 </table>
 <h2 id="stable-edge-ids">Stable edge ids<a class="headerlink" href="#stable-edge-ids" title="Permanent link">&para;</a></h2>
 <p>Every edge gets a deterministic <code>id</code>: a UUID v3 derived from the edge itself. By default it is
-derived from the <strong>whole record</strong>, which makes it maximally brittle — a corrected <code>p_value</code>, a new
+derived from the <strong>whole record</strong>, which makes it maximally brittle: a corrected <code>p_value</code>, a new
 <code>supporting_text</code> entry, a reordered source row, or a Biolink release that renames a slot all mint a
 brand-new id. Downstream Translator consumers then see a new edge where they should see the same
 edge with updated attributes.</p>
@@ -1784,20 +1784,20 @@ edge with updated attributes.</p>
 <h3 id="choosing-a-field-set">Choosing a field set<a class="headerlink" href="#choosing-a-field-set" title="Permanent link">&para;</a></h3>
 <p>Start from what identifies an assertion, and what each entry buys you:</p>
 <ul>
-<li><strong><code>subject</code> / <code>predicate</code> / <code>object</code></strong> — the assertion itself.</li>
-<li><strong><code>publications</code></strong> — the evidence it rests on.</li>
-<li><strong><code>has_supporting_studies</code></strong> — carries <code>has_study_results[].id</code> (<code>row:&lt;N&gt;</code>), the <strong>row
+<li><strong><code>subject</code> / <code>predicate</code> / <code>object</code></strong>: the assertion itself.</li>
+<li><strong><code>publications</code></strong>: the evidence it rests on.</li>
+<li><strong><code>has_supporting_studies</code></strong>: carries <code>has_study_results[].id</code> (<code>row:&lt;N&gt;</code>), the <strong>row
   discriminator</strong>. Include it whenever one table contributes several rows that share a subject,
   predicate, and object. It also carries the <code>study_*</code> metadata, but those come from per-section
   config and are far more stable than <code>p_value</code> or <code>effect_size</code>.</li>
 </ul>
-<p>Add qualifiers (<code>object_direction_qualifier</code>, <code>anatomical_context_qualifier</code>, …) when they
+<p>Add qualifiers (<code>object_direction_qualifier</code>, <code>anatomical_context_qualifier</code>, ...) when they
 <em>distinguish</em> assertions rather than merely describe them.</p>
 <p>Leave out anything that is an observation <em>about</em> the edge rather than the edge's identity:
 <code>p_value</code>, <code>effect_size</code>, <code>effect_type</code>, <code>original_subject</code> / <code>original_object</code>, <code>supporting_text</code>,
 <code>sources</code>, <code>category</code>, <code>knowledge_level</code>, <code>agent_type</code>.</p>
 <p><strong>Then build, and let the failure tell you what is missing.</strong> That list is a starting point, not an
-answer — whether it is a key depends on your data, and the only way to find out is to run it. On a
+answer: whether it is a key depends on your data, and the only way to find out is to run it. On a
 real 1.27M-edge graph the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
 predicate, object, publication and row were identical, differing only in the NLP level recorded in
 <code>supporting_text</code> because two raw strings had resolved onto the same CURIE. Adding
@@ -1817,11 +1817,11 @@ every row) and rebuilding:</p>
 <tbody>
 <tr>
 <td>no <code>uuid_fields</code> (whole-record hash)</td>
-<td>930,081 of 1,265,355 — <strong>73%</strong></td>
+<td>930,081 of 1,265,355 (<strong>73%</strong>)</td>
 </tr>
 <tr>
 <td><code>uuid_fields</code> declared</td>
-<td>0 of 1,265,355 — <strong>none</strong></td>
+<td>0 of 1,265,355 (<strong>none</strong>)</td>
 </tr>
 </tbody>
 </table>
@@ -1837,12 +1837,12 @@ to ship duplicate edge ids, so that is a build failure, not a silent collapse:</
 </code></pre></div>
 <p>The fix is whatever the message names: add the qualifier that separates them,
 <code>has_supporting_studies</code> for the source row, or the statistic that genuinely differs. Two rows with
-an identical subject, predicate, and object that differ only in <code>p_value</code> are exactly this case —
-and were previously producing two ids for what config claimed was one assertion.</p>
+an identical subject, predicate, and object that differ only in <code>p_value</code> are exactly this case,
+and were previously producing two ids for what the config claimed was one assertion.</p>
 <p>An exact duplicate is <em>not</em> a violation: identical edges collapse, as they always have.</p>
 <h3 id="merging-collisions-instead">Merging collisions instead<a class="headerlink" href="#merging-collisions-instead" title="Permanent link">&para;</a></h3>
 <p>Sometimes a collision is not a config mistake but the data working as intended: two rows with
-different raw mention spellings resolve to the same CURIE, so they derive one id — and the right
+different raw mention spellings resolve to the same CURIE, so they derive one id, and the right
 answer is one edge with the combined evidence, not a failed build. Opt in with:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">uuid_fields</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">subject</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">predicate</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">object</span><span class="p p-Indicator">]</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">uuid_on_collision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">merge</span>
@@ -1850,22 +1850,22 @@ answer is one edge with the combined evidence, not a failed build. Opt in with:<
 <p>Under <code>merge</code>, a divergent same-id record is folded into the first record that claimed the id:</p>
 <ul>
 <li><strong>list fields</strong> (<code>publications</code>, <code>sources</code>, <code>source_record_urls</code>, <code>supporting_text</code>, <code>category</code>,
-  <code>upstream_resource_ids</code>, <code>has_supporting_studies</code>, …) are unioned, deduplicated, and <strong>sorted</strong>,
+  <code>upstream_resource_ids</code>, <code>has_supporting_studies</code>, ...) are unioned, deduplicated, and <strong>sorted</strong>,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
-  <code>sources[]</code> dedup by content — key order alone never keeps two copies.</li>
+  <code>sources[]</code> dedup by content; key order alone never keeps two copies.</li>
 <li><strong>scalar fields</strong> keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.</li>
-<li>fields only the later record carries are copied over — first-wins arbitrates <em>conflicts</em>, not
+<li>fields only the later record carries are copied over: first-wins arbitrates <em>conflicts</em>, not
   additions.</li>
 <li><strong>one scalar is exempt from first-wins:</strong> when the merged record carries the build-internal
-  <code>supporting_case_ids</code> list — the case IDs behind a <code>number_of_cases</code> count — the merged count
+  <code>supporting_case_ids</code> list (the case IDs behind a <code>number_of_cases</code> count), the merged count
   becomes the length of the unioned list, so a case ID shared by both records counts once where
   first-wins would under-report and summing would double-count. The superseded divergence is not
   reported as a scalar conflict, and the carrier list is stripped from every edge before write in
   both modes, so it never ships in the final NDJSON.</li>
 </ul>
 <p><code>merge</code> requires <code>uuid_fields</code> (under the whole-record hash every field is an identity field, so
-two different records can never share an id — there would be nothing to merge) and is rejected
+two different records can never share an id; there would be nothing to merge) and is rejected
 without it as <code>uuid-merge-without-fields</code>.</p>
 <p>The trade-off is memory: merge mode buffers one full record per unique id and writes edges only at
 end-of-stream, where the default path streams and holds 24 bytes per edge. That is why it is
@@ -1874,8 +1874,8 @@ opt-in. The default <code>error</code> behavior is unchanged in every respect.</
 <p>Because a narrow field set no longer distinguishes graphs by accident, declaring <code>uuid_fields</code>
 moves the UUID namespace onto the graph's own <code>rig.source_info.infores_id</code>. Two graphs asserting
 the same triple from the same publication then still derive different ids, structurally.</p>
-<p>Set <code>uuid_domain</code> only when graphs must deliberately <strong>share</strong> an id space — a KG compiled in
-shards, or one renamed across versions that has to keep its published ids:</p>
+<p>Set <code>uuid_domain</code> only when graphs must deliberately <strong>share</strong> an id space: a KG compiled in
+shards, or one renamed across versions that has to keep its published ids.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">uuid_domain</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">infores:multiomicskg</span>
 </code></pre></div>
 <h3 id="migration">Migration<a class="headerlink" href="#migration" title="Permanent link">&para;</a></h3>

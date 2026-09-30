@@ -1436,13 +1436,13 @@ for the live surface.</p>
 <thead>
 <tr>
 <th>Command</th>
-<th>Use this to…</th>
+<th>Use this to...</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><a href="#agent"><code>agent</code></a></td>
-<td>Autonomously derive, build, audit, and improve KG configs from PMC articles</td>
+<td>Autonomously derive, build, audit, and improve KG configs from PMC articles (experimental)</td>
 </tr>
 <tr>
 <td><a href="#build-fullmap"><code>build-fullmap</code></a></td>
@@ -1454,11 +1454,11 @@ for the live surface.</p>
 </tr>
 <tr>
 <td><a href="#distill-export"><code>distill-export</code></a></td>
-<td>Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset</td>
+<td>Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset (experimental)</td>
 </tr>
 <tr>
 <td><a href="#distill-weigh"><code>distill-weigh</code></a></td>
-<td>Join distillation records to outcomes and prepare LoRA-SFT training rows</td>
+<td>Join distillation records to outcomes and prepare LoRA-SFT training rows (experimental)</td>
 </tr>
 <tr>
 <td><a href="#quick-map"><code>quick-map</code></a></td>
@@ -1503,8 +1503,14 @@ not named <code>--version</code>, because the app-level <code>--version</code> f
 </div>
 <hr />
 <h2 id="agent">agent<a class="headerlink" href="#agent" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Experimental</p>
+<p>The agent surface (<code>tablassert agent</code>, its flags, and the workspace layout it writes) is
+experimental: the API may change without notice or a deprecation cycle. The core pipeline
+(<code>build-kg</code>, <code>validate</code>, <code>validate-kgx</code>, <code>build-fullmap</code>, <code>quick-map</code>) is stable.</p>
+</div>
 <p>Use this to autonomously turn one or more PMC articles into audited, improved KG configs and graphs
-(fetch → derive config → build + audit → improve until coverage maps). Requires the <code>[agent]</code> extra
+(fetch -&gt; derive config -&gt; build + audit -&gt; improve until coverage maps). Requires the <code>[agent]</code> extra
 (<code>pip install "tablassert[agent]"</code>); <code>--optimize</code> additionally needs the <code>[optimize]</code> extra
 (<code>pip install "tablassert[optimize]"</code>, pulls <code>dspy</code>). Both are checked after flag validation and
 before any model is built or article fetched, so a missing extra is reported with its install
@@ -1702,13 +1708,19 @@ page lists the flags; see
 </div>
 <hr />
 <h2 id="distill-export">distill-export<a class="headerlink" href="#distill-export" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Experimental</p>
+<p>The distillation surface (<code>--distill</code> recording, <code>distill-export</code>, <code>distill-weigh</code>, and the
+record/outcome NDJSON schemas) is experimental: the API and file formats may change without
+notice or a deprecation cycle.</p>
+</div>
 <p>Use this to convert a distillation dataset recorded with
 <a href="#agent"><code>agent --distill</code></a> into an on-disk Hugging Face dataset (<code>save_to_disk</code>). Requires the
 <code>[distill]</code> extra (<code>pip install "tablassert[distill]"</code>, pulls <code>datasets</code>). The raw NDJSON already
-loads directly in Unsloth Studio and via <code>datasets.load_dataset("json", ...)</code> — this export is
+loads directly in Unsloth Studio and via <code>datasets.load_dataset("json", ...)</code>; this export is
 only needed for <code>datasets</code>-native workflows.</p>
 <p>Outcome files are skipped: export recognizes <code>outcomes.ndjson</code> by its <strong>content</strong> (a first line
-whose <code>record_type</code> is <code>outcome</code>), not its name, and loads only the record files — a directory
+whose <code>record_type</code> is <code>outcome</code>), not its name, and loads only the record files, so a directory
 holding nothing else exits 2 with a message that says so. A directory with no <code>*.ndjson</code> at all
 still fails with the original empty-directory error. Keep derived training output (e.g.
 <code>distill-weigh</code>'s <code>train.ndjson</code>) in a separate directory: export loads every record <code>*.ndjson</code>
@@ -1718,8 +1730,8 @@ corpus.</p>
 seen anywhere in the corpus, and re-emits every row with an explicit <code>null</code> for absent keys into
 one uniform temporary file (outside the input directory) that is what actually gets passed to
 <code>load_dataset</code>. <code>datasets</code> otherwise infers its schema from the <strong>first block of the first file
-only</strong> and dies with a <code>CastError</code> the moment a later file carries a column that block lacked —
-which an append-only corpus spanning schema versions (v1 rows without <code>run_id</code> next to v2 rows)
+only</strong> and dies with a <code>CastError</code> the moment a later file carries a column that block lacked, which an
+append-only corpus spanning schema versions (v1 rows without <code>run_id</code> next to v2 rows)
 would always trigger. Normalization makes the schema correct by construction, so a v1-only
 corpus still exports. A column whose type varies across rows (say <code>"2"</code> in one line and <code>2</code> in
 another) is <strong>rejected</strong> with exit 2 naming the column and the types: <code>datasets</code> would otherwise
@@ -1754,6 +1766,8 @@ silently JSON-encode that column into a string, corrupting the corpus without an
 </tbody>
 </table>
 <h2 id="distill-weigh">distill-weigh<a class="headerlink" href="#distill-weigh" title="Permanent link">&para;</a></h2>
+<p>Experimental, like <a href="#distill-export"><code>distill-export</code></a>: the record/outcome schemas and flags may
+change without notice.</p>
 <p>Join <code>agent --distill</code> records to their sibling outcomes, compute deterministic reward weights, and
 write one flat training row per input record for LoRA/QLoRA supervised fine-tuning. This is data
 selection, not RLHF: no reward model or online trainer is involved. Keep the output outside the
@@ -1813,7 +1827,7 @@ input directory because <code>distill-export</code> loads every <code>*.ndjson</
 <td>int</td>
 <td>No</td>
 <td><code>2</code></td>
-<td>Replication slope for <code>replication</code>, bounded to 0–3</td>
+<td>Replication slope for <code>replication</code>, bounded to 0-3</td>
 </tr>
 <tr>
 <td><code>--reward-config</code>, <code>-rc</code></td>
@@ -1862,7 +1876,7 @@ are counts on rows, not physical row duplication.</p>
 <hr />
 <h2 id="build-fullmap">build-fullmap<a class="headerlink" href="#build-fullmap" title="Permanent link">&para;</a></h2>
 <p>Use this to obtain the embedded <code>fullmap.redb</code> entity-resolution database. Every database this
-command installs is filtered by the built-in <strong>top-100 experimental-taxon allowlist</strong> — there is no
+command installs is filtered by the built-in <strong>top-100 experimental-taxon allowlist</strong>; there is no
 flag for it. By default it first tries to <strong>download a prebuilt database</strong> published for this
 Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL exports instead (download class
 + synonym files, then build a single redb).</p>
@@ -1923,14 +1937,14 @@ Tablassert version; <code>--force</code> skips that and builds from RENCI BABEL 
 <p>By default <code>build-fullmap</code> looks for a prebuilt <code>fullmap.tar.zst</code> at
 <code>https://stars.renci.org/var/babel_outputs/&lt;babel-version&gt;/fullmap/&lt;tablassert-version&gt;/</code> (the version
 directory is the <strong>installed Tablassert package version</strong>, never hardcoded), verifies it against the
-published <code>sha256sum.txt</code>, and extracts it beside <code>--output</code> in the Rust extension, streaming zstd →
+published <code>sha256sum.txt</code>, and extracts it beside <code>--output</code> in the Rust extension, streaming zstd -&gt;
 tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
 primary + shards against the force-build contract (exact <code>v6</code> schema, a recorded <code>build_id</code>, the exact
 shard set, per-shard <code>build_id</code> equality, and a <code>META.taxon_allowlist</code> identity matching the built-in
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
 download, extraction, or identity check fails), it falls back to a from-scratch BABEL build and logs a
-warning — an archive published without the current filter is never installed.</p>
-<p>The downloader is chosen automatically — there is no flag to pass: with the optional <code>[aria2]</code> extra
+warning: an archive published without the current filter is never installed.</p>
+<p>The downloader is chosen automatically; there is no flag to pass. With the optional <code>[aria2]</code> extra
 installed (<code>pip install "tablassert[aria2]"</code>; Linux/Windows wheels only), both the prebuilt archive
 and the BABEL files download through the bundled aria2c binary with resumable segmented downloads;
 without the extra, Tablassert's Python downloader is used. The extra ships no macOS wheels, so a
@@ -1941,18 +1955,18 @@ rather than being silently rescued by the Python downloader.</p>
 <p>A database already present at <code>--output</code> is reused only when it carries that same allowlist identity;
 an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
 Pass <code>--force</code> to rebuild unconditionally.</p>
-<p>A from-scratch build parallelizes automatically across all available CPU threads — on Linux the
+<p>A from-scratch build parallelizes automatically across all available CPU threads: on Linux the
 worker count is capped by available memory (~2 GB per thread, read from <code>/proc/meminfo</code>) to avoid
 OOMs. There is no flag to tune.</p>
 <p>See <a href="../fullmap/">Fullmap</a> for the data pipeline, output schema, and graph-config usage.</p>
 <hr />
 <h2 id="quick-map">quick-map<a class="headerlink" href="#quick-map" title="Permanent link">&para;</a></h2>
-<p>Use this to see what fullmap entity resolution will do with one or more terms — the rows a
+<p>Use this to see what fullmap entity resolution will do with one or more terms (the rows a
 <code>build-kg</code> run would emit for a cell holding that term under the filters shown. Each term runs
-through the exact build path (level-one/level-two normalization → probe-key extraction → redb
-fetch → filter, rank, dedup), one <code>rich</code> table per term in input order, with the term's normalized
+through the exact build path (level-one/level-two normalization -&gt; probe-key extraction -&gt; redb
+fetch -&gt; filter, rank, dedup), one <code>rich</code> table per term in input order, with the term's normalized
 probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
-never one per term. A term with no matches prints a <code>no matches</code> line and still exits 0 — a miss is
+never one per term. A term with no matches prints a <code>no matches</code> line and still exits 0: a miss is
 a finding, not a failure; only usage errors and an unreadable fullmap exit 2.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>tablassert<span class="w"> </span>quick-map<span class="w"> </span>TERMS...<span class="w"> </span>--fullmap<span class="w"> </span>./fullmap/data/fullmap.redb<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </code></pre></div>
@@ -2031,15 +2045,15 @@ section config whose resolution you are checking (see the
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">The <code>--prioritize</code> / <code>--avoid</code> vocabulary</p>
-<p>These flags accept the <strong>live Biolink entity category names</strong> — the same vocabulary the
-<code>prioritize</code> / <code>avoid</code> config keys accept — validated at run time rather than enumerated in
+<p>These flags accept the <strong>live Biolink entity category names</strong> (the same vocabulary the
+<code>prioritize</code> / <code>avoid</code> config keys accept), validated at run time rather than enumerated in
 <code>--help</code>, because the <code>Categories</code> enum is built dynamically from the installed biolink-model.
 An invalid value exits 2 naming the nearest valid names.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title"><code>-f</code> means <code>--fullmap</code> here</p>
 <p>On <code>build-kg</code>, <code>validate</code>, and <code>agent</code>, <code>-f</code> is <code>--configuration-file</code>; on <code>build-fullmap</code> it is
-<code>--force</code>. Aliases are per-command, and <code>quick-map</code> takes no config and has no force mode —
+<code>--force</code>. Aliases are per-command, and <code>quick-map</code> takes no config and has no force mode.
 <code>-f</code> is its one required input path.</p>
 </div>
 <hr />
@@ -2079,7 +2093,7 @@ YAML configuration file.</p>
 <td>Flag</td>
 <td>No</td>
 <td><code>False</code></td>
-<td>Audit resolved mappings (exact → fuzzy → abbreviation → SapBERT) so low-confidence edges are flagged; requires the <code>[qc]</code> extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty <code>id</code> and <code>name</code>, every edge has a non-empty <code>subject</code>, <code>predicate</code>, and <code>object</code>, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim <code>original_*</code> fields excepted from the whitespace check, since they are faithful source copies), and -- when any section declares a <code>category_override</code> -- no edge demoted to bare <code>biolink:Association</code> (a row escaped its pin and shipped without the class-specific slots <code>prune_to_class</code> nulled into <code>has_supporting_studies</code>; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation</td>
+<td>Audit resolved mappings (exact -&gt; fuzzy -&gt; abbreviation -&gt; SapBERT) so low-confidence edges are flagged; requires the <code>[qc]</code> extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty <code>id</code> and <code>name</code>, every edge has a non-empty <code>subject</code>, <code>predicate</code>, and <code>object</code>, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim <code>original_*</code> fields excepted from the whitespace check, since they are faithful source copies), and, when any section declares a <code>category_override</code>, no edge demoted to bare <code>biolink:Association</code> (a row escaped its pin and shipped without the class-specific slots <code>prune_to_class</code> nulled into <code>has_supporting_studies</code>; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation</td>
 </tr>
 <tr>
 <td><code>--log</code>, <code>-l</code></td>
@@ -2093,13 +2107,13 @@ YAML configuration file.</p>
 <td>Flag</td>
 <td>No</td>
 <td><code>False</code></td>
-<td>Fast output-shape preview: ≤5 random rows/section, cached to <code>.head.parquet</code>, never clobbers a full build</td>
+<td>Fast output-shape preview: &lt;=5 random rows/section, cached to <code>.head.parquet</code>, never clobbers a full build</td>
 </tr>
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
 </code></pre></div>
-<p>The parallel fullmap reads behind entity resolution are automatic: large lookup batches (≥ 1024
+<p>The parallel fullmap reads behind entity resolution are automatic: large lookup batches (&gt;= 1024
 terms) fan out across the record-shard files on all available CPU threads (redb readers share-lock,
 so they never contend), while smaller batches stay serial. There is no flag to tune, and results are
 identical at any worker count.</p>
@@ -2113,8 +2127,8 @@ incomplete RIG fails the build with <code>[rig-validation-failed]</code> and not
 <a href="../configuration/graph/">Graph Configuration</a>.</p>
 <details class="info">
 <summary>Build progress &amp; stages</summary>
-<p>The build runs six parallel stages (Loading Tables → Extracting Sections → Building TCode →
-Collecting Instructions → Building Subgraphs → Compiling Graph) plus a seventh, Studying Graph,
+<p>The build runs six parallel stages (Loading Tables -&gt; Extracting Sections -&gt; Building TCode -&gt;
+Collecting Instructions -&gt; Building Subgraphs -&gt; Compiling Graph) plus a seventh, Studying Graph,
 only when <code>--qc</code> is passed. They run under a three-row live progress block (stage header;
 section bar with count/elapsed/ETA; in-flight item detail). Each completed
 stage prints a green <code>✓ Stage N · NAME · elapsed</code> line above the live block. During Building
@@ -2256,7 +2270,7 @@ once a model release drops the requirement.</p>
 <li><strong><a href="../tutorial/">Tutorial</a></strong>: complete example walkthrough</li>
 <li><strong><a href="../configuration/graph/">Configuration Guide</a></strong>: YAML configuration reference</li>
 <li><strong><a href="../fullmap/">Fullmap</a></strong>: entity-resolution database build and schema</li>
-<li><strong><a href="../agent/">Agent</a></strong>: autonomous PMC → KG pipeline depth</li>
+<li><strong><a href="../agent/">Agent</a></strong>: autonomous PMC -&gt; KG pipeline depth</li>
 </ul>
 
 

@@ -542,6 +542,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#who-this-is-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who this is for
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#documentation-sections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1139,6 +1150,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#who-this-is-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who this is for
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#documentation-sections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1197,6 +1219,17 @@ graphs, declaratively, with entity resolution built in and optional quality cont
 <p><strong>Installing?</strong> See <a href="installation/">Installation</a>. <strong>First build?</strong> Follow the
 <a href="tutorial/">Tutorial</a>. <strong>Automating?</strong> Use the <a href="cli/">CLI</a> or the autonomous
 <a href="agent/">Agent</a>.</p>
+<h2 id="who-this-is-for">Who this is for<a class="headerlink" href="#who-this-is-for" title="Permanent link">&para;</a></h2>
+<p>Translator ingest authors and knowledge-graph data engineers holding tabular biomedical sources:
+association tables, assay results, curated gene-disease lists. Tablassert turns those rows into
+KGX nodes and edges from a declarative YAML mapping, resolving free text to standard CURIEs through
+an embedded database built from RENCI BABEL exports, so a build needs no hosted resolution service
+and no per-source Python transform. It also emits the Resource Ingest Guide (RIG) metadata that
+<a href="https://github.com/NCATSTranslator/translator-ingests"><code>NCATSTranslator/translator-ingests</code></a>
+submissions require.</p>
+<p><strong>Questions or bugs?</strong> Open an issue at
+<a href="https://github.com/SkyeAv/Tablassert/issues">github.com/SkyeAv/Tablassert/issues</a>; see
+<a href="https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> to contribute.</p>
 <h2 id="documentation-sections">Documentation Sections<a class="headerlink" href="#documentation-sections" title="Permanent link">&para;</a></h2>
 <p><strong>Start</strong></p>
 <ul>
@@ -1209,7 +1242,8 @@ graphs, declaratively, with entity resolution built in and optional quality cont
 <li><strong><a href="cli/">CLI Reference</a></strong>: every command and flag: <code>build-kg</code>, <code>build-fullmap</code>, <code>validate</code>,
   <code>validate-kgx</code>, <code>quick-map</code>, <code>agent</code>, <code>distill-export</code>, <code>distill-weigh</code></li>
 <li><strong><a href="fullmap/">Fullmap</a></strong>: obtain and build the entity-resolution database</li>
-<li><strong><a href="agent/">Agent</a></strong>: run the autonomous PMC-to-graph pipeline, with checkpoints and tooling</li>
+<li><strong><a href="agent/">Agent</a></strong>: run the autonomous PMC-to-graph pipeline, with checkpoints and tooling
+  (experimental: API may change)</li>
 </ul>
 <p><strong>Reference</strong></p>
 <ul>

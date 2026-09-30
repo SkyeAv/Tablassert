@@ -1411,7 +1411,7 @@ with a regex pipeline on the way.</p>
 </code></pre></div>
 <p><strong>Key techniques:</strong></p>
 <ul>
-<li><strong>Regex pipeline</strong> cleans raw taxonomic strings (<code>d__Bacteria;p__Firmicutes;g__Lactobacillus</code> → <code>Lactobacillus</code>). Patterns must be Polars <code>str.replace_all()</code>-compatible (Rust <code>regex</code> engine): no backreferences (<code>\1</code>, <code>\2</code>, …) or lookarounds (<code>(?=...)</code>, <code>(?&lt;=...)</code>, <code>(?!...)</code>, <code>(?&lt;!...)</code>); plain and non-capturing groups are supported, so chain several simple substitutions when needed.</li>
+<li><strong>Regex pipeline</strong> cleans raw taxonomic strings (<code>d__Bacteria;p__Firmicutes;g__Lactobacillus</code> -&gt; <code>Lactobacillus</code>). Patterns must be Polars <code>str.replace_all()</code>-compatible (Rust <code>regex</code> engine): no backreferences (<code>\1</code>, <code>\2</code>, ...) or lookarounds (<code>(?=...)</code>, <code>(?&lt;=...)</code>, <code>(?!...)</code>, <code>(?&lt;!...)</code>); plain and non-capturing groups are supported, so chain several simple substitutions when needed.</li>
 <li><strong>Avoid list</strong> (<code>avoid: [Gene]</code>) prevents organism names resolving to gene entities; <strong>fixed-value object</strong> (<code>method: value</code>) assigns the same metabolite CURIE to all rows.</li>
 </ul>
 <hr />

@@ -1603,7 +1603,7 @@
 <p><strong>Deterministic pass for abbreviation/expansion pairs (Schwartz-Hearst).</strong> A row passes when the pre-resolution text abbreviates the preferred name, or vice versa:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">_is_abbrev</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_is_abbrev</span><span class="p">(</span><span class="n">preferred_name</span><span class="p">,</span> <span class="n">original</span><span class="p">)</span>
 </code></pre></div>
-<p>The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss: <code>AML</code> ↔ <code>acute myeloid leukemia</code>.</p>
+<p>The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss: <code>AML</code> &lt;-&gt; <code>acute myeloid leukemia</code>.</p>
 <p><strong>Performance:</strong> O(n) character scans per row, no model inference.</p>
 <h4 id="stage-4-sapbert-semantic-similarity">Stage 4: SapBERT Semantic Similarity<a class="headerlink" href="#stage-4-sapbert-semantic-similarity" title="Permanent link">&para;</a></h4>
 <p><strong>High confidence using SapBERT embeddings.</strong></p>
@@ -1650,10 +1650,10 @@
 <h3 id="pipeline-flow">Pipeline Flow<a class="headerlink" href="#pipeline-flow" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Input: 1000 rows with entity mappings
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Stage 1 (Exact): 700 pass → 300 pending
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Stage 2 (Fuzzy): 250 pass → 50 pending
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Stage 3 (Abbreviation): 10 pass → 40 pending
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>Stage 4 (SapBERT): 30 pass → 10 rejected
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Stage 1 (Exact): 700 pass -&gt; 300 pending
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Stage 2 (Fuzzy): 250 pass -&gt; 50 pending
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Stage 3 (Abbreviation): 10 pass -&gt; 40 pending
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>Stage 4 (SapBERT): 30 pass -&gt; 10 rejected
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>Output: 990 rows (700 + 250 + 10 + 30)
 </code></pre></div>
@@ -1684,7 +1684,7 @@
 <td>3</td>
 <td>Abbreviation expansion</td>
 <td>High</td>
-<td>Abbreviation ↔ full-name pairs</td>
+<td>Abbreviation &lt;-&gt; full-name pairs</td>
 </tr>
 <tr>
 <td>4</td>

@@ -1621,21 +1621,21 @@ a slot all mint a brand-new id, and downstream consumers see a new edge rather t
 </ul>
 <h3 id="namespace">Namespace<a class="headerlink" href="#namespace" title="Permanent link">&para;</a></h3>
 <p>The domain defaults to <code>"TABLASSERT"</code>. When <code>uuid_fields</code> is declared it becomes the graph's
-<code>rig.source_info.infores_id</code>, so two graphs asserting the same triple can never mint the same id —
+<code>rig.source_info.infores_id</code>, so two graphs asserting the same triple can never mint the same id:
 the uniqueness that full-record hashing provided by accident becomes structural. <code>uuid_domain</code>
 overrides it for graphs that must deliberately share an id space.</p>
 <h3 id="uniqueness">Uniqueness<a class="headerlink" href="#uniqueness" title="Permanent link">&para;</a></h3>
 <p>Edges deduplicate on their derived id, so an output file can never carry the same id twice. An
 exact repeat collapses; two genuinely different edges deriving one id abort the build with
 <code>uuid-fields-not-a-key</code>, naming the fields that would disambiguate them.</p>
-<p>A graph that <em>expects</em> such collisions — e.g. one whose <code>uuid_fields</code> are the resolved statement,
-so two rows with different raw mention spellings resolve to the same CURIE — can instead set
+<p>A graph that <em>expects</em> such collisions (e.g. one whose <code>uuid_fields</code> are the resolved statement,
+so two rows with different raw mention spellings resolve to the same CURIE) can instead set
 <code>uuid_on_collision: merge</code> (requires <code>uuid_fields</code>). Divergent same-id records are then folded
 into one edge: list fields are unioned, deduplicated by content, and sorted (so the merged edge is
 identical regardless of row order), conflicting scalars keep the first record's value, and a
 build-log summary reports how many records merged and how many scalar conflicts were arbitrated.
-Merge mode buffers one full record per unique id until end-of-stream — the memory cost the default
-streaming path avoids — which is why it is opt-in. See
+Merge mode buffers one full record per unique id until end-of-stream (the memory cost the default
+streaming path avoids), which is why it is opt-in. See
 <a href="../../configuration/graph/#merging-collisions-instead">Merging collisions instead</a>.</p>
 <h3 id="kgx-compliance">KGX Compliance<a class="headerlink" href="#kgx-compliance" title="Permanent link">&para;</a></h3>
 <p>NCATS Translator KGX requires edge IDs to be globally unique and, where possible, deterministic.

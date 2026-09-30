@@ -1706,7 +1706,7 @@ dropped as well.</p>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">db</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/path/to/fullmap/data/fullmap.redb&quot;</span><span class="p">)</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">LazyFrame</span><span class="p">({</span><span class="s2">&quot;gene&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;TP53&quot;</span><span class="p">,</span> <span class="s2">&quot;BRCA1&quot;</span><span class="p">,</span> <span class="s2">&quot;EGFR&quot;</span><span class="p">,</span> <span class="s2">&quot;KRAS&quot;</span><span class="p">]})</span>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_one</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># canonical tokenize, stem, deduplicate, and sort</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_two</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># remove non-word chars → &quot;gene_two&quot; column</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_two</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene&quot;</span><span class="p">)</span>   <span class="c1"># remove non-word chars -&gt; &quot;gene_two&quot; column</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">result</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span><span class="n">lf</span><span class="o">=</span><span class="n">lf</span><span class="p">,</span> <span class="n">col</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span> <span class="n">taxon</span><span class="o">=</span><span class="s2">&quot;9606&quot;</span><span class="p">,</span>
 <a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>                 <span class="n">prioritize</span><span class="o">=</span><span class="p">[</span><span class="n">Categories</span><span class="o">.</span><span class="n">GENE</span><span class="p">],</span> <span class="n">log</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
@@ -1722,7 +1722,7 @@ dropped as well.</p>
 - Is queried first; preferred-name ranking compares these normalized forms, so a fullmap database built with different level-one keys cannot be reused.</p>
 <p>Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.</p>
 <p><strong><code>level_two</code> output</strong> (column: <code>col + "_two"</code>):
-- All non-word characters removed (<code>\W+</code> → <code>""</code>) from the <code>level_one</code> result
+- All non-word characters removed (<code>\W+</code> -&gt; <code>""</code>) from the <code>level_one</code> result
 - Used as fallback when <code>level_one</code> produces no match
 - Preferred for disease names and free text</p>
 <p>Rows without a valid CURIE are filtered from the returned frame.</p>
@@ -1734,7 +1734,7 @@ dropped as well.</p>
 <h2 id="quick_map">quick_map()<a class="headerlink" href="#quick_map" title="Permanent link">&para;</a></h2>
 <p>Single-shot inspection core behind the <code>tablassert quick-map</code> CLI command: resolve raw terms
 against a fullmap exactly as a build would, one result frame per input term. It runs the same op
-chain a build runs per node column (normalization → probe keys → one batched redb fetch →
+chain a build runs per node column (normalization -&gt; probe keys -&gt; one batched redb fetch -&gt;
 filter/rank/dedup), so the returned rows are the rows <code>build-kg</code> would emit for a cell holding
 that term under a <code>NodeEncoding</code> with the same settings. The whole input is ONE batched lookup,
 never a round trip per term.</p>
