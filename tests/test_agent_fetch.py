@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from tablassert.agent import (
@@ -151,6 +152,7 @@ def test_version_prefixes_from_listing_bad(listing: str) -> None:
         ("a.xlsx", None, True),
         ("a.csv", None, True),
         ("a.tsv", None, True),
+        ("a.parquet", None, True),
         ("fig.jpg", "Table 1", False),  # DROP extension wins over a "Table" label
         ("data.bin", "Table S2", True),  # label-only match for an unknown extension
         ("data.bin", None, False),
@@ -276,6 +278,18 @@ def test_effective_rows_cache_invalidates_when_file_changes(tmp_path: Path) -> N
 
     table.write_text("value\n1\n2\n")
     assert _effective_rows(table) == 2
+
+
+def test_effective_rows_counts_parquet_excluding_all_null_rows(tmp_path: Path) -> None:
+    """A ``.parquet`` table counts data rows minus rows null in every column.
+
+    The agent shows candidates with a row threshold, so a parquet payload must count the same
+    way the Excel branch does (formatted blank rows are not data). A row that is null in every
+    column is skipped; partial-null rows still count.
+    """
+    pp: Path = tmp_path / "counts.parquet"
+    pl.DataFrame({"a": ["x", None, "y", "z"], "b": ["1", None, "2", None]}).write_parquet(pp)
+    assert _effective_rows(pp) == 3
 
 
 def test_excel_sheet_heights_ignores_blank_rows(tmp_path: Path) -> None:
