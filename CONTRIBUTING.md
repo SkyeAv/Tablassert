@@ -182,6 +182,8 @@ If your OS hard limit is lower, raise the system/user NOFILE limit first, then o
   `src/tablassert/cli.py` are the authority; file an issue for the drift.
 - **Security problems:** do not open a public issue. Email the maintainers listed in
   [`CITATION.cff`](CITATION.cff) so the report stays private until a fix ships.
+- **Conduct:** all contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md);
+  violations go to the enforcement contacts named there.
 
 ## License
 
