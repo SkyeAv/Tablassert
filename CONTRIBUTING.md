@@ -169,9 +169,19 @@ If your OS hard limit is lower, raise the system/user NOFILE limit first, then o
 - Run `make check` and include the result in the PR description.
 - PRs are squash-merged to `main`; write commits and PR titles so the squashed history stays clear.
 
-## Reporting issues
+## Getting help
 
-Open bug reports and feature requests at [github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues). Include reproduction steps, the command you ran, and relevant environment details.
+- **Usage questions:** open an issue with the `question` label at
+  [github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues).
+- **Bugs and feature requests:** use the bug-report or feature-request template in the same tracker,
+  with reproduction steps, the command you ran, its full output, `tablassert --version`, and your OS
+  and Python version.
+- **Documentation drift:** the published site at
+  [skyeav.github.io/Tablassert](https://skyeav.github.io/Tablassert/) is the reference for the CLI,
+  configuration schema, and API. When prose and source disagree, `src/tablassert/models.py` and
+  `src/tablassert/cli.py` are the authority; file an issue for the drift.
+- **Security problems:** do not open a public issue. Email the maintainers listed in
+  [`CITATION.cff`](CITATION.cff) so the report stays private until a fix ships.
 
 ## License
 

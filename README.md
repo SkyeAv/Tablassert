@@ -16,6 +16,35 @@ KGX-compliant nodes and edges.
 **[Full Documentation](https://skyeav.github.io/Tablassert/)**: installation guides, tutorial,
 configuration reference, and API docs.
 
+## Statement of need
+
+Biomedical knowledge lives in spreadsheets: association tables, assay results, curated gene-disease
+lists. Getting those rows into an NCATS Translator knowledge graph means writing an ingest that maps
+columns to Biolink statements, resolves free text ("TP53", "lung cancer") to standard CURIEs, and
+records provenance, terms of use, and statistical annotations. Today that ingest is Python code
+maintained per source, and entity resolution usually means calling a hosted name-resolution service
+at build time.
+
+Tablassert replaces the per-source code with a declarative YAML mapping plus an embedded, offline
+entity-resolution database built from RENCI BABEL exports, so a build is reproducible, auditable,
+and network-free. It is aimed at Translator ingest authors and knowledge-graph data engineers who
+hold tabular biomedical sources, and at bioinformatics groups that want a validated KGX output
+without writing a transform pipeline. The configuration model and the Biolink/KGX contracts it
+emits follow current [`NCATSTranslator/translator-ingests`](https://github.com/NCATSTranslator/translator-ingests)
+practice, and each build can emit the Resource Ingest Guide (RIG) metadata those submissions require.
+
+## Getting help
+
+- **Questions and bug reports:** open an issue at
+  [github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues) (use the
+  `question` label for usage questions). Include the command you ran, its output, and your
+  `tablassert --version`.
+- **Contributing code or docs:** see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the local quality
+  gates, and pull-request expectations.
+- **Reference:** the [CLI Reference](https://skyeav.github.io/Tablassert/cli/) and
+  [configuration guides](https://skyeav.github.io/Tablassert/configuration/graph/) document every
+  flag and field.
+
 ## Quick Start
 
 ```bash

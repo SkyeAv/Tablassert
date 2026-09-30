@@ -7,6 +7,20 @@ graphs, declaratively, with entity resolution built in and optional quality cont
 [Tutorial](tutorial.md). **Automating?** Use the [CLI](cli.md) or the autonomous
 [Agent](agent.md).
 
+## Who this is for
+
+Translator ingest authors and knowledge-graph data engineers holding tabular biomedical sources:
+association tables, assay results, curated gene-disease lists. Tablassert turns those rows into
+KGX nodes and edges from a declarative YAML mapping, resolving free text to standard CURIEs through
+an embedded database built from RENCI BABEL exports, so a build needs no hosted resolution service
+and no per-source Python transform. It also emits the Resource Ingest Guide (RIG) metadata that
+[`NCATSTranslator/translator-ingests`](https://github.com/NCATSTranslator/translator-ingests)
+submissions require.
+
+**Questions or bugs?** Open an issue at
+[github.com/SkyeAv/Tablassert/issues](https://github.com/SkyeAv/Tablassert/issues); see
+[CONTRIBUTING.md](https://github.com/SkyeAv/Tablassert/blob/main/CONTRIBUTING.md) to contribute.
+
 ## Documentation Sections
 
 **Start**
