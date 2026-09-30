@@ -8,12 +8,22 @@ configurations, running Tablassert, and examining the output.
 The input files ship under `docs/examples/` and are validated against the live schema by the test suite;
 the configurations below reproduce them exactly.
 
-**Time:** 5-10 minutes
+**Time:** 5-10 minutes once the fullmap database is present. Obtaining it is a separate, larger
+step: `tablassert build-fullmap` downloads a multi-GB prebuilt archive when one is published for
+your Tablassert version, and otherwise downloads RENCI BABEL exports and builds the database from
+scratch (see [Fullmap](fullmap.md) for sizes, disk requirements, and build tunables).
 
 ## Prerequisites
 
-- Tablassert installed (see [Installation](installation.md))
-- Required database: fullmap
+- Tablassert installed with the `[cli]` extra (see [Installation](installation.md))
+- The fullmap entity-resolution database. Build or download it once:
+
+  ```bash
+  tablassert build-fullmap --output ./fullmap/data/fullmap.redb
+  ```
+
+  Then point the graph config's `fullmap:` field at `./fullmap` in Step 3. See
+  [Fullmap](fullmap.md) for what the build produces and how the path is resolved.
 - Basic familiarity with YAML
 
 ## The Data
@@ -118,8 +128,10 @@ rig:
   artifact_base_path: ./tutorial-output
 ```
 
-**Important:** Replace `fullmap` with the path to your fullmap redb (and adjust `tables` if your table
-config lives elsewhere). The `rig:` section is required; see the
+**Important:** Replace `fullmap` with the path to your fullmap redb file or its base directory (the
+`tablassert build-fullmap --output ./fullmap/data/fullmap.redb` invocation in
+[Prerequisites](#prerequisites) makes `./fullmap` correct), and adjust `tables` if your table
+config lives elsewhere. The `rig:` section is required; see the
 [Graph configuration reference](configuration/graph.md) for every field.
 
 **What this does:**

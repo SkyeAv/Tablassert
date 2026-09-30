@@ -73,14 +73,17 @@ template:
 ```
 
 Wrap it in a graph config (`graph.yaml`) pointing at your fullmap entity-resolution database
-and carrying the required `rig:` metadata for the generated Resource Ingest Guide:
+and carrying the required `rig:` metadata for the generated Resource Ingest Guide. Build or
+download that database once first (`tablassert build-fullmap`, a multi-GB download; see the
+[Fullmap guide](https://skyeav.github.io/Tablassert/fullmap/)), which makes `./fullmap` below the
+right path:
 
 ```yaml
 name: MY_KG
 version: 1.0.0
 tables:
   - ./table.yaml
-fullmap: /path/to/fullmap
+fullmap: ./fullmap
 rig:
   source_info:
     infores_id: infores:my-kg
