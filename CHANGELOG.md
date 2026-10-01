@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## 19.5.1 - 2026-10-01
+
+### Changed
+- **`biolink-model` is bumped to 4.4.5 and the class-field grants it absorbed are dropped.** The 4.4.5 mixin consolidation attached the disease/phenotype qualifier stack to the pinned `EntityToDiseaseAssociation`/`EntityToPhenotypicFeatureAssociation` classes, renamed `FDA_regulatory_approvals` to the canonical `regulatory_approvals` on them, and added `sex_qualifier` to the phenotypic-feature side, so the `CLASS_FIELD_OVERRIDES` grants for `anatomical_context_qualifier`, `disease_context_qualifier`, `frequency_qualifier`, and `regulatory_approvals` (both classes) plus `sex_qualifier` on `EntityToPhenotypicFeatureAssociation` are absorbed and removed; the remaining deliberate grants are `population_context_qualifier` and `temporal_context_qualifier` on both classes plus `sex_qualifier` on `EntityToDiseaseAssociation`, and the effective field set is unchanged because biolink-model now provides the rest upstream. The Rust mapping layer also passes `validation_ctx` by value in `extract_validate_rename`, satisfying the `needless_borrows_for_generic_args` lint that Rust 1.99.0 enables by default. ([#209](https://github.com/SkyeAv/Tablassert/pull/209))
+- **Documentation now orients external readers.** README and `docs/index.md` state the problem, the audience, and the `NCATSTranslator/translator-ingests` context; a Getting help pathway runs through README, `CONTRIBUTING.md`, and `docs/index.md`; the agent/optimize/distill surfaces are labeled experimental with the stable core pipeline (`build-kg`, `validate`, `validate-kgx`, `build-fullmap`, `quick-map`) named as unaffected; the tutorial carries runnable `build-fullmap` prerequisites; `docs/installation.md` collapses four install methods into three; and live docs prose is normalized to plain ASCII. ([#205](https://github.com/SkyeAv/Tablassert/pull/205))
+- **A Contributor Covenant code of conduct ships.** `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) names the `CITATION.cff` maintainer emails as enforcement contacts and is linked from the README, `CONTRIBUTING.md`, and `docs/index.md` support sections. ([#206](https://github.com/SkyeAv/Tablassert/pull/206))
+- **`CITATION.cff` carries verified ORCIDs and a factual abstract.** ORCID fields for all three authors are verified against the ORCID public registry with matching Institute for Systems Biology affiliations, and the abstract replaces the unverifiable "highly performant" claim with the mechanism it abbreviates: a Rust mapping extension with parallel, memory-capped builds. ([#207](https://github.com/SkyeAv/Tablassert/pull/207))
+
 ## 19.5.0 - 2026-09-30
 
 ### Added
