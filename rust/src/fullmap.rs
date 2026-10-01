@@ -2950,11 +2950,11 @@ fn extract_validate_rename(
             archive.display()
         ))
     };
-    let database = open_read_only(&primary).map_err(&validation_ctx)?;
-    validate_schema(&database).map_err(&validation_ctx)?;
-    let build_id = read_build_id(&database).map_err(&validation_ctx)?;
-    let shard_count = shard_count_of(&database).map_err(&validation_ctx)?;
-    let recorded_allowlist = read_taxon_allowlist_identity(&database).map_err(&validation_ctx)?;
+    let database = open_read_only(&primary).map_err(validation_ctx)?;
+    validate_schema(&database).map_err(validation_ctx)?;
+    let build_id = read_build_id(&database).map_err(validation_ctx)?;
+    let shard_count = shard_count_of(&database).map_err(validation_ctx)?;
+    let recorded_allowlist = read_taxon_allowlist_identity(&database).map_err(validation_ctx)?;
     drop(database);
 
     // A published archive built WITHOUT the required filter is not the database
