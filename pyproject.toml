@@ -47,7 +47,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "biolink-model>=4.4.4",
+    "biolink-model>=4.4.5",
     "polars>=2.0.0rc2",
     "pyarrow>=21.0.0",
     "rapidfuzz>=3.14.3",

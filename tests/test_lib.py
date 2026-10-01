@@ -1993,15 +1993,17 @@ def test_prune_to_class_keeps_override_only_slots() -> None:
 def test_prune_to_class_keeps_class_field_override_grants() -> None:
     """Slots granted to a class by CLASS_FIELD_OVERRIDES survive prune_to_class.
 
-    ``disease_context_qualifier`` is declared only on the
-    ``ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`` lineage, but the policy
-    grant keeps it on ``EntityToDiseaseAssociation`` /
-    ``EntityToPhenotypicFeatureAssociation`` rows so a pinned edge can carry it
-    alongside ``regulatory_approvals`` -- and the same holds for DAKP's sparse
-    qualifier stack (``anatomical_context_qualifier``, ``sex_qualifier``,
-    ``population_context_qualifier``, ``frequency_qualifier``,
-    ``temporal_context_qualifier``), none of which the pinned classes declare.
-    Classes without the grant still prune them.
+    DAKP's sparse qualifier stack rides the pinned ``EntityToDiseaseAssociation`` /
+    ``EntityToPhenotypicFeatureAssociation`` rows through ``prune_to_class`` via the
+    grants: ``population_context_qualifier`` / ``temporal_context_qualifier`` (both
+    classes) and ``sex_qualifier`` (disease side only) are kept even though the
+    installed model does not declare them there. ``regulatory_approvals`` needs no
+    grant anymore -- biolink-model 4.4.5 attached it natively to the two pinned
+    classes -- but the ungranted control class still prunes it, alongside the
+    still-granted qualifiers. The qualifiers the 4.4.5 mixin consolidation attached
+    to the whole disease/phenotype family (``disease_context_qualifier``,
+    ``anatomical_context_qualifier``, ``frequency_qualifier``) survive on every row
+    including the control.
     """
     from tablassert.lib import PRUNED_COLUMN, prune_to_class
 
@@ -2022,20 +2024,15 @@ def test_prune_to_class_keeps_class_field_override_grants() -> None:
         }
     )
     out: pl.DataFrame = prune_to_class(lf).collect()
-    assert out["disease_context_qualifier"].to_list() == ["MONDO:0005148", None, "MONDO:0005015"]
-    assert out["regulatory_approvals"].to_list() == ["FDA:1", None, "FDA:3"]
-    for col in ("anatomical_context_qualifier", "sex_qualifier", "population_context_qualifier", "frequency_qualifier", "temporal_context_qualifier"):
+    assert out["disease_context_qualifier"].to_list() == ["MONDO:0005148", "MONDO:0005148", "MONDO:0005015"]
+    # Native multivalued slots wrap kept values; granted fields are passed through verbatim.
+    assert out["anatomical_context_qualifier"].to_list() == [["UBERON:0001557"]] * 3
+    assert out["frequency_qualifier"].to_list() == ["HP:0012823"] * 3
+    assert out["regulatory_approvals"].to_list() == [["FDA:1"], None, ["FDA:3"]]
+    for col in ("sex_qualifier", "population_context_qualifier", "temporal_context_qualifier"):
         assert out[col].to_list() == [out[col].to_list()[0], None, out[col].to_list()[2]], col
     pruned_second: list[str] = out[PRUNED_COLUMN].to_list()[1]
-    for col in (
-        "disease_context_qualifier",
-        "regulatory_approvals",
-        "anatomical_context_qualifier",
-        "sex_qualifier",
-        "population_context_qualifier",
-        "frequency_qualifier",
-        "temporal_context_qualifier",
-    ):
+    for col in ("regulatory_approvals", "sex_qualifier", "population_context_qualifier", "temporal_context_qualifier"):
         assert any(entry.startswith(f"{col}=") for entry in pruned_second), col
     assert out[PRUNED_COLUMN].to_list()[0] == []
     assert out[PRUNED_COLUMN].to_list()[2] == []

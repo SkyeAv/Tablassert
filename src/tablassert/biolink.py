@@ -591,28 +591,8 @@ release from making ``species_context_qualifier`` silently emittable again.
 
 
 CLASS_FIELD_OVERRIDES: dict[str, frozenset[str]] = {
-    "EntityToDiseaseAssociation": frozenset(
-        {
-            "anatomical_context_qualifier",
-            "disease_context_qualifier",
-            "frequency_qualifier",
-            "population_context_qualifier",
-            "regulatory_approvals",
-            "sex_qualifier",
-            "temporal_context_qualifier",
-        }
-    ),
-    "EntityToPhenotypicFeatureAssociation": frozenset(
-        {
-            "anatomical_context_qualifier",
-            "disease_context_qualifier",
-            "frequency_qualifier",
-            "population_context_qualifier",
-            "regulatory_approvals",
-            "sex_qualifier",
-            "temporal_context_qualifier",
-        }
-    ),
+    "EntityToDiseaseAssociation": frozenset({"population_context_qualifier", "sex_qualifier", "temporal_context_qualifier"}),
+    "EntityToPhenotypicFeatureAssociation": frozenset({"population_context_qualifier", "temporal_context_qualifier"}),
 }
 """Per-class grants of edge fields the resolved association class does not declare.
 
@@ -620,22 +600,21 @@ Keys are bare association class names (``association_class(cat).__name__``), val
 the slots ``lib.prune_to_class`` keeps on rows resolved to that class even though the
 installed model attaches them elsewhere.
 
-The motivating case is a DAKP contraindication edge: ``regulatory_approvals`` is a
-canonical slot not yet attached by the installed model, while
-``disease_context_qualifier`` is declared only on the
-``ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`` lineage -- so one edge can
-natively carry both only through these explicit class-scoped grants. The same gap
-covers DAKP's sparse qualifier stack (``anatomical_context_qualifier``,
-``sex_qualifier``, ``population_context_qualifier``, ``frequency_qualifier``,
-``temporal_context_qualifier``): each is a satisfiable Biolink qualifier slot that no
-pinned class declares, so without a grant ``prune_to_class`` would null it off the
-edge. Deliberately excluded: ``species_context_qualifier`` (in
-``DISABLED_EDGE_FIELDS`` -- never emittable), ``temporal_interval_qualifier`` and
-``severity_qualifier`` (in ``UNSATISFIABLE_EDGE_FIELDS`` -- attached to no class, so
-a grant could never validate). Tablassert
-deliberately emits the granted fields on the pinned classes ahead of the pinned model
+The motivating case is a DAKP contraindication edge carrying the sparse qualifier
+stack ahead of the pinned model: ``population_context_qualifier`` and
+``temporal_context_qualifier`` are satisfiable qualifier slots the pinned classes do
+not declare, and ``sex_qualifier`` is declared only on the phenotypic-feature side of
+the family -- so without a grant ``prune_to_class`` would null them off the edge.
+Upstream Biolink has absorbed most of the original stack (the biolink-model 4.4.5
+mixin consolidation attached ``disease_context_qualifier``,
+``anatomical_context_qualifier``, and ``frequency_qualifier`` to the whole
+disease/phenotype family, renamed ``FDA_regulatory_approvals`` to the canonical
+``regulatory_approvals`` on the pinned classes, and added ``sex_qualifier`` to
+``EntityToPhenotypicFeatureAssociation``); the tripwire removed those grants the day
+the release landed, and the remaining ones stay deliberately ahead of the model
 (pending an upstream Biolink widening). ``_validation_record`` strips granted fields
-before record validation so the deliberate gap is not reported as ``extra_forbidden``.
+before record validation so the deliberate gap is not reported as
+``extra_forbidden``.
 
 A tripwire test asserts every granted field is still absent from its class: the moment
 a biolink-model release attaches the slot, the suite fails and the stale grant is
