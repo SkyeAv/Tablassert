@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -131,3 +132,110 @@ def test_validate_command_graph_branch_rejects_invalid_table(tmp_path: Path, fix
     with pytest.raises(SectionValidationError) as exc_info:
         validate(graph_file, schema="graph")
     assert exc_info.value.code == "section-validation-failed"
+
+
+def _kgx_node_row() -> dict[str, Any]:
+    """Minimal valid node record for ``validate-kgx`` fixtures."""
+    return {"id": "HGNC:11998", "name": "TP53", "category": ["biolink:Gene"]}
+
+
+def _kgx_edge_base() -> dict[str, Any]:
+    """Minimal otherwise-valid edge record for ``validate-kgx`` fixtures."""
+    return {
+        "subject": "HGNC:11998",
+        "predicate": "biolink:associated_with",
+        "object": "MONDO:0008903",
+        "category": ["biolink:GeneToDiseaseAssociation"],
+        "knowledge_level": "statistical_association",
+        "agent_type": "data_analysis_pipeline",
+    }
+
+
+def _write_kgx_pair(tmp_path: Path, node_rows: list[dict[str, Any]], edge_lines: list[Any]) -> tuple[Path, Path]:
+    """Write a nodes/edges NDJSON pair (raw strings pass through verbatim, for defects)."""
+    nodes: Path = tmp_path / "PRUNECLI_KG_1.0.0.nodes.ndjson"
+    nodes.write_text("".join(json.dumps(row) + "\n" for row in node_rows), encoding="utf-8")
+    edges: Path = tmp_path / "PRUNECLI_KG_1.0.0.edges.ndjson"
+    edges.write_text("".join(line if isinstance(line, str) else json.dumps(line) + "\n" for line in edge_lines), encoding="utf-8")
+    return nodes, edges
+
+
+def test_validate_kgx_prune_flag_parses() -> None:
+    """Guard: ``validate-kgx`` binds ``--prune``/``-p`` through the parser as a bool flag.
+
+    The direct ``validate_kgx_command()`` calls below bypass Cyclopts; this pins the live
+    CLI contract -- both spellings bind to the ``prune`` parameter and default to False,
+    so a run without the flag can never rewrite a graph by accident.
+    """
+
+    def parse(argv: list[str]) -> dict[str, Any]:
+        fn, bound, _ = cli.APP.parse_args(argv, exit_on_error=False)
+        assert fn is cli.validate_kgx_command
+        return dict(bound.arguments)
+
+    dummy: str = "x.ndjson"
+    assert parse(["validate-kgx", "-n", dummy, "-e", dummy, "--prune"])["prune"] is True
+    assert parse(["validate-kgx", "-n", dummy, "-e", dummy, "-p"])["prune"] is True
+    # cyclopts only binds flags the caller passed; the default stays False at call time
+    # (pinned by the behavior tests below, which never rewrite a graph by accident).
+    assert parse(["validate-kgx", "-n", dummy, "-e", dummy]).get("prune", False) is False
+
+
+def test_validate_kgx_prune_removes_defective_edges_and_exits_zero(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Guard: ``--prune`` drops the never-compliant edge from the FINAL graph and exits 0.
+
+    Why: the verification requirement is that after a prune the shipped edges file no
+    longer contains non-KGX-compliant records -- not merely that a report says so. The
+    kept edge must survive byte-identically, and the report must name exactly what was
+    removed and what remains.
+    """
+    nodes, edges = _write_kgx_pair(
+        tmp_path, [_kgx_node_row()], [{**_kgx_edge_base(), "id": "keep-1"}, {**_kgx_edge_base(), "id": "drop-1", "p_value": "not-a-number"}]
+    )
+    original_kept_line: str = json.dumps({**_kgx_edge_base(), "id": "keep-1"}) + "\n"
+
+    cli.validate_kgx_command(nodes=nodes, edges=edges, limit=20, prune=True)
+
+    stderr: str = capsys.readouterr().err
+    assert "edges: pruned 1/2 non-compliant records" in stderr
+    assert "p_value: float_parsing" in stderr
+    assert "KGX output is Biolink-compliant." in stderr
+    assert edges.read_text(encoding="utf-8") == original_kept_line  # the defective record is GONE
+
+
+def test_validate_kgx_prune_drops_pending_gaps_and_exits_zero(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Guard: ``--prune`` removes pending carryovers too, and the run goes green.
+
+    Why: the strict bar is the point of the flag -- after it runs, the final graph
+    validates with zero failures, so a run over clean nodes exits 0. The report must
+    still name the removed records, and a pruned file must be EMPTY here, not quietly
+    holding the gaps.
+    """
+    nodes, edges = _write_kgx_pair(tmp_path, [_kgx_node_row()], [{**_kgx_edge_base(), "id": "pending-1", "provided_by": "infores:test"}])
+
+    cli.validate_kgx_command(nodes=nodes, edges=edges, limit=20, prune=True)
+
+    stderr: str = capsys.readouterr().err
+    assert "edges: pruned 1/1 non-compliant records" in stderr
+    assert "provided_by: extra_forbidden" in stderr
+    assert "KGX output is Biolink-compliant." in stderr
+    assert edges.read_bytes() == b""  # the pending gap did not survive the prune
+
+
+def test_validate_kgx_prune_missing_edges_file_is_not_a_pass(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Guard: pruning a typo'd path reports it and exits non-zero without creating files.
+
+    Why: the prune path has destructive power; a misspelled ``--edges`` must never read
+    as a successful no-op prune (0/0 valid would otherwise exit 0 and hide the mistake).
+    """
+    nodes, edges = _write_kgx_pair(tmp_path, [_kgx_node_row()], [])
+    edges.unlink()  # keep the nodes file; only the edges path is a typo
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.validate_kgx_command(nodes=nodes, edges=edges, limit=20, prune=True)
+
+    assert exc_info.value.code == 1
+    stderr: str = capsys.readouterr().err
+    assert "edges: file not found" in stderr
+    assert "KGX output is not Biolink-compliant." in stderr
+    assert not edges.exists()  # the prune never created the file

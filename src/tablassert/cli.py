@@ -955,11 +955,29 @@ def validate(
         run(3, validate_pipeline, configuration_file)
 
 
+def _print_kgx_section(label: str, section: dict[str, Any], path: Path) -> None:
+    """Print one ``validate-kgx`` per-file section (shared by the plain and ``--prune`` paths)."""
+    if section["missing"]:
+        # Never let a typo'd path read as a pass: 0/0 valid would otherwise exit 0.
+        print(f"{label}: file not found ({path})", file=sys.stderr)
+        logger.info(f"validate-kgx {label}: file not found")
+        return
+    pending: int = section["valid_excluding_pending"] - section["valid"]
+    suffix: str = f"; {pending} pending biolink-model support" if pending else ""
+    print(f"{label}: {section['valid']}/{section['total']} valid ({section['failures']} failures{suffix})", file=sys.stderr)
+    for problem, count in section["problems"].items():
+        print(f"  {count:>9}  {problem}", file=sys.stderr)
+    for example in section["examples"][:3]:
+        print(f"  e.g. {example['id']}: {', '.join(example['errors'])}", file=sys.stderr)
+    logger.info(f"validate-kgx {label}: {section['valid']}/{section['total']} valid")
+
+
 @APP.command(name="validate-kgx")
 def validate_kgx_command(
     nodes: Annotated[Path, cyclopts.Parameter(name=["--nodes", "-n"])],
     edges: Annotated[Path, cyclopts.Parameter(name=["--edges", "-e"])],
     limit: Annotated[int, cyclopts.Parameter(name=["--limit"])] = 20,
+    prune: Annotated[bool, cyclopts.Parameter(name=["--prune", "-p"])] = False,
 ) -> None:
     """Validate built KGX NDJSON against the Biolink Model.
 
@@ -968,33 +986,60 @@ def validate_kgx_command(
     and reports failures grouped by field and error type. Exits non-zero when any
     record fails, so a build can be gated in CI.
 
+    ``--prune`` rewrites the EDGES file in place, keeping only edges that validate
+    strictly. Real defects (non-coercible values, extras the model will never declare,
+    rejected predicates), the deliberate pending carryovers (``synonym``/``xref``/
+    ``relation``/``provided_by``, ...), and lines that are not JSON at all are all
+    removed. On a real graph the carryovers are most of the edges, so ``--prune``
+    trades them for a strictly-compliant graph. The rewrite is atomic and kept lines
+    stay byte-identical; a clean file is not rewritten at all, and a missing edges file
+    is reported without ever being pruned. Nodes are validated and reported, never
+    pruned. The exit code stays strict over the post-prune state: after a prune, every
+    kept edge is strictly valid, so the run is compliant exactly when the nodes are.
+
     Args:
         nodes: Path to the built nodes NDJSON file (``<name>_<version>.nodes.ndjson``).
         edges: Path to the built edges NDJSON file (``<name>_<version>.edges.ndjson``).
         limit: Maximum example failures retained per file for the ``e.g.`` report lines;
             every record is still validated regardless of this cap. A missing file is
             reported and fails the run rather than reading as a pass.
+        prune: Rewrite the edges file in place, removing every edge record that is not
+            strictly KGX/Biolink-compliant, including the deliberate pending carryovers.
+            The nodes file is never modified; a clean edges file is left untouched.
     """
-    from tablassert.biolink import validate_kgx
+    from tablassert.biolink import _validate_file, prune_kgx_edges, validate_kgx
 
-    report: dict[str, Any] = validate_kgx(nodes, edges, limit=limit)
-    print(f"biolink-model {report['biolink_version']}", file=sys.stderr)
-    for label in ("nodes", "edges"):
-        section: dict[str, Any] = report[label]
-        if section["missing"]:
-            # Never let a typo'd path read as a pass: 0/0 valid would otherwise exit 0.
-            print(f"{label}: file not found ({nodes if label == 'nodes' else edges})", file=sys.stderr)
-            logger.info(f"validate-kgx {label}: file not found")
-            continue
-        pending: int = section["valid_excluding_pending"] - section["valid"]
-        suffix: str = f"; {pending} pending biolink-model support" if pending else ""
-        print(f"{label}: {section['valid']}/{section['total']} valid ({section['failures']} failures{suffix})", file=sys.stderr)
-        for problem, count in section["problems"].items():
-            print(f"  {count:>9}  {problem}", file=sys.stderr)
-        for example in section["examples"][:3]:
-            print(f"  e.g. {example['id']}: {', '.join(example['errors'])}", file=sys.stderr)
-        logger.info(f"validate-kgx {label}: {section['valid']}/{section['total']} valid")
-    if not report["ok"]:
+    if not prune:
+        report: dict[str, Any] = validate_kgx(nodes, edges, limit=limit)
+        print(f"biolink-model {report['biolink_version']}", file=sys.stderr)
+        _print_kgx_section("nodes", report["nodes"], nodes)
+        _print_kgx_section("edges", report["edges"], edges)
+        if not report["ok"]:
+            print("KGX output is not Biolink-compliant.", file=sys.stderr)
+            raise SystemExit(1)
+        print("KGX output is Biolink-compliant.", file=sys.stderr)
+        return
+
+    # The prune path validates nodes-only itself and drives prune_kgx_edges' own single
+    # pass for both edges sections, so the edges file is never read and written twice.
+    nodes_section: dict[str, Any] = _validate_file(nodes, edge=False, limit=limit)
+    pruned_report: dict[str, Any] = prune_kgx_edges(edges, limit=limit)
+    print(f"biolink-model {pruned_report['biolink_version']}", file=sys.stderr)
+    _print_kgx_section("nodes", nodes_section, nodes)
+    _print_kgx_section("edges", pruned_report["before"], edges)
+    if pruned_report["before"]["missing"]:
+        print("KGX output is not Biolink-compliant.", file=sys.stderr)
+        raise SystemExit(1)
+    malformed_note: str = f" ({pruned_report['malformed']} malformed lines)" if pruned_report["malformed"] else ""
+    print(f"edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} non-compliant records{malformed_note}", file=sys.stderr)
+    logger.info(f"validate-kgx edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} (rewritten={pruned_report['rewritten']})")
+    for problem, count in pruned_report["dropped"]["problems"].items():
+        print(f"  {count:>9}  {problem}", file=sys.stderr)
+    for example in pruned_report["dropped"]["examples"][:3]:
+        print(f"  e.g. {example['id']}: {', '.join(example['errors'])}", file=sys.stderr)
+    _print_kgx_section("edges", pruned_report["after"], edges)
+    nodes_ok: bool = not nodes_section["missing"] and nodes_section["total"] == nodes_section["valid"]
+    if not (nodes_ok and pruned_report["ok"]):
         print("KGX output is not Biolink-compliant.", file=sys.stderr)
         raise SystemExit(1)
     print("KGX output is Biolink-compliant.", file=sys.stderr)

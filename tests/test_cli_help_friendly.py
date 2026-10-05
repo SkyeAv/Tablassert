@@ -129,6 +129,21 @@ def test_validate_kgx_help_documents_the_failure_example_cap() -> None:
     assert ".edges.ndjson" in text
 
 
+def test_validate_kgx_help_documents_the_prune_flag() -> None:
+    """validate-kgx renders what --prune rewrites (edges in place; strict bar).
+
+    Why: --prune has destructive power (it rewrites a build artifact in place), so an
+    agent must be able to learn from --help alone that it drops every non-strictly-
+    valid edge INCLUDING the deliberate pending carryovers, never touches nodes, and
+    leaves a clean file untouched -- without reading the source or docs.
+    """
+    text = render_help(["validate-kgx"])
+    assert "--prune" in text
+    assert "pending carryovers" in text
+    assert "nodes file is never modified" in text
+    assert "clean edges file is left untouched" in text
+
+
 ALL_COMMANDS = ["agent", "build-fullmap", "build-kg", "distill-export", "distill-weigh", "quick-map", "validate", "validate-kgx"]
 
 

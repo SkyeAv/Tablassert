@@ -721,15 +721,14 @@ def _write_prune_fixture(tmp_path: Path, records: list[Any]) -> Path:
     return edges
 
 
-def test_prune_kgx_edges_drops_only_real_defects(tmp_path: Path) -> None:
-    """Prune removes genuinely non-compliant edges and keeps valid + pending-only ones.
+def test_prune_kgx_edges_keeps_only_strictly_valid_edges(tmp_path: Path) -> None:
+    """Prune keeps strictly valid edges and drops everything else, pending included.
 
-    Why: ``--prune`` rewrites a built graph in place, so its keep/drop line must match
-    ``validate_kgx``'s own two-score contract exactly -- a deliberate pending carryover
-    (the KGX denormalized extras, or an override predicate the pinned class rejects) is
-    most of a real graph and must never read as a defect, while a record that can never
-    validate (a non-coercible ``p_value``, an extra the model will never declare) must
-    not survive into the final graph. The byte-identity of kept lines is pinned too: a
+    Why: ``--prune`` rewrites a built graph in place under validate_kgx's own STRICT
+    bar, so its keep/drop line must match what a plain validation run would reject:
+    a record that can never validate (a non-coercible ``p_value``, an extra the model
+    will never declare) and a deliberate pending carryover (the KGX denormalized
+    extras) are all non-compliant. The byte-identity of kept lines is pinned too: a
     re-serialization pass would silently re-format numbers and rewrite the graph.
     """
     edges: Path = _write_prune_fixture(
@@ -741,7 +740,7 @@ def test_prune_kgx_edges_drops_only_real_defects(tmp_path: Path) -> None:
             {**_prunable_edge_base(), "id": "e2", "p_value": "not-a-number"},
             # Real defect: extra_forbidden on a field outside KNOWN_PENDING_EDGE_FIELDS.
             {**_prunable_edge_base(), "id": "e3", "approval_ids": "011111|022222"},
-            # Pending-only: extra_forbidden on a deliberate carryover, so it is KEPT.
+            # Deliberate pending carryover: still not strictly valid, so it goes too.
             {**_prunable_edge_base(), "id": "e4", sorted(KNOWN_PENDING_EDGE_FIELDS)[0]: "carryover"},
         ],
     )
@@ -752,19 +751,22 @@ def test_prune_kgx_edges_drops_only_real_defects(tmp_path: Path) -> None:
     assert report["before"]["total"] == 4
     assert report["before"]["valid"] == 1
     assert report["before"]["valid_excluding_pending"] == 2
-    assert report["pruned"] == 2
-    assert report["kept"] == 2
+    assert report["pruned"] == 3
+    assert report["kept"] == 1
     assert report["malformed"] == 0
     assert report["rewritten"] is True
     assert report["ok_excluding_pending"] is True
-    # Strict stays false: the kept pending carryover still fails, exactly as a plain
-    # validation run of the rewritten file would report.
-    assert report["ok"] is False
-    assert report["after"]["total"] == 2
-    assert report["after"]["failures"] == 1
+    assert report["ok"] is True  # strict: everything kept validates cleanly
+    assert report["after"]["total"] == 1
+    assert report["after"]["failures"] == 0
     assert {"p_value: float_parsing", "approval_ids: extra_forbidden"} <= set(report["before"]["problems"])
+    # The dropped section names exactly what was removed -- the records the CLI reports
+    # under the pruned line -- defects and pending carryovers alike.
+    assert report["dropped"]["total"] == 3
+    assert {"p_value: float_parsing", "approval_ids: extra_forbidden"} <= set(report["dropped"]["problems"])
+    assert {example["id"] for example in report["dropped"]["examples"]} == {"e2", "e3", "e4"}
     # The rewritten file holds exactly the kept lines, byte-identical and in order.
-    assert edges.read_text(encoding="utf-8").splitlines(keepends=True) == [original_lines[0], original_lines[3]]
+    assert edges.read_text(encoding="utf-8").splitlines(keepends=True) == [original_lines[0]]
     assert not (tmp_path / ".PRUNE_KG_1.0.0.edges.ndjson.tmp").exists()  # no torn temp survives
 
 
@@ -827,13 +829,13 @@ def test_prune_kgx_edges_counts_malformed_lines_as_prunable(tmp_path: Path) -> N
     assert [json.loads(line)["id"] for line in edges.read_text(encoding="utf-8").splitlines()] == ["e1", "e3"]
 
 
-def test_prune_kgx_edges_keeps_pending_gaps_and_stays_strict(tmp_path: Path) -> None:
-    """A file holding only deliberate pending gaps prunes nothing but stays strict.
+def test_prune_kgx_edges_drops_pending_gaps_to_a_strict_clean_file(tmp_path: Path) -> None:
+    """A file holding only deliberate pending gaps prunes to empty and reports ok.
 
-    Why: the pending score forgives known model gaps; it does not make them vanish.
-    After a prune every kept record is valid-or-pending (so ``ok_excluding_pending``
-    is true) while the strict verdict keeps reporting them, matching the CLI's
-    documented exit contract instead of quietly laundering deliberate carryovers.
+    Why: the strict bar is the whole point of ``--prune`` -- after it runs, the final
+    graph validates with zero failures, so the pending forgiveness score cannot keep a
+    record alive. The no-rewrite guarantee only applies when nothing is prunable; here
+    everything is, so the file becomes empty rather than silently keeping the gaps.
     """
     edges: Path = _write_prune_fixture(
         tmp_path,
@@ -848,15 +850,15 @@ def test_prune_kgx_edges_keeps_pending_gaps_and_stays_strict(tmp_path: Path) -> 
             }
         ],
     )
-    before: bytes = edges.read_bytes()
 
     report: dict[str, Any] = prune_kgx_edges(edges)
 
-    assert report["pruned"] == 0
-    assert report["rewritten"] is False
-    assert report["ok"] is False  # strict: the pending gap still fails
+    assert report["pruned"] == 1
+    assert report["kept"] == 0
+    assert report["rewritten"] is True
+    assert report["ok"] is True  # strict: nothing left to fail
     assert report["ok_excluding_pending"] is True
-    assert edges.read_bytes() == before
+    assert edges.read_bytes() == b""  # the pending gap did not survive
 
 
 def test_prune_kgx_edges_after_section_matches_a_plain_revalidation(tmp_path: Path) -> None:
@@ -873,7 +875,7 @@ def test_prune_kgx_edges_after_section_matches_a_plain_revalidation(tmp_path: Pa
         [
             {**_prunable_edge_base(), "id": "e1", "p_value": "1.0000e-03"},
             {**_prunable_edge_base(), "id": "e2", "p_value": "not-a-number"},
-            # Pending-only carryover: kept, so the post-prune section must still name it.
+            # Pending-only carryover: not strictly valid, so it is dropped like a defect.
             {**_prunable_edge_base(), "id": "e3", sorted(KNOWN_PENDING_EDGE_FIELDS)[0]: "carryover"},
         ],
     )
@@ -885,8 +887,9 @@ def test_prune_kgx_edges_after_section_matches_a_plain_revalidation(tmp_path: Pa
     assert report["before"]["total"] == 3
     assert report["before"]["valid"] == 1
     assert report["before"]["valid_excluding_pending"] == 2
-    assert revalidated["edges"]["total"] == 2
-    assert revalidated["edges"]["failures"] == 1  # the kept pending gap, reported exactly as a plain run would
+    assert revalidated["edges"]["total"] == 1
+    assert revalidated["edges"]["failures"] == 0  # only the strictly valid edge survives
+    assert revalidated["ok"] is True
 
 
 def test_prune_kgx_edges_raises_when_the_destination_cannot_be_written(tmp_path: Path) -> None:

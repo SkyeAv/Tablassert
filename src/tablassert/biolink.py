@@ -1004,17 +1004,19 @@ def _validate_file(path: Path, *, edge: bool, limit: int) -> dict[str, Any]:
 
 
 def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
-    """Drop the edge records that cannot be KGX/Biolink-compliant, rewriting in place.
+    """Drop every edge record that is not strictly KGX/Biolink-compliant, in place.
 
-    The keep/drop line is exactly ``validate_kgx``'s own two-score contract, so a prune
-    can never disagree with what a plain validation run reports:
+    A record survives only when it validates against the Biolink Pydantic class named
+    by its own ``category`` with zero errors -- the same strict bar a plain
+    ``validate_kgx`` run uses for its ``ok`` verdict, so a prune can never disagree
+    with what validation reports:
 
     * a strictly valid record is kept;
     * a record whose every failure is a known, intentional model gap (the KGX
       denormalized carryovers in :data:`KNOWN_PENDING_EDGE_FIELDS`, or a
-      :data:`PREDICATE_OVERRIDES` predicate the pinned classes reject) is KEPT -- these
-      carryovers are most of a real graph, and deleting them would destroy deliberately
-      shipped data;
+      :data:`PREDICATE_OVERRIDES` predicate the pinned classes reject) is dropped --
+      these carryovers are most of a real graph, so the caller asked for a
+      strictly-compliant graph over maximal data retention when invoking this;
     * every other failing record is a real defect and is dropped;
     * a line that is not valid JSON at all is dropped and counted separately in
       ``malformed``.
@@ -1038,12 +1040,12 @@ def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
         Mapping with ``before`` (the same per-file section ``validate_kgx`` builds over
         the original file), ``after`` (the same shape over the kept records, i.e. the
         file's post-prune state, equal to what ``validate_kgx`` reports on the rewritten
-        file), ``pruned`` / ``kept`` / ``malformed`` / ``rewritten`` counts, and ``ok`` /
-        ``ok_excluding_pending`` computed over the post-prune state. For a readable file
-        ``ok_excluding_pending`` is therefore always true -- every kept record is
-        strictly valid or pending-only -- while ``ok`` stays strict, so a graph holding
-        pending carryovers keeps failing strict validation until a ``biolink-model``
-        release declares those fields.
+        file), ``dropped`` (the ``pruned`` records' problem histogram and examples --
+        the records that were removed), ``pruned`` / ``kept`` / ``malformed`` /
+        ``rewritten`` counts, and ``ok`` / ``ok_excluding_pending`` computed over the
+        post-prune state. For a readable file ``ok`` is therefore always true -- every
+        kept record is strictly valid -- and ``ok_excluding_pending`` agrees, because
+        nothing pending survives the prune.
 
     Raises:
         OSError: the destination's directory is unwritable; the error propagates and the
@@ -1051,13 +1053,11 @@ def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
     """
     total: int = 0
     valid: int = 0
-    valid_excluding_pending: int = 0
+    pending: int = 0  # pending-only failures: counted for the BEFORE report, never kept
     pruned: int = 0
     malformed: int = 0
     all_problems: Counter[str] = Counter()
     all_examples: list[dict[str, Any]] = []
-    kept_problems: Counter[str] = Counter()
-    kept_examples: list[dict[str, Any]] = []
     pruned_problems: Counter[str] = Counter()
     pruned_examples: list[dict[str, Any]] = []
     # A missing path must never read as a clean bill of health: reporting zero records
@@ -1087,22 +1087,19 @@ def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
                     all_problems.update(errors)
                     if len(all_examples) < limit:
                         all_examples.append({"id": record.get("id"), "errors": errors})
-                    if not errors:
-                        valid += 1
-                        valid_excluding_pending += 1
-                        dst.write(line)
+                    if errors:
+                        # The before-section keeps validate_kgx's pending score so the
+                        # pre-report matches a plain validation run; the STRICT bar still
+                        # drops the record -- real defects AND deliberate pending gaps.
+                        if _record_has_only_pending_problems(record, errors):
+                            pending += 1
+                        pruned += 1
+                        pruned_problems.update(errors)
+                        if len(pruned_examples) < limit:
+                            pruned_examples.append({"id": record.get("id"), "errors": errors})
                         continue
-                    if _record_has_only_pending_problems(record, errors):
-                        valid_excluding_pending += 1
-                        kept_problems.update(errors)
-                        if len(kept_examples) < limit:
-                            kept_examples.append({"id": record.get("id"), "errors": errors})
-                        dst.write(line)
-                        continue
-                    pruned += 1
-                    pruned_problems.update(errors)
-                    if len(pruned_examples) < limit:
-                        pruned_examples.append({"id": record.get("id"), "errors": errors})
+                    valid += 1
+                    dst.write(line)
             # ATOMIC: the swap happens only after every kept line was written, so a crash
             # mid-write leaves the original file untouched and the temp never read back.
             rewritten: bool = pruned > 0
@@ -1116,31 +1113,33 @@ def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
     before: dict[str, Any] = {
         "total": total,
         "valid": valid,
-        "valid_excluding_pending": valid_excluding_pending,
+        "valid_excluding_pending": valid + pending,
         "failures": total - valid,
         "missing": missing,
         "problems": dict(all_problems.most_common()),
         "examples": all_examples,
     }
+    dropped: dict[str, Any] = {"total": pruned, "problems": dict(pruned_problems.most_common()), "examples": pruned_examples}
     after: dict[str, Any] = {
         "total": kept,
         "valid": valid,
-        "valid_excluding_pending": valid_excluding_pending,
+        "valid_excluding_pending": valid,  # nothing pending survives, so the scores agree
         "failures": kept - valid,
         "missing": missing,
-        "problems": dict(kept_problems.most_common()),
-        "examples": kept_examples,
+        "problems": {},
+        "examples": [],
     }
     return {
         "biolink_version": BIOLINK_VERSION,
         "before": before,
         "after": after,
+        "dropped": dropped,
         "pruned": pruned,
         "kept": kept,
         "malformed": malformed,
         "rewritten": rewritten,
         "ok": not missing and kept == valid,
-        "ok_excluding_pending": not missing and kept == valid_excluding_pending,
+        "ok_excluding_pending": not missing and kept == valid,
     }
 
 
