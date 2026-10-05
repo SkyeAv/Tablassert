@@ -776,6 +776,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="validate-kgx">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#repairing-a-graph-with-prune" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repairing a graph with --prune
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1380,6 +1397,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="validate-kgx">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#repairing-a-graph-with-prune" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repairing a graph with --prune
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2226,6 +2260,13 @@ when it ingests your files.</p>
 <td><code>20</code></td>
 <td>Maximum example failures to retain per file</td>
 </tr>
+<tr>
+<td><code>--prune</code>, <code>-p</code></td>
+<td>Flag</td>
+<td>No</td>
+<td><code>False</code></td>
+<td>Rewrite the edges file in place, keeping only edges that validate strictly (pending carryovers are dropped too); nodes are never touched, and a clean file is not rewritten</td>
+</tr>
 </tbody>
 </table>
 <p>Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
@@ -2248,6 +2289,28 @@ it, as <code>effect_size</code> / <code>effect_type</code> did when 4.4.4 shippe
 </code></pre></div>
 <p>The strict count is what <code>ok</code> and the exit code use; the pending count is what
 <a href="#agent"><code>tablassert agent</code></a> optimizes against, so a deliberate gap never reads as a modelling error.</p>
+<h3 id="repairing-a-graph-with-prune">Repairing a graph with <code>--prune</code><a class="headerlink" href="#repairing-a-graph-with-prune" title="Permanent link">&para;</a></h3>
+<p><code>--prune</code> (<code>-p</code>) repairs an already-emitted graph instead of just scoring it: the edges file is
+rewritten in place and every edge that does not validate strictly is removed. That includes real
+defects (non-coercible values, extras the model will never declare, rejected predicates), the
+deliberate pending carryovers (<code>synonym</code>, <code>xref</code>, <code>relation</code>, <code>provided_by</code>, ...), and lines that
+are not JSON at all (counted separately as malformed). On a real graph the carryovers are most of
+the edges -- a DAKP-style build prunes roughly 800085 of 2000085 -- so <code>--prune</code> trades them for a
+strictly-compliant graph. Nodes are validated and reported, never pruned: dropping one would
+strand its references.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>-n<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>-e<span class="w"> </span>MY_KG_1.0.0.edges.ndjson<span class="w"> </span>--prune
+</code></pre></div>
+<p>The rewrite is atomic (written to a sibling temp file, then swapped in) and kept lines stay
+byte-identical, so a pruned graph differs from the original only by the removed records. A clean
+file is not rewritten at all, and a missing edges file is reported without ever being pruned.
+After pruning, every kept edge is strictly valid, so the exit code goes green as soon as the
+nodes are clean too:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>edges: pruned 12/424159 non-compliant records
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>  9  p_value: float_parsing
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>  e.g. DISEASE_EDGE_000017: p_value: float_parsing
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>edges: 424147/424159 valid (0 failures)
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>KGX output is Biolink-compliant.
+</code></pre></div>
 <p>Retrieval-source entries are the mirror case. Tablassert emits <code>resource_id</code> as each <code>sources</code> entry's
 sole identifier, while the pinned model still requires the inherited <code>Entity.id</code> on <code>RetrievalSource</code>.
 The validator supplies that <code>id</code> to its own in-memory copy of the record whenever the installed model
