@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 from collections import Counter
 from enum import Enum
@@ -86,6 +87,7 @@ __all__ = [
     "legal_predicates",
     "node_class",
     "numeric_slot_kind",
+    "prune_kgx_edges",
     "resolve_association_class",
     "resolve_node_category",
     "resolve_node_class",
@@ -944,45 +946,202 @@ def validate_kgx(nodes_path: Path, edges_path: Path, limit: int = 20) -> dict[st
     """
     report: dict[str, Any] = {"biolink_version": BIOLINK_VERSION, "ok": True, "ok_excluding_pending": True}
     for label, path, edge in (("nodes", nodes_path, False), ("edges", edges_path, True)):
-        total: int = 0
-        valid: int = 0
-        valid_excluding_pending: int = 0
-        problems: Counter[str] = Counter()
-        examples: list[dict[str, Any]] = []
-        # A missing path must never read as a clean bill of health: counting zero records
-        # out of zero would otherwise exit 0 on a typo'd filename and hide a broken build.
-        missing: bool = not path.is_file()
-        if not missing:
-            with path.open(encoding="utf-8") as handle:
-                for line in handle:
+        section: dict[str, Any] = _validate_file(path, edge=edge, limit=limit)
+        report[label] = section
+        if section["missing"] or section["total"] != section["valid"]:
+            report["ok"] = False
+        if section["missing"] or section["total"] != section["valid_excluding_pending"]:
+            report["ok_excluding_pending"] = False
+    return report
+
+
+def _validate_file(path: Path, *, edge: bool, limit: int) -> dict[str, Any]:
+    """Validate one KGX NDJSON file record by record (the per-file half of ``validate_kgx``).
+
+    Args:
+        path: Path to the ``.ndjson`` file; a missing path reports ``missing`` instead of
+            counting zero records out of zero as a pass.
+        edge: ``True`` to dispatch on the association family, ``False`` for nodes.
+        limit: Maximum number of example failures to retain.
+
+    Returns:
+        The same per-file section ``validate_kgx`` nests under ``"nodes"`` / ``"edges"``.
+    """
+    total: int = 0
+    valid: int = 0
+    valid_excluding_pending: int = 0
+    problems: Counter[str] = Counter()
+    examples: list[dict[str, Any]] = []
+    # A missing path must never read as a clean bill of health: counting zero records
+    # out of zero would otherwise exit 0 on a typo'd filename and hide a broken build.
+    missing: bool = not path.is_file()
+    if not missing:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                total += 1
+                record: dict[str, Any] = json.loads(line)
+                errors: list[str] = validate_record(record, edge=edge)
+                if not errors:
+                    valid += 1
+                    valid_excluding_pending += 1
+                    continue
+                if _record_has_only_pending_problems(record, errors):
+                    valid_excluding_pending += 1
+                problems.update(errors)
+                if len(examples) < limit:
+                    examples.append({"id": record.get("id"), "errors": errors})
+    return {
+        "total": total,
+        "valid": valid,
+        "valid_excluding_pending": valid_excluding_pending,
+        "failures": total - valid,
+        "missing": missing,
+        "problems": dict(problems.most_common()),
+        "examples": examples,
+    }
+
+
+def prune_kgx_edges(edges_path: Path, limit: int = 20) -> dict[str, Any]:
+    """Drop the edge records that cannot be KGX/Biolink-compliant, rewriting in place.
+
+    The keep/drop line is exactly ``validate_kgx``'s own two-score contract, so a prune
+    can never disagree with what a plain validation run reports:
+
+    * a strictly valid record is kept;
+    * a record whose every failure is a known, intentional model gap (the KGX
+      denormalized carryovers in :data:`KNOWN_PENDING_EDGE_FIELDS`, or a
+      :data:`PREDICATE_OVERRIDES` predicate the pinned classes reject) is KEPT -- these
+      carryovers are most of a real graph, and deleting them would destroy deliberately
+      shipped data;
+    * every other failing record is a real defect and is dropped;
+    * a line that is not valid JSON at all is dropped and counted separately in
+      ``malformed``.
+
+    Nodes are never touched: dropping one would strand references, and cascading that
+    into the edges is a modelling decision, not a validation repair.
+
+    The rewrite is ATOMIC and lossless for kept records: kept lines are written verbatim
+    (byte-identical, order preserved, blank lines passed through) into a sibling
+    ``.{name}.tmp`` and swapped in with :func:`os.replace` only once every line was
+    written, so a crash never leaves a torn edges file. When nothing is prunable the
+    destination is not rewritten at all (``rewritten`` is ``False`` and the bytes are
+    untouched), and a missing file is reported (``missing``) without ever being created
+    -- a typo'd path must never read as a prune.
+
+    Args:
+        edges_path: Path to ``<name>_<version>.edges.ndjson``.
+        limit: Maximum number of example failures to retain per report section.
+
+    Returns:
+        Mapping with ``before`` (the same per-file section ``validate_kgx`` builds over
+        the original file), ``after`` (the same shape over the kept records, i.e. the
+        file's post-prune state, equal to what ``validate_kgx`` reports on the rewritten
+        file), ``pruned`` / ``kept`` / ``malformed`` / ``rewritten`` counts, and ``ok`` /
+        ``ok_excluding_pending`` computed over the post-prune state. For a readable file
+        ``ok_excluding_pending`` is therefore always true -- every kept record is
+        strictly valid or pending-only -- while ``ok`` stays strict, so a graph holding
+        pending carryovers keeps failing strict validation until a ``biolink-model``
+        release declares those fields.
+
+    Raises:
+        OSError: the destination's directory is unwritable; the error propagates and the
+            original file keeps its previous content.
+    """
+    total: int = 0
+    valid: int = 0
+    valid_excluding_pending: int = 0
+    pruned: int = 0
+    malformed: int = 0
+    all_problems: Counter[str] = Counter()
+    all_examples: list[dict[str, Any]] = []
+    kept_problems: Counter[str] = Counter()
+    kept_examples: list[dict[str, Any]] = []
+    pruned_problems: Counter[str] = Counter()
+    pruned_examples: list[dict[str, Any]] = []
+    # A missing path must never read as a clean bill of health: reporting zero records
+    # out of zero would otherwise exit 0 on a typo'd filename and hide a broken build.
+    missing: bool = not edges_path.is_file()
+    if not missing:
+        tmp: Path = edges_path.with_name(f".{edges_path.name}.tmp")
+        try:
+            # newline="" on both ends keeps every kept line byte-identical: the default
+            # universal-newlines mode would silently rewrite "\r\n" as "\n".
+            with edges_path.open(encoding="utf-8", newline="") as src, tmp.open("w", encoding="utf-8", newline="") as dst:
+                for line in src:
                     if not line.strip():
+                        dst.write(line)  # blank lines are not records; pass through verbatim
                         continue
                     total += 1
-                    record: dict[str, Any] = json.loads(line)
-                    errors: list[str] = validate_record(record, edge=edge)
+                    try:
+                        record: dict[str, Any] = json.loads(line)
+                    except json.JSONDecodeError:
+                        malformed += 1
+                        pruned += 1
+                        pruned_problems["record: json_parse_error"] += 1
+                        if len(pruned_examples) < limit:
+                            pruned_examples.append({"id": None, "errors": ["record: json_parse_error"]})
+                        continue
+                    errors: list[str] = validate_record(record, edge=True)
+                    all_problems.update(errors)
+                    if len(all_examples) < limit:
+                        all_examples.append({"id": record.get("id"), "errors": errors})
                     if not errors:
                         valid += 1
                         valid_excluding_pending += 1
+                        dst.write(line)
                         continue
                     if _record_has_only_pending_problems(record, errors):
                         valid_excluding_pending += 1
-                    problems.update(errors)
-                    if len(examples) < limit:
-                        examples.append({"id": record.get("id"), "errors": errors})
-        report[label] = {
-            "total": total,
-            "valid": valid,
-            "valid_excluding_pending": valid_excluding_pending,
-            "failures": total - valid,
-            "missing": missing,
-            "problems": dict(problems.most_common()),
-            "examples": examples,
-        }
-        if missing or total != valid:
-            report["ok"] = False
-        if missing or total != valid_excluding_pending:
-            report["ok_excluding_pending"] = False
-    return report
+                        kept_problems.update(errors)
+                        if len(kept_examples) < limit:
+                            kept_examples.append({"id": record.get("id"), "errors": errors})
+                        dst.write(line)
+                        continue
+                    pruned += 1
+                    pruned_problems.update(errors)
+                    if len(pruned_examples) < limit:
+                        pruned_examples.append({"id": record.get("id"), "errors": errors})
+            # ATOMIC: the swap happens only after every kept line was written, so a crash
+            # mid-write leaves the original file untouched and the temp never read back.
+            rewritten: bool = pruned > 0
+            if rewritten:
+                os.replace(tmp, edges_path)
+        finally:
+            tmp.unlink(missing_ok=True)  # no-op after a successful replace; cleanup after a raise
+    else:
+        rewritten = False
+    kept: int = total - pruned
+    before: dict[str, Any] = {
+        "total": total,
+        "valid": valid,
+        "valid_excluding_pending": valid_excluding_pending,
+        "failures": total - valid,
+        "missing": missing,
+        "problems": dict(all_problems.most_common()),
+        "examples": all_examples,
+    }
+    after: dict[str, Any] = {
+        "total": kept,
+        "valid": valid,
+        "valid_excluding_pending": valid_excluding_pending,
+        "failures": kept - valid,
+        "missing": missing,
+        "problems": dict(kept_problems.most_common()),
+        "examples": kept_examples,
+    }
+    return {
+        "biolink_version": BIOLINK_VERSION,
+        "before": before,
+        "after": after,
+        "pruned": pruned,
+        "kept": kept,
+        "malformed": malformed,
+        "rewritten": rewritten,
+        "ok": not missing and kept == valid,
+        "ok_excluding_pending": not missing and kept == valid_excluding_pending,
+    }
 
 
 # Node slots Tablassert can always populate from a fullmap hit. A class requiring

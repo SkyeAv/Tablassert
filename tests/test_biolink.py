@@ -42,6 +42,7 @@ from tablassert.biolink import (
     is_pending_problem,
     legal_predicates,
     numeric_slot_kind,
+    prune_kgx_edges,
     resolve_association_class,
     validate_kgx,
     validate_record,
@@ -699,6 +700,213 @@ def test_validate_kgx_counts_override_predicates_as_pending_not_valid(tmp_path: 
     assert report["ok_excluding_pending"] is False  # the smuggled-in predicate still fails
     assert "predicate: literal_error" in report["edges"]["problems"]
     assert "predicate: enum" in report["edges"]["problems"]
+
+
+def _prunable_edge_base() -> dict[str, Any]:
+    """Minimal otherwise-valid DAKP-shaped edge used by the ``prune_kgx_edges`` fixtures."""
+    return {
+        "subject": "HGNC:11998",
+        "predicate": "biolink:associated_with",
+        "object": "MONDO:0008903",
+        "category": ["biolink:GeneToDiseaseAssociation"],
+        "knowledge_level": "statistical_association",
+        "agent_type": "data_analysis_pipeline",
+    }
+
+
+def _write_prune_fixture(tmp_path: Path, records: list[Any]) -> Path:
+    """Write one record per line (raw strings pass through verbatim, for malformed lines)."""
+    edges: Path = tmp_path / "PRUNE_KG_1.0.0.edges.ndjson"
+    edges.write_text("".join(record if isinstance(record, str) else json.dumps(record) + "\n" for record in records), encoding="utf-8")
+    return edges
+
+
+def test_prune_kgx_edges_drops_only_real_defects(tmp_path: Path) -> None:
+    """Prune removes genuinely non-compliant edges and keeps valid + pending-only ones.
+
+    Why: ``--prune`` rewrites a built graph in place, so its keep/drop line must match
+    ``validate_kgx``'s own two-score contract exactly -- a deliberate pending carryover
+    (the KGX denormalized extras, or an override predicate the pinned class rejects) is
+    most of a real graph and must never read as a defect, while a record that can never
+    validate (a non-coercible ``p_value``, an extra the model will never declare) must
+    not survive into the final graph. The byte-identity of kept lines is pinned too: a
+    re-serialization pass would silently re-format numbers and rewrite the graph.
+    """
+    edges: Path = _write_prune_fixture(
+        tmp_path,
+        [
+            # Strictly valid: scientific-notation p_value coerces back to the float slot.
+            {**_prunable_edge_base(), "id": "e1", "p_value": "1.0000e-03"},
+            # Real defect: a non-numeric string can never coerce into p_value's float.
+            {**_prunable_edge_base(), "id": "e2", "p_value": "not-a-number"},
+            # Real defect: extra_forbidden on a field outside KNOWN_PENDING_EDGE_FIELDS.
+            {**_prunable_edge_base(), "id": "e3", "approval_ids": "011111|022222"},
+            # Pending-only: extra_forbidden on a deliberate carryover, so it is KEPT.
+            {**_prunable_edge_base(), "id": "e4", sorted(KNOWN_PENDING_EDGE_FIELDS)[0]: "carryover"},
+        ],
+    )
+    original_lines: list[str] = edges.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+
+    assert report["before"]["total"] == 4
+    assert report["before"]["valid"] == 1
+    assert report["before"]["valid_excluding_pending"] == 2
+    assert report["pruned"] == 2
+    assert report["kept"] == 2
+    assert report["malformed"] == 0
+    assert report["rewritten"] is True
+    assert report["ok_excluding_pending"] is True
+    # Strict stays false: the kept pending carryover still fails, exactly as a plain
+    # validation run of the rewritten file would report.
+    assert report["ok"] is False
+    assert report["after"]["total"] == 2
+    assert report["after"]["failures"] == 1
+    assert {"p_value: float_parsing", "approval_ids: extra_forbidden"} <= set(report["before"]["problems"])
+    # The rewritten file holds exactly the kept lines, byte-identical and in order.
+    assert edges.read_text(encoding="utf-8").splitlines(keepends=True) == [original_lines[0], original_lines[3]]
+    assert not (tmp_path / ".PRUNE_KG_1.0.0.edges.ndjson.tmp").exists()  # no torn temp survives
+
+
+def test_prune_kgx_edges_clean_file_is_a_no_op(tmp_path: Path) -> None:
+    """Pruning an already-compliant file must not rewrite it (bytes stay untouched).
+
+    Why: ``--prune`` runs against build artifacts that may be published; a rewrite that
+    only round-trips JSON would churn mtimes and (via float re-formatting) bytes, so
+    the no-op path must leave the file exactly as it was.
+    """
+    edges: Path = _write_prune_fixture(tmp_path, [{**_prunable_edge_base(), "id": "e1"}])
+    before: bytes = edges.read_bytes()
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+
+    assert report["pruned"] == 0
+    assert report["rewritten"] is False
+    assert report["ok"] is True
+    assert edges.read_bytes() == before
+
+
+def test_prune_kgx_edges_never_treats_a_missing_file_as_a_pass(tmp_path: Path) -> None:
+    """A typo'd path reports ``missing`` and must not create or pass over a file.
+
+    Why: ``validate_kgx`` already refuses to read a missing file as a clean bill of
+    health; the pruning path has strictly more power (it deletes records), so it must
+    refuse even harder instead of silently "pruning" nothing.
+    """
+    edges: Path = tmp_path / "ABSENT_KG_1.0.0.edges.ndjson"
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+
+    assert report["before"]["missing"] is True
+    assert report["after"]["missing"] is True
+    assert report["ok"] is False
+    assert report["ok_excluding_pending"] is False
+    assert report["pruned"] == 0
+    assert not edges.exists()  # the prune never created the file
+
+
+def test_prune_kgx_edges_counts_malformed_lines_as_prunable(tmp_path: Path) -> None:
+    """A line that is not JSON at all is dropped and counted under ``malformed``.
+
+    Why: a torn build artifact can carry a half-written line; leaving it in place
+    would keep the final graph unreadable for every downstream KGX consumer, while
+    silently mixing it into the ordinary failure count would hide the two failure
+    kinds from each other.
+    """
+    edges: Path = _write_prune_fixture(
+        tmp_path, [{**_prunable_edge_base(), "id": "e1"}, '{"id": "e2", "subject": "HGNC:11998", "object":\n', {**_prunable_edge_base(), "id": "e3"}]
+    )
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+
+    assert report["malformed"] == 1
+    assert report["pruned"] == 1
+    assert report["kept"] == 2
+    assert report["rewritten"] is True
+    assert report["after"]["problems"] == {}  # the malformed line left no record-level problems behind
+    assert [json.loads(line)["id"] for line in edges.read_text(encoding="utf-8").splitlines()] == ["e1", "e3"]
+
+
+def test_prune_kgx_edges_keeps_pending_gaps_and_stays_strict(tmp_path: Path) -> None:
+    """A file holding only deliberate pending gaps prunes nothing but stays strict.
+
+    Why: the pending score forgives known model gaps; it does not make them vanish.
+    After a prune every kept record is valid-or-pending (so ``ok_excluding_pending``
+    is true) while the strict verdict keeps reporting them, matching the CLI's
+    documented exit contract instead of quietly laundering deliberate carryovers.
+    """
+    edges: Path = _write_prune_fixture(
+        tmp_path,
+        [
+            # Constrained Literal class rejecting an override predicate -> pending only.
+            {
+                **_prunable_edge_base(),
+                "id": "e1",
+                "subject": "CHEBI:1",
+                "predicate": "biolink:prevents",
+                "category": ["biolink:ChemicalEntityToBiologicalProcessAssociation"],
+            }
+        ],
+    )
+    before: bytes = edges.read_bytes()
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+
+    assert report["pruned"] == 0
+    assert report["rewritten"] is False
+    assert report["ok"] is False  # strict: the pending gap still fails
+    assert report["ok_excluding_pending"] is True
+    assert edges.read_bytes() == before
+
+
+def test_prune_kgx_edges_after_section_matches_a_plain_revalidation(tmp_path: Path) -> None:
+    """``after`` must equal what ``validate_kgx`` reports over the rewritten file.
+
+    Why: the CLI prints the post-prune verdict straight from ``after``; if that shape
+    ever drifted from a real validation pass, ``--prune`` could report compliance the
+    next plain run would contradict.
+    """
+    nodes: Path = tmp_path / "PRUNE_KG_1.0.0.nodes.ndjson"
+    nodes.write_text(json.dumps({"id": "HGNC:11998", "name": "TP53", "category": ["biolink:Gene"]}) + "\n", encoding="utf-8")
+    edges: Path = _write_prune_fixture(
+        tmp_path,
+        [
+            {**_prunable_edge_base(), "id": "e1", "p_value": "1.0000e-03"},
+            {**_prunable_edge_base(), "id": "e2", "p_value": "not-a-number"},
+            # Pending-only carryover: kept, so the post-prune section must still name it.
+            {**_prunable_edge_base(), "id": "e3", sorted(KNOWN_PENDING_EDGE_FIELDS)[0]: "carryover"},
+        ],
+    )
+
+    report: dict[str, Any] = prune_kgx_edges(edges)
+    revalidated: dict[str, Any] = validate_kgx(nodes, edges)
+
+    assert report["after"] == revalidated["edges"]
+    assert report["before"]["total"] == 3
+    assert report["before"]["valid"] == 1
+    assert report["before"]["valid_excluding_pending"] == 2
+    assert revalidated["edges"]["total"] == 2
+    assert revalidated["edges"]["failures"] == 1  # the kept pending gap, reported exactly as a plain run would
+
+
+def test_prune_kgx_edges_raises_when_the_destination_cannot_be_written(tmp_path: Path) -> None:
+    """An unwritable destination raises instead of silently skipping the prune.
+
+    Why: a read-only graph directory makes the rewrite impossible; failing silently
+    would leave the user believing defective edges were removed. The original file
+    must keep its previous content and the temp must be cleaned up.
+    """
+    edges: Path = _write_prune_fixture(tmp_path, [{**_prunable_edge_base(), "id": "e1", "p_value": "not-a-number"}])
+    before: bytes = edges.read_bytes()
+    tmp_path.chmod(0o500)  # r-x: creating the sibling temp inside fails
+    try:
+        with pytest.raises(PermissionError):
+            prune_kgx_edges(edges)
+    finally:
+        tmp_path.chmod(0o700)
+
+    assert edges.read_bytes() == before
+    assert not (tmp_path / ".PRUNE_KG_1.0.0.edges.ndjson.tmp").exists()
 
 
 def test_category_overrides_track_the_installed_model() -> None:
