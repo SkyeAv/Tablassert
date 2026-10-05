@@ -400,6 +400,7 @@ tablassert validate-kgx --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edg
 | `--nodes`, `-n` | Path | Yes | n/a | Built `*.nodes.ndjson` file to validate |
 | `--edges`, `-e` | Path | Yes | n/a | Built `*.edges.ndjson` file to validate |
 | `--limit` | int | No | `20` | Maximum example failures to retain per file |
+| `--prune`, `-p` | Flag | No | `False` | Rewrite the edges file in place, keeping only edges that validate strictly (pending carryovers are dropped too); nodes are never touched, and a clean file is not rewritten |
 
 Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
 rather than a million:
@@ -428,6 +429,35 @@ edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model supp
 
 The strict count is what `ok` and the exit code use; the pending count is what
 [`tablassert agent`](#agent) optimizes against, so a deliberate gap never reads as a modelling error.
+
+### Repairing a graph with `--prune`
+
+`--prune` (`-p`) repairs an already-emitted graph instead of just scoring it: the edges file is
+rewritten in place and every edge that does not validate strictly is removed. That includes real
+defects (non-coercible values, extras the model will never declare, rejected predicates), the
+deliberate pending carryovers (`synonym`, `xref`, `relation`, `provided_by`, ...), and lines that
+are not JSON at all (counted separately as malformed). On a real graph the carryovers are most of
+the edges -- a DAKP-style build prunes roughly 800085 of 2000085 -- so `--prune` trades them for a
+strictly-compliant graph. Nodes are validated and reported, never pruned: dropping one would
+strand its references.
+
+```bash
+tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson --prune
+```
+
+The rewrite is atomic (written to a sibling temp file, then swapped in) and kept lines stay
+byte-identical, so a pruned graph differs from the original only by the removed records. A clean
+file is not rewritten at all, and a missing edges file is reported without ever being pruned.
+After pruning, every kept edge is strictly valid, so the exit code goes green as soon as the
+nodes are clean too:
+
+```text
+edges: pruned 12/424159 non-compliant records
+  9  p_value: float_parsing
+  e.g. DISEASE_EDGE_000017: p_value: float_parsing
+edges: 424147/424159 valid (0 failures)
+KGX output is Biolink-compliant.
+```
 
 Retrieval-source entries are the mirror case. Tablassert emits `resource_id` as each `sources` entry's
 sole identifier, while the pinned model still requires the inherited `Entity.id` on `RetrievalSource`.

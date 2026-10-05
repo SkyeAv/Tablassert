@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- **`validate-kgx` can repair a graph in place with `--prune` (`-p`).** The flag rewrites the edges NDJSON in place, keeping only the edges that validate strictly: real defects (non-coercible values, extras the model will never declare, rejected predicates), the deliberate pending carryovers (`synonym`/`xref`/`relation`/`provided_by`, ...), and lines that are not JSON at all are all removed, so the final graph validates with zero failures (on a real graph the carryovers are most of the edges, so the flag trades them for compliance). The rewrite is atomic and kept lines stay byte-identical, a clean file is not rewritten at all, a missing edges file is reported without ever being pruned, nodes are never touched, and the exit code goes green as soon as the nodes are clean too. The core lives in the new public `biolink.prune_kgx_edges`, which reuses `validate_kgx`'s own strict bar, so a prune can never disagree with what a plain validation run reports.
+
 ## 19.5.1 - 2026-10-01
 
 ### Changed
