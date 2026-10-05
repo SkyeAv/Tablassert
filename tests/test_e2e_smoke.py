@@ -22,7 +22,7 @@ import polars as pl
 import pytest
 
 from tablassert import rs
-from tablassert.cli import build_pipeline, validate, validate_pipeline
+from tablassert.cli import build_pipeline, validate, validate_kgx_command, validate_pipeline
 from tablassert.ingests import to_yaml
 from tablassert.progress import PipelineProgress
 
@@ -431,3 +431,90 @@ def test_nullable_qualifier_keeps_edge_without_key_while_strict_drops(tmp_path: 
     by_subject: dict[str, dict[str, Any]] = {edge["subject"]: edge for edge in nullable_edges}
     assert by_subject["CHEBI:1"]["disease_context_qualifier"] == "MONDO:2"
     assert "disease_context_qualifier" not in by_subject["CHEBI:2"]
+
+
+def test_prune_command_cleans_the_final_built_graph(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
+    """validate-kgx --prune cleans the FINAL graph, not just the report: every injected
+    non-compliant edge is gone from the rewritten file and the pair then validates
+    strictly with exit 0.
+
+    Why: the prune command's promise is about the shipped artifact, so the proof must
+    read the file back after the command runs -- injected defects (non-coercible values,
+    unforgiven extras), an injected deliberate pending carryover, and a malformed line
+    all have to be absent, every surviving line has to come from the real build
+    byte-identically, and a plain ``validate_kgx`` over the pruned pair has to agree
+    with the command's post-prune verdict. Anything less (report-only validation, or a
+    prune that silently keeps pending gaps) would let a non-compliant graph ship.
+    """
+    from tablassert.biolink import validate_kgx
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+
+    data: Path = tmp_path / "data.tsv"
+    data.write_text("brca1\tmapk1\nbrca1\tmapk1\n")
+    table: Path = tmp_path / "table.yaml"
+    to_yaml(
+        table,
+        {
+            "template": {
+                "source": {"kind": "text", "local": str(data), "url": ["https://example.com/data.tsv"], "delimiter": "\t"},
+                "statement": {
+                    "subject": {"method": "column", "encoding": "A"},
+                    "predicate": "associated_with",
+                    "object": {"method": "column", "encoding": "B"},
+                },
+                "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+            }
+        },
+    )
+    graph: Path = tmp_path / "graph.yaml"
+    to_yaml(
+        graph,
+        {
+            "name": "SMOKE_KG",
+            "version": "1.0.0",
+            "tables": [str(table)],
+            "fullmap": str(fullmap),
+            "rig": rig_factory(tmp_path, infores_id="infores:smoke-kg", source_info={"description": "e2e prune graph"}),
+        },
+    )
+    build_pipeline(graph, PipelineProgress(total_stages=6))
+
+    nodes: Path = tmp_path / "SMOKE_KG_1.0.0.nodes.ndjson"
+    edges: Path = tmp_path / "SMOKE_KG_1.0.0.edges.ndjson"
+    built_lines: list[str] = edges.read_text(encoding="utf-8").splitlines()
+    base: dict[str, Any] = json.loads(built_lines[0])
+
+    # The injected tail mirrors how a torn or drifted artifact looks downstream of a build.
+    injected: list[str] = [
+        json.dumps({**base, "id": "INJECT-DEFECT-1", "p_value": "not-a-number"}),
+        json.dumps({**base, "id": "INJECT-DEFECT-2", "approval_ids": "011111|022222"}),
+        json.dumps({**base, "id": "INJECT-PENDING-1", "provided_by": "infores:smoke-kg"}),
+    ]
+    edges.write_bytes(("\n".join(built_lines + injected) + "\n{ broken json\n").encode("utf-8"))
+
+    try:
+        validate_kgx_command(nodes=nodes, edges=edges, limit=20, prune=True)
+        exit_code: int = 0
+    except SystemExit as exc:
+        exit_code = int(exc.code or 0)
+
+    post: dict[str, Any] = validate_kgx(nodes, edges)
+
+    # The command's strict verdict and a plain re-validation agree: fully compliant.
+    assert exit_code == 0
+    assert post["ok"] is True
+    assert post["edges"]["valid"] == post["edges"]["total"]  # every remaining edge is strictly valid
+    assert post["edges"]["failures"] == 0
+
+    text: str = edges.read_text(encoding="utf-8")
+    for record_id in ("INJECT-DEFECT-1", "INJECT-DEFECT-2", "INJECT-PENDING-1"):
+        assert record_id not in text
+    assert "{ broken json" not in text
+
+    # Everything that survived came from the real build, byte-identical and in order.
+    current: list[str] = text.splitlines()
+    pending_built = iter(built_lines)
+    assert all(line in pending_built for line in current)
