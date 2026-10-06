@@ -223,4 +223,4 @@ described in:
 
 - [Skye Lane Goetz](mailto:sgoetz@isbscience.org), Institute for Systems Biology
 - [Gwênlyn Glusman](mailto:gglusman@isbscience.org), Institute for Systems Biology
-- Jared C. Roach, Institute for Systems Biology
+- [Jared C. Roach](mailto:jroach@isbscience.org), Institute for Systems Biology
