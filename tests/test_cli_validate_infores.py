@@ -81,12 +81,12 @@ class TestValidateInforesCommand:
         assert excinfo.value.code == 1
 
     def test_registry_off_skips_membership(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """--registry off reports structure only: membership never fails, even strict."""
+        """--registry off reports structure only and never claims registry verification."""
         edges = write_ndjson(tmp_path / "e.ndjson", [{"id": "urn:1", "primary_knowledge_source": ["infores:made-up"]}])
         nodes = write_ndjson(tmp_path / "n.ndjson", [])
         out = run({"nodes": nodes, "edges": edges, "registry": "off", "strict": True}, capsys)
         assert "0 entries" in out
-        assert "All emitted infores CURIEs are registered." in out
+        assert "infores membership check skipped (--registry off)." in out
 
     def test_registry_refresh_fetches_and_caches(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
         """--registry refresh pulls the live catalog via the retry layer and caches the body."""
@@ -119,6 +119,54 @@ class TestValidateInforesCommand:
         with pytest.raises(SystemExit) as excinfo:
             cli.validate_infores_command(nodes=nodes, edges=edges, rig=rig, strict=True)
         assert excinfo.value.code == 1
+
+    def test_non_json_lines_count_as_malformed(self, tmp_path: Path) -> None:
+        """A line that is not JSON at all is malformed output, never a traceback.
+
+        Mirrors validate-kgx's explicit handling of its own non-JSON lines: the report
+        stays structured so one corrupt line cannot crash a build gate.
+        """
+        from tablassert.infores_registry import validate_infores
+
+        edges = tmp_path / "e.ndjson"
+        edges.write_text('{"id": "urn:1", "primary_knowledge_source": ["infores:monarchinitiative"]}\nnot json at all\n', encoding="utf-8")
+        nodes = write_ndjson(tmp_path / "n.ndjson", [])
+        report = validate_infores(nodes, edges, registry=frozenset({REGISTERED}))
+        assert report["malformed"] == 1
+        assert report["registered"] == 1
+        assert report["ok"] is False
+        assert any(example["field"] == "<not-json>" for example in report["examples"])
+
+    def test_corrupt_rig_raises_coded_error(self, tmp_path: Path) -> None:
+        """An unparsable --rig yaml raises the coded error, not a raw yaml traceback."""
+        from tablassert.errors import TablassertError, error_code_of
+        from tablassert.infores_registry import validate_infores
+
+        edges = write_ndjson(tmp_path / "e.ndjson", [])
+        nodes = write_ndjson(tmp_path / "n.ndjson", [])
+        rig = tmp_path / "rig.yaml"
+        rig.write_text("source_info: [unclosed", encoding="utf-8")
+        with pytest.raises(TablassertError) as excinfo:
+            validate_infores(nodes, edges, rig_path=rig, registry=frozenset({REGISTERED}))
+        assert error_code_of(excinfo.value) == "infores-registry-unreadable"
+
+    def test_refresh_rejects_empty_stanza_list_before_caching(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A fetched body with an empty stanza list fails and never reaches the cache.
+
+        Such a body would classify every real CURIE unregistered on later inspection;
+        it must be rejected at fetch time, not cached as a valid-looking registry.
+        """
+        from tablassert.errors import TablassertError, error_code_of
+
+        monkeypatch.setattr(infores_registry.net, "http_get_text", lambda url, **kwargs: yaml.safe_dump({"information_resources": []}))
+        cache = tmp_path / "cache.yaml"
+        monkeypatch.setattr(infores_registry, "registry_cache_path", lambda: cache)
+        edges = write_ndjson(tmp_path / "e.ndjson", [])
+        nodes = write_ndjson(tmp_path / "n.ndjson", [])
+        with pytest.raises(TablassertError) as excinfo:
+            cli.validate_infores_command(nodes=nodes, edges=edges, registry="refresh")
+        assert error_code_of(excinfo.value) == "infores-registry-unreadable"
+        assert not cache.exists()
 
     def test_help_renders_every_flag(self) -> None:
         """The help page must self-describe: an agent picks flags from help alone."""

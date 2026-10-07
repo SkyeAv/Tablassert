@@ -1098,7 +1098,8 @@ def validate_infores_command(
         report["registry"]["source"] = f"{REGISTRY_RAW_URL} (refreshed)"
     for label, absent in report["missing"].items():
         if absent:
-            print(f"{label}: file not found", file=sys.stderr)
+            path_label = {"nodes": nodes, "edges": edges, "rig": rig}.get(label)
+            print(f"{label}: file not found ({path_label})", file=sys.stderr)
     if any(report["missing"].values()):
         print("infores validation failed: missing input files.", file=sys.stderr)
         raise SystemExit(1)
@@ -1112,16 +1113,17 @@ def validate_infores_command(
     for example in report["examples"][:3]:
         print(f"  e.g. {example['curie']} ({example['where']}.{example['field']}): {example['problem']}", file=sys.stderr)
     clean: bool = not report["unregistered"] and not report["malformed"]
+    passed: str = "infores membership check skipped (--registry off)." if registry == "off" else "All emitted infores CURIEs are registered."
     if strict:
         if report["ok_strict"]:
-            print("All emitted infores CURIEs are registered." if clean else "infores validation passed (strict).", file=sys.stderr)
+            print(passed if clean else "infores validation passed (strict).", file=sys.stderr)
             return
         print("infores validation failed (strict): unregistered CURIEs remain.", file=sys.stderr)
         raise SystemExit(1)
     if not clean:
         print("infores warnings present; pass --strict to fail on them.", file=sys.stderr)
         return
-    print("All emitted infores CURIEs are registered.", file=sys.stderr)
+    print(passed, file=sys.stderr)
 
 
 @APP.command(name="quick-map")

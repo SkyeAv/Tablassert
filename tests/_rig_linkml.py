@@ -23,6 +23,7 @@ drift is caught by review of that diff, not mechanically here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -42,9 +43,9 @@ class LinkMLSubsetError(Exception):
         return f"{self.path}: {self.reason}"
 
 
-def load_schema(path: Any) -> dict[str, Any]:
+def load_schema(path: Path) -> dict[str, Any]:
     """Load the vendored LinkML schema document."""
-    return yaml.safe_load(path.read_bytes() if hasattr(path, "read_bytes") else open(path, "rb").read())
+    return yaml.safe_load(path.read_bytes())
 
 
 def validate_document(document: Any, schema: dict[str, Any], class_name: str = "ReferenceIngestGuide") -> list[LinkMLSubsetError]:

@@ -59,6 +59,29 @@ INFORES_PREFIX: str = "infores:"
 _EDGE_INFORES_FIELDS: tuple[str, ...] = ("primary_knowledge_source", "sources")
 
 
+def _extract_identifiers(document: Any, path_label: str) -> frozenset[str]:
+    """Pull the ``infores:`` identifier set out of a parsed catalog document.
+
+    Shared by the snapshot loader and the refresh path so both enforce the identical
+    bar: a document without a non-empty identifier set is corrupt and must fail loudly
+    BEFORE the refresh path caches it.
+    """
+    stanzas: Any = document.get("information_resources") if isinstance(document, dict) else None
+    if not isinstance(stanzas, list):
+        raise TablassertError(
+            f"The infores registry document at {path_label} carries no `information_resources` stanza list; it is truncated or corrupt.",
+            code="infores-registry-unreadable",
+        )
+    identifiers: set[str] = {
+        str(stanza["id"]) for stanza in stanzas if isinstance(stanza, dict) and str(stanza.get("id") or "").startswith(INFORES_PREFIX)
+    }
+    if not identifiers:
+        raise TablassertError(
+            f"The infores registry document at {path_label} parsed but contains zero infores: identifiers.", code="infores-registry-unreadable"
+        )
+    return frozenset(identifiers)
+
+
 def load_registry_snapshot(path: Path = REGISTRY_SNAPSHOT_PATH) -> frozenset[str]:
     """Load the bundled registry snapshot into a set of ``infores:`` CURIEs.
 
@@ -81,20 +104,7 @@ def load_registry_snapshot(path: Path = REGISTRY_SNAPSHOT_PATH) -> frozenset[str
         document: Any = yaml.safe_load(path.read_bytes())
     except (OSError, yaml.YAMLError) as error:
         raise TablassertError(f"Cannot read the infores registry snapshot at {path}: {error}", code="infores-registry-unreadable") from error
-    stanzas: Any = document.get("information_resources") if isinstance(document, dict) else None
-    if not isinstance(stanzas, list):
-        raise TablassertError(
-            f"The infores registry snapshot at {path} carries no `information_resources` stanza list; it is truncated or corrupt.",
-            code="infores-registry-unreadable",
-        )
-    identifiers: set[str] = {
-        str(stanza["id"]) for stanza in stanzas if isinstance(stanza, dict) and str(stanza.get("id") or "").startswith(INFORES_PREFIX)
-    }
-    if not identifiers:
-        raise TablassertError(
-            f"The infores registry snapshot at {path} parsed but contains zero infores: identifiers.", code="infores-registry-unreadable"
-        )
-    return frozenset(identifiers)
+    return _extract_identifiers(document, str(path))
 
 
 def refresh_registry(destination: Path | None = None) -> frozenset[str]:
@@ -124,14 +134,13 @@ def refresh_registry(destination: Path | None = None) -> frozenset[str]:
         raise TablassertError(
             f"Fetched infores registry from {REGISTRY_RAW_URL} is not valid yaml: {error}", code="infores-registry-unreadable"
         ) from error
-    if not (isinstance(document, dict) and isinstance(document.get("information_resources"), list)):
-        raise TablassertError(
-            f"Fetched infores registry from {REGISTRY_RAW_URL} carries no `information_resources` stanza list; refusing to cache it.",
-            code="infores-registry-unreadable",
-        )
+    # Validate the identifier set BEFORE writing: a body with an empty stanza list
+    # would otherwise be cached as a "valid" registry that classifies every real
+    # CURIE unregistered on some later hand-inspection.
+    identifiers: frozenset[str] = _extract_identifiers(document, REGISTRY_RAW_URL)
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(text, encoding="utf-8")
-    return load_registry_snapshot(cache)
+    return identifiers
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -141,14 +150,26 @@ def _as_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else [value]
 
 
-def _iter_file_records(path: Path) -> Iterator[dict[str, Any]]:
-    """Yield decoded NDJSON records from ``path``; blank lines are skipped silently."""
-    with path.open(encoding="utf-8") as handle:
+def _iter_file_records(path: Path) -> Iterator[tuple[dict[str, Any] | None, str | None]]:
+    """Yield ``(record, None)`` per decoded NDJSON record, ``(None, line)`` for non-JSON lines.
+
+    Blank lines are skipped. A line that is not JSON at all is surfaced to the caller
+    (the same defect class ``validate-kgx`` counts explicitly) instead of crashing the
+    walk with a traceback.
+    """
+    # errors="replace" keeps a bad byte from raising UnicodeDecodeError mid-file;
+    # the replacement glyph makes the line non-JSON, which reports as malformed.
+    with path.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
-            if line.strip():
+            if not line.strip():
+                continue
+            try:
                 record: Any = json.loads(line)
-                if isinstance(record, dict):
-                    yield record
+            except json.JSONDecodeError:
+                yield None, line
+                continue
+            if isinstance(record, dict):
+                yield record, None
 
 
 def _edge_observations(record: dict[str, Any]) -> Iterator[tuple[str, str]]:
@@ -200,13 +221,21 @@ def _observations(nodes_path: Path, edges_path: Path, rig_path: Path | None) -> 
         missing[label] = not path.is_file()
         if missing[label]:
             continue
-        for record in _iter_file_records(path):
+        for record, bad_line in _iter_file_records(path):
+            if record is None:
+                # A line that is not JSON at all is malformed output, matching how
+                # validate-kgx counts its own non-JSON lines.
+                observations.append((str(bad_line).strip()[:120], label, "<not-json>"))
+                continue
             for value, field in walk(record):
                 observations.append((value, label, field))
     if rig_path is not None:
         missing["rig"] = not rig_path.is_file()
         if not missing["rig"]:
-            loaded: Any = yaml.safe_load(rig_path.read_bytes())
+            try:
+                loaded: Any = yaml.safe_load(rig_path.read_bytes())
+            except yaml.YAMLError as error:
+                raise TablassertError(f"Cannot parse the RIG document at {rig_path}: {error}", code="infores-registry-unreadable") from error
             for value, field in _rig_observations(loaded):
                 observations.append((value, "rig", field))
     return observations, missing
@@ -231,7 +260,8 @@ def validate_infores(
         allow: Locally-minted CURIEs accepted without registry membership (e.g. the
             graph's own ``infores:`` id from ``rig.infores()``).
         registry: Pre-loaded identifier set; defaults to the bundled snapshot. Tests
-            inject tiny fixtures here. Ignored when ``check_registry`` is False.
+            inject tiny fixtures here (the report's ``registry.source`` then reads
+            ``injected``). Ignored when ``check_registry`` is False.
         check_registry: False runs the structural pass only (the ``--registry off``
             mode): CURIEs are counted as malformed or not, but never registered vs
             unregistered, so membership never influences any verdict.
@@ -239,22 +269,24 @@ def validate_infores(
 
     Returns:
         Mapping with ``registered`` / ``allowed`` / ``unregistered`` / ``malformed``
-        counts, ``examples`` (``{"curie", "where", "field", "problem"}``), a ``missing``
-        map of absent input files, ``registry`` provenance, and the verdicts ``ok``
-        (no missing inputs, no malformed values) and ``ok_strict`` (``ok`` and zero
-        unregistered CURIEs). The default CLI posture is advisory; only ``ok_strict``
-        may drive a non-zero exit, and only under an explicit flag.
+        counts -- all four are DISTINCT-value counts, so a defect repeated on every
+        record counts once -- ``examples`` (``{"curie", "where", "field", "problem"}``),
+        a ``missing`` map of absent input files, ``registry`` provenance, and the
+        verdicts ``ok`` (no missing inputs, no malformed values) and ``ok_strict``
+        (``ok`` and zero unregistered CURIEs). The default CLI posture is advisory;
+        only ``ok_strict`` may drive a non-zero exit, and only under an explicit flag.
     """
     registry_ids: frozenset[str] = (load_registry_snapshot() if registry is None else frozenset(registry)) if check_registry else frozenset()
+    registry_source: str = "injected" if registry is not None and check_registry else ("off" if not check_registry else str(REGISTRY_SNAPSHOT_PATH))
     observations, missing = _observations(nodes_path, edges_path, rig_path)
     registered: set[str] = set()
     allowed: set[str] = set()
     unregistered: dict[str, tuple[str, str]] = {}
-    malformed: list[tuple[str, str, str]] = []
+    malformed: set[tuple[str, str, str]] = set()
     examples: list[dict[str, str]] = []
     for value, where, field in observations:
         if not value.startswith(INFORES_PREFIX):
-            malformed.append((value, where, field))
+            malformed.add((value, where, field))
             continue
         if not check_registry:
             continue
@@ -269,7 +301,7 @@ def validate_infores(
             break
         where, field = unregistered[value]
         examples.append({"curie": value, "where": where, "field": field, "problem": "unregistered"})
-    for value, where, field in malformed:
+    for value, where, field in sorted(malformed):
         if len(examples) >= limit:
             break
         examples.append({"curie": value, "where": where, "field": field, "problem": "malformed"})
@@ -280,7 +312,7 @@ def validate_infores(
         "malformed": len(malformed),
         "examples": examples,
         "missing": missing,
-        "registry": {"source": "off" if not check_registry else str(REGISTRY_SNAPSHOT_PATH), "entries": len(registry_ids)},
+        "registry": {"source": registry_source, "entries": len(registry_ids)},
         "ok": not any(missing.values()) and not malformed,
         "ok_strict": not any(missing.values()) and not malformed and not unregistered,
     }

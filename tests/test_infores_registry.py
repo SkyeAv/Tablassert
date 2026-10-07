@@ -225,5 +225,15 @@ class TestClassification:
 
 
 def test_prefix_constant_matches_validator() -> None:
-    """The malformed boundary is exactly the ``infores:`` prefix shared with models.py."""
+    """The malformed boundary is the same ``infores:`` prefix models.py enforces.
+
+    ``models.validate_infores_curie`` carries its own prefix literal, so a one-sided
+    change would let syntactically-valid-but-foreign CURIEs pass config validation and
+    then be classified unregistered here (or vice versa): the two must stay in lockstep.
+    """
+    from tablassert.models import TablassertValidationError, validate_infores_curie
+
     assert INFORES_PREFIX == "infores:"
+    assert validate_infores_curie("infores:some-resource", "rig-bad-infores") == "infores:some-resource"
+    with pytest.raises(TablassertValidationError):
+        validate_infores_curie("PMID:123", "rig-bad-infores")
