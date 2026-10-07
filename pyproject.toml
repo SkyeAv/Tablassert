@@ -71,7 +71,7 @@ module-name = "tablassert.rs"
 bindings = "pyo3"
 manifest-path = "rust/Cargo.toml"
 features = ["extension-module"]
-include = ["src/tablassert/data/experimental_taxa.yaml"]
+include = ["src/tablassert/data/experimental_taxa.yaml", "src/tablassert/data/infores_catalog.yaml"]
 
 [project.scripts]
 tablassert = "tablassert.cli_entry:main"
