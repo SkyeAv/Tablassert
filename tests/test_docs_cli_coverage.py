@@ -29,6 +29,7 @@ COMMAND_NAME_DOCS: dict[str, tuple[str, ...]] = {
     "distill-weigh": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
+    "validate-infores": ("cli.md",),
     "validate-kgx": ("cli.md",),
 }
 COMMAND_FLAG_DOCS: dict[str, tuple[str, ...]] = {
@@ -39,6 +40,7 @@ COMMAND_FLAG_DOCS: dict[str, tuple[str, ...]] = {
     "distill-weigh": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
+    "validate-infores": ("cli.md",),
     "validate-kgx": ("cli.md",),
 }
 

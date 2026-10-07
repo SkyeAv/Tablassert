@@ -23,18 +23,32 @@ contribution process documented by the registry repo.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from tablassert import net
 from tablassert.errors import TablassertError
 
 #: Bundled snapshot of the upstream ``infores_catalog.yaml`` (vendored, see the header
 #: comment in that file for the source commit). The default validation path reads only
 #: this file; live refresh is an explicit opt-in that lands in the user cache dir.
 REGISTRY_SNAPSHOT_PATH: Path = Path(__file__).parent / "data" / "infores_catalog.yaml"
+
+#: Upstream document the snapshot vendors and ``--registry refresh`` fetches.
+REGISTRY_RAW_URL: str = "https://raw.githubusercontent.com/biolink/information-resource-registry/main/infores_catalog.yaml"
+
+
+#: Cache location for ``--registry refresh`` (honors ``XDG_CACHE_HOME``). The cache is a
+#: convenience artifact for inspection and offline re-reads; every refresh run refetches.
+def registry_cache_path() -> Path:
+    """Return the user cache path the refreshed registry document is written to."""
+    cache_root: str | None = os.environ.get("XDG_CACHE_HOME")
+    return (Path(cache_root) if cache_root else Path.home() / ".cache") / "tablassert" / "infores_catalog.yaml"
+
 
 #: Prefix every registry identifier carries. Values without it are malformed output,
 #: not merely unregistered.
@@ -81,6 +95,43 @@ def load_registry_snapshot(path: Path = REGISTRY_SNAPSHOT_PATH) -> frozenset[str
             f"The infores registry snapshot at {path} parsed but contains zero infores: identifiers.", code="infores-registry-unreadable"
         )
     return frozenset(identifiers)
+
+
+def refresh_registry(destination: Path | None = None) -> frozenset[str]:
+    """Fetch the live upstream registry and load it.
+
+    The document is parsed BEFORE it is written, so a truncated or hostile body can never
+    poison the cache file; on success the cache is a plain copy of the upstream yaml, left
+    for inspection and offline re-reads.
+
+    Args:
+        destination: Cache path; defaults to :func:`registry_cache_path`.
+
+    Returns:
+        The live registry's identifier set, identical in shape to
+        :func:`load_registry_snapshot`.
+
+    Raises:
+        NetworkTransientError: When every fetch attempt fails with a transient error.
+        TablassertError: With code ``infores-registry-unreadable`` when the fetched body
+            is not a parseable catalog document.
+    """
+    cache: Path = destination if destination is not None else registry_cache_path()
+    text: str = net.http_get_text(REGISTRY_RAW_URL)
+    try:
+        document: Any = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise TablassertError(
+            f"Fetched infores registry from {REGISTRY_RAW_URL} is not valid yaml: {error}", code="infores-registry-unreadable"
+        ) from error
+    if not (isinstance(document, dict) and isinstance(document.get("information_resources"), list)):
+        raise TablassertError(
+            f"Fetched infores registry from {REGISTRY_RAW_URL} carries no `information_resources` stanza list; refusing to cache it.",
+            code="infores-registry-unreadable",
+        )
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(text, encoding="utf-8")
+    return load_registry_snapshot(cache)
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -168,6 +219,7 @@ def validate_infores(
     rig_path: Path | None = None,
     allow: tuple[str, ...] | list[str] = (),
     registry: frozenset[str] | set[str] | None = None,
+    check_registry: bool = True,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Classify every emitted infores CURIE against the registry.
@@ -179,7 +231,10 @@ def validate_infores(
         allow: Locally-minted CURIEs accepted without registry membership (e.g. the
             graph's own ``infores:`` id from ``rig.infores()``).
         registry: Pre-loaded identifier set; defaults to the bundled snapshot. Tests
-            inject tiny fixtures here.
+            inject tiny fixtures here. Ignored when ``check_registry`` is False.
+        check_registry: False runs the structural pass only (the ``--registry off``
+            mode): CURIEs are counted as malformed or not, but never registered vs
+            unregistered, so membership never influences any verdict.
         limit: Maximum number of example unregistered/malformed observations retained.
 
     Returns:
@@ -190,7 +245,7 @@ def validate_infores(
         unregistered CURIEs). The default CLI posture is advisory; only ``ok_strict``
         may drive a non-zero exit, and only under an explicit flag.
     """
-    registry_ids: frozenset[str] = load_registry_snapshot() if registry is None else frozenset(registry)
+    registry_ids: frozenset[str] = (load_registry_snapshot() if registry is None else frozenset(registry)) if check_registry else frozenset()
     observations, missing = _observations(nodes_path, edges_path, rig_path)
     registered: set[str] = set()
     allowed: set[str] = set()
@@ -200,6 +255,8 @@ def validate_infores(
     for value, where, field in observations:
         if not value.startswith(INFORES_PREFIX):
             malformed.append((value, where, field))
+            continue
+        if not check_registry:
             continue
         if value in registry_ids:
             registered.add(value)
@@ -223,7 +280,7 @@ def validate_infores(
         "malformed": len(malformed),
         "examples": examples,
         "missing": missing,
-        "registry": {"source": str(REGISTRY_SNAPSHOT_PATH), "entries": len(registry_ids)},
+        "registry": {"source": "off" if not check_registry else str(REGISTRY_SNAPSHOT_PATH), "entries": len(registry_ids)},
         "ok": not any(missing.values()) and not malformed,
         "ok_strict": not any(missing.values()) and not malformed and not unregistered,
     }
