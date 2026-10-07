@@ -796,6 +796,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#validate-infores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate-infores
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#typical-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1418,6 +1429,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#validate-infores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate-infores
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#typical-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1462,8 +1484,8 @@
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
 <p>Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The <code>tablassert</code> app
 requires the <code>[cli]</code> extra (<code>pip install "tablassert[cli]"</code> or <code>uv tool install "tablassert[cli]"</code>) and
-exposes <strong>eight subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>distill-weigh</code>, <code>quick-map</code>, <code>validate</code>,
-and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
+exposes <strong>nine subcommands</strong>: <code>agent</code>, <code>build-fullmap</code>, <code>build-kg</code>, <code>distill-export</code>, <code>distill-weigh</code>, <code>quick-map</code>, <code>validate</code>,
+<code>validate-infores</code>, and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
 for the live surface.</p>
 <h2 id="command-index">Command index<a class="headerlink" href="#command-index" title="Permanent link">&para;</a></h2>
 <table>
@@ -1501,6 +1523,10 @@ for the live surface.</p>
 <tr>
 <td><a href="#validate"><code>validate</code></a></td>
 <td>Validate a graph or table configuration without executing it</td>
+</tr>
+<tr>
+<td><a href="#validate-infores"><code>validate-infores</code></a></td>
+<td>Validate emitted infores CURIEs against the Translator registry</td>
 </tr>
 <tr>
 <td><a href="#validate-kgx"><code>validate-kgx</code></a></td>
@@ -2317,6 +2343,90 @@ The validator supplies that <code>id</code> to its own in-memory copy of the rec
 requires it, so compliant output validates without the duplicate identifier ever being written to disk.
 The decoded record and the built NDJSON are untouched, and the alias stops being applied on its own
 once a model release drops the requirement.</p>
+<hr />
+<h2 id="validate-infores">validate-infores<a class="headerlink" href="#validate-infores" title="Permanent link">&para;</a></h2>
+<p>Use this to prove the knowledge-source identifiers a build emits are real. <code>validate-kgx</code> checks
+<em>structure</em> against the Biolink Model; <code>validate-infores</code> checks <em>identity</em>: every <code>infores:</code> CURIE
+on your edges (<code>primary_knowledge_source</code>, <code>sources[].resource_id</code>, <code>sources[].upstream_resource_ids</code>),
+nodes (<code>provided_by</code>), and, with <code>--rig</code>, the RIG document, is classified against the NCATS
+Translator registry (<a href="https://github.com/biolink/information-resource-registry"><code>biolink/information-resource-registry</code></a>'s
+<code>infores_catalog.yaml</code>). The registry ships as a bundled snapshot (<code>validate-infores</code> is offline by
+default); <code>--registry refresh</code> fetches the live catalog instead. Values without the <code>infores:</code>
+prefix are reported as malformed, not unregistered.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>tablassert<span class="w"> </span>validate-infores<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson<span class="w"> </span>--rig<span class="w"> </span>MY_KG_1.0.0.RIG.yaml
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>registry: .../infores_catalog.yaml (508 entries)
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>infores warnings present; pass --strict to fail on them.
+</code></pre></div>
+<p>The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
+graph's own <code>infores:</code> id from the <code>rig:</code> section's name) that will never sit in the registry. Allow
+those with repeatable <code>--allow-infores</code>, and pass <code>--strict</code> in CI to exit non-zero while any
+unregistered CURIE remains. A missing or misspelled path is reported as <code>file not found</code> and exits
+non-zero in every mode: a file that was never read must never count as a pass.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--nodes</code>, <code>-n</code></td>
+<td>Path</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>Built <code>*.nodes.ndjson</code> file to validate</td>
+</tr>
+<tr>
+<td><code>--edges</code>, <code>-e</code></td>
+<td>Path</td>
+<td>Yes</td>
+<td>n/a</td>
+<td>Built <code>*.edges.ndjson</code> file to validate</td>
+</tr>
+<tr>
+<td><code>--rig</code></td>
+<td>Path</td>
+<td>No</td>
+<td>n/a</td>
+<td>RIG yaml to include in the scan (its <code>source_info.infores_id</code> and target <code>primary_knowledge_sources</code> are checked)</td>
+</tr>
+<tr>
+<td><code>--allow-infores</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td>n/a</td>
+<td>Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals</td>
+</tr>
+<tr>
+<td><code>--registry</code></td>
+<td>snapshot\</td>
+<td>refresh\</td>
+<td>off</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>--strict</code></td>
+<td>Flag</td>
+<td>No</td>
+<td><code>False</code></td>
+<td>Exit non-zero while any unregistered CURIE remains; without it the run is advisory</td>
+</tr>
+<tr>
+<td><code>--limit</code></td>
+<td>int</td>
+<td>No</td>
+<td><code>20</code></td>
+<td>Maximum example unregistered/malformed CURIEs retained for the <code>e.g.</code> report lines</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <h2 id="typical-workflow">Typical workflow<a class="headerlink" href="#typical-workflow" title="Permanent link">&para;</a></h2>
 <ol>
