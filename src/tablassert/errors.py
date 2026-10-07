@@ -83,6 +83,7 @@ TablassertErrorCodes = Literal[
     "network-transient",
     "llm-transient",
     "reward-config-invalid",
+    "infores-registry-unreadable",
 ]
 
 

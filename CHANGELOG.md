@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- **`validate-infores` checks every emitted knowledge-source identifier against the Translator registry.** The new command classifies each `infores:` CURIE on the edges (`primary_knowledge_source`, `sources[].resource_id`, `sources[].upstream_resource_ids`), the nodes (`provided_by`), and optionally the RIG document against `biolink/information-resource-registry`'s `infores_catalog.yaml` -- the authoritative catalog translator-ingests' SOP points at but never checks programmatically. The registry ships as a bundled offline snapshot (vendored from upstream commit `a72dbc3b55d5`), `--registry refresh` fetches the live catalog through the bounded-retry network layer, and `--registry off` reports structure only. The default posture is advisory (exit 0 with warnings) because Tablassert legitimately mints graph-local CURIEs; repeatable `--allow-infores` exempts them and `--strict` makes unregistered CURIEs fail in CI. Values without the `infores:` prefix are malformed, not unregistered. This closes the validation gap that only the CURIE prefix was ever checked.
+
 ## 19.6.0 - 2026-10-05
 
 ### Added

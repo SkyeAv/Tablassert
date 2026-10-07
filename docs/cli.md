@@ -2,8 +2,8 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **eight subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`,
-and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
+exposes **nine subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`,
+`validate-infores`, and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
 ## Command index
@@ -17,6 +17,7 @@ for the live surface.
 | [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows (experimental) |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
+| [`validate-infores`](#validate-infores) | Validate emitted infores CURIEs against the Translator registry |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model |
 
 ## App flags
@@ -465,6 +466,46 @@ The validator supplies that `id` to its own in-memory copy of the record wheneve
 requires it, so compliant output validates without the duplicate identifier ever being written to disk.
 The decoded record and the built NDJSON are untouched, and the alias stops being applied on its own
 once a model release drops the requirement.
+
+---
+
+## validate-infores
+
+Use this to prove the knowledge-source identifiers a build emits are real. `validate-kgx` checks
+*structure* against the Biolink Model; `validate-infores` checks *identity*: every `infores:` CURIE
+on your edges (`primary_knowledge_source`, `sources[].resource_id`, `sources[].upstream_resource_ids`),
+nodes (`provided_by`), and, with `--rig`, the RIG document, is classified against the NCATS
+Translator registry ([`biolink/information-resource-registry`](https://github.com/biolink/information-resource-registry)'s
+`infores_catalog.yaml`). The registry ships as a bundled snapshot (`validate-infores` is offline by
+default); `--registry refresh` fetches the live catalog instead. Values without the `infores:`
+prefix are reported as malformed, not unregistered.
+
+```bash
+tablassert validate-infores --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edges.ndjson --rig MY_KG_1.0.0.RIG.yaml
+```
+
+```text
+registry: .../infores_catalog.yaml (508 entries)
+curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
+  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
+infores warnings present; pass --strict to fail on them.
+```
+
+The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
+graph's own `infores:` id from the `rig:` section's name) that will never sit in the registry. Allow
+those with repeatable `--allow-infores`, and pass `--strict` in CI to exit non-zero while any
+unregistered CURIE remains. A missing or misspelled path is reported as `file not found` and exits
+non-zero in every mode: a file that was never read must never count as a pass.
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--nodes`, `-n` | Path | Yes | n/a | Built `*.nodes.ndjson` file to validate |
+| `--edges`, `-e` | Path | Yes | n/a | Built `*.edges.ndjson` file to validate |
+| `--rig` | Path | No | n/a | RIG yaml to include in the scan (its `source_info.infores_id` and target `primary_knowledge_sources` are checked) |
+| `--allow-infores` | list[str] | No | n/a | Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals |
+| `--registry` | snapshot\\|refresh\\|off | No | `snapshot` | `snapshot` validates offline against the bundled copy; `refresh` fetches the live upstream catalog (network) and caches it under the user cache dir; `off` skips membership classification and reports structure only |
+| `--strict` | Flag | No | `False` | Exit non-zero while any unregistered CURIE remains; without it the run is advisory |
+| `--limit` | int | No | `20` | Maximum example unregistered/malformed CURIEs retained for the `e.g.` report lines |
 
 ---
 

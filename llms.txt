@@ -10,7 +10,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
 - [Documentation Site Home](docs/index.md): docs landing page and navigation context.
 - [Installation Guide](docs/installation.md): three install paths (PyPI, GitHub main, development from source), platform and Rust-toolchain notes, and the missing-extra behavior. Optional extras: `cli`, `rt`, `aria2`, `qc`, `agent`, `optimize`, `distill`, and `log`; the last three back experimental surfaces whose APIs may change.
-- [CLI Reference](docs/cli.md): the eight commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
+- [CLI Reference](docs/cli.md): the nine commands (`agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`, `validate-infores`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
 ## YAML Authoring
@@ -54,6 +54,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Fullmap Module](src/tablassert/fullmap.py): embedded redb synonym resolution and ranking logic.
 - [Graph Target](src/tablassert/graph_target.py): graph output target preparation and locking.
 - [YAML Ingestion](src/tablassert/ingests.py): `from_yaml()`, `to_sections()`, template/section merge behavior, YAML loading, and section expansion.
+- [InfoRes Registry](src/tablassert/infores_registry.py): bundled infores registry snapshot loader, KGX/RIG CURIE collection, and three-way registered/allowed/unregistered classification.
 - [Core Pipeline](src/tablassert/lib.py): extraction transforms, statement assembly, and graph compilation.
 - [Logging](src/tablassert/log.py): optional loguru logging abstraction.
 - [Pydantic Models](src/tablassert/models.py): authoritative schema for `Section` and `Graph`: table, graph, and RIG configuration models.

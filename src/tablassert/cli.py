@@ -1045,6 +1045,87 @@ def validate_kgx_command(
     print("KGX output is Biolink-compliant.", file=sys.stderr)
 
 
+@APP.command(name="validate-infores")
+def validate_infores_command(
+    nodes: Annotated[Path, cyclopts.Parameter(name=["--nodes", "-n"])],
+    edges: Annotated[Path, cyclopts.Parameter(name=["--edges", "-e"])],
+    rig: Annotated[Path | None, cyclopts.Parameter(name=["--rig"])] = None,
+    allow_infores: Annotated[list[str] | None, cyclopts.Parameter(name=["--allow-infores"], negative="", allow_leading_hyphen=False)] = None,
+    registry: Annotated[Literal["snapshot", "refresh", "off"], cyclopts.Parameter(name=["--registry"])] = "snapshot",
+    strict: Annotated[bool, cyclopts.Parameter(name=["--strict"])] = False,
+    limit: Annotated[int, cyclopts.Parameter(name=["--limit"])] = 20,
+) -> None:
+    """Validate emitted infores CURIEs against the NCATS Translator registry.
+
+    Every knowledge-source identifier the build emits -- edge ``primary_knowledge_source``,
+    ``sources[].resource_id`` and ``sources[].upstream_resource_ids``, node ``provided_by``,
+    and, with ``--rig``, the RIG document's infores values -- is classified against
+    ``biolink/information-resource-registry``'s ``infores_catalog.yaml`` (vendored as the
+    bundled snapshot, so the default path is offline). Values without the ``infores:``
+    prefix are malformed, not unregistered.
+
+    The default posture is advisory: unregistered CURIEs are reported and the command
+    exits 0, because Tablassert legitimately mints graph-local CURIEs that will never sit
+    in the registry. ``--strict`` (CI gates) exits 1 when any unregistered CURIE remains;
+    allowlist legitimate local ids with repeatable ``--allow-infores``. Missing input
+    files fail in every mode: a typo'd path must never read as a clean bill of health.
+
+    Args:
+        nodes: Path to the built nodes NDJSON file (``<name>_<version>.nodes.ndjson``).
+        edges: Path to the built edges NDJSON file (``<name>_<version>.edges.ndjson``).
+        rig: Optional RIG yaml (``<name>_<version>.RIG.yaml``); its infores values are
+            classified too.
+        allow-infores: Registry-exempt CURIE, repeatable; use for the locally-minted
+            graph identifier (``rig.infores()``) and other deliberate locals.
+        registry: Registry source. ``snapshot`` (default) validates offline against the
+            bundled copy; ``refresh`` fetches the live upstream catalog (network) and
+            caches it under the user cache dir; ``off`` skips membership classification
+            and reports structure only.
+        strict: Exit non-zero when any unregistered CURIE remains. Without it the run
+            is advisory and always exits 0 once inputs exist.
+        limit: Maximum number of example unregistered/malformed CURIEs retained for the
+            ``e.g.`` report lines; every observation is still classified regardless.
+    """
+    from tablassert.infores_registry import REGISTRY_RAW_URL, refresh_registry, validate_infores
+
+    ids: frozenset[str] | None = None
+    if registry == "refresh":
+        ids = refresh_registry()
+    report: dict[str, Any] = validate_infores(
+        nodes, edges, rig_path=rig, allow=tuple(allow_infores or ()), registry=ids, check_registry=registry != "off", limit=limit
+    )
+    if ids is not None:
+        report["registry"]["source"] = f"{REGISTRY_RAW_URL} (refreshed)"
+    for label, absent in report["missing"].items():
+        if absent:
+            path_label = {"nodes": nodes, "edges": edges, "rig": rig}.get(label)
+            print(f"{label}: file not found ({path_label})", file=sys.stderr)
+    if any(report["missing"].values()):
+        print("infores validation failed: missing input files.", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"registry: {report['registry']['source']} ({report['registry']['entries']} entries)", file=sys.stderr)
+    counts: str = (
+        f"curies: {report['registered']} registered, {report['allowed']} allowed, "
+        f"{report['unregistered']} unregistered, {report['malformed']} malformed"
+    )
+    print(counts, file=sys.stderr)
+    logger.info(f"validate-infores: {counts}")
+    for example in report["examples"][:3]:
+        print(f"  e.g. {example['curie']} ({example['where']}.{example['field']}): {example['problem']}", file=sys.stderr)
+    clean: bool = not report["unregistered"] and not report["malformed"]
+    passed: str = "infores membership check skipped (--registry off)." if registry == "off" else "All emitted infores CURIEs are registered."
+    if strict:
+        if report["ok_strict"]:
+            print(passed if clean else "infores validation passed (strict).", file=sys.stderr)
+            return
+        print("infores validation failed (strict): unregistered CURIEs remain.", file=sys.stderr)
+        raise SystemExit(1)
+    if not clean:
+        print("infores warnings present; pass --strict to fail on them.", file=sys.stderr)
+        return
+    print(passed, file=sys.stderr)
+
+
 @APP.command(name="quick-map")
 def quick_map_command(
     # negative="" suppresses cyclopts' auto-generated --empty-terms help row: the reset
