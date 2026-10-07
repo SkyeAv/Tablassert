@@ -1,0 +1,703 @@
+# Vendored from https://raw.githubusercontent.com/biolink/resource-ingest-guide-schema/f870823cfde8/src/resource_ingest_guide_schema/schema/resource_ingest_guide_schema.yaml
+# Upstream commit: f870823cfde8 (2026-07-09T15:22:11Z). Vendored 2026-10-07.
+# Refresh: the network-marked staleness test in tests/test_rig_schema_drift.py refetches and compares.
+---
+id: https://w3id.org/biolink/resource-ingest-guide-schema
+name: reference_ingest_guide
+title: Reference Ingest Guide Schema
+description: >-
+  A schema for describing the scope, rationale, and modeling approach for ingesting content from an external resource to
+  a data repository compliant with the Biolink Model.
+license: MIT
+prefixes:
+  linkml: https://w3id.org/linkml/
+  biolink: https://w3id.org/biolink/vocab/
+default_prefix: biolink
+default_range: string
+see_also:
+  - https://biolink.github.io/resource-ingest-guide-schema
+
+imports:
+  - linkml:types
+
+classes:
+  ReferenceIngestGuide:
+      description: >-
+        A container that holds attributes for the discrete sections of information comprising
+        a Resource Ingest Guide.
+      attributes:
+        name:
+          description: A human readable name for the RIG.
+          range: string
+        supporting_data_source_info:
+          description: >-
+             Information about upstream sources of data that are used by an ingested source, to derive the knowledge that we ingest.
+          comments: >-
+             This slot is optional, and can be omitted for typical ingest of an external knowledge source - as it is mainly relevant for describing "ingest" of
+             data-derived KPs like ICEES, COHD, various Multiomics KPs, etc.
+          range: SupportingDataSourceInformation
+          multivalued: true
+        source_info:
+          description: >-
+            Information about the source from which content is ingested.
+          range: SourceInformation
+          required: true
+        ingest_info:
+          description: >-
+            Information about the rationale and scope of an ingest, including what source
+            content was included and excluded from the ingest, and what additional content
+            might be considered in future iterations.
+          range: IngestInformation
+          required: true
+        target_info:
+          description: >-
+            Information about the dataset / knowledge graph output by the ingest, 
+            including what types of edges and nodes were produced, modeling rationale, 
+            and what modeling changes might be considered in future iterations.
+          range: TargetInformation
+          required: true
+        provenance_info:
+          description: >-
+            Information about the provenance of the ingest, including who contributed and how,
+            and links to external provenance-related artifacts (e.g. Github tickets, ingest
+            surveys, etc.)
+          range: ProvenanceInformation
+
+  SupportingDataSourceInformation:
+      description: >-
+        A container for information about upstream sources of data that are used by an ingested source, to derive the knowledge that we ingest.
+        This info is not relevant for typical ingest of an external knowledge source, and applies mainly for describing "ingest" of data-derived
+        KPs like ICEES, COHD, various Multiomics KPs, etc.
+      attributes:
+        infores_id:
+          description: >-
+            The infores identifier of the source from which content is being ingested,
+            e.g. "infores:ctd".
+          range: uriorcurie
+          required: true
+        name:
+          description: >-
+            A human-readable name for the source of supporting data, e.g. "Aggregate Analysis of ClinicalTrial.gov (AACT)"
+          range: string
+        description:
+          description: >-
+            A brief description of the source, including its purpose, scope, and any relevant background information.
+          range: string
+        terms_of_use_info:
+          description: >-
+            Information about conditions for use of the ingested source. May include the
+            name of a community license (e.g. `CC-BY 4.0`), a link to a "terms of use"
+            or license information web page (e.g. `https://ctdbase.org/about/legal.jsp`), and/or
+            a free-text summary of key terms of use.
+          range: TermsOfUseInformation
+          required: true
+        relevant_files:
+          description: >-
+            A description of each source file (or API endpoint, database, or table) that contains
+            data used to create the ingested knowledge. Source files that contain data not used to created
+            knowledge need not be listed or described.
+          range: RelevantFiles
+          multivalued: true
+          required: true
+        
+  SourceInformation:
+      description: A container for capturing information about the source of the ingest.
+      attributes:
+        infores_id:
+          description: >-
+            The infores identifier of the source from which content is being ingested,
+            e.g. "infores:ctd".
+          range: uriorcurie
+          required: true
+        name:
+          description: A human readable name for the source
+          range: string
+        description:
+          description: >-
+            A brief description of the source, including its purpose, scope, and any
+            relevant background information.
+          range: string
+        citations:
+          description: >-
+            One ore more citations to publications describing the source. May be a identifier
+            (e.g a pmid or doi), a url to the published document, or a free-text citation.
+          range: string
+          multivalued: true
+        terms_of_use_info:
+          description: >-
+            Information about conditions for use of the ingested source. May include the
+            name of a community license (e.g. `CC-BY 4.0`), a link to a "terms of use"
+            or license information web page (e.g. `https://ctdbase.org/about/legal.jsp`), and/or
+            a free-text summary of key terms of use.
+          range: TermsOfUseInformation
+          required: true
+        data_access_locations:
+          description: >-
+            Where the source data that is being ingested can be accessed. Provide one or more URLs, 
+            along with optional descriptions of what each URL provides.
+          range: string
+          multivalued: true
+          required: true
+        data_provision_mechanisms:
+          description: >-
+            How the source distributes their data (file download, API endpoints, database dump).
+          range: ProvisionMechanismEnum
+          multivalued: true
+        data_formats:
+          description: >-
+            The format(s) in which the data is serialized for retrieval and use.
+          range: DataFormatEnum
+          multivalued: true
+        data_versioning_and_releases:
+          description: >-
+            A description of how releases are versioned and managed by the source (e.g. general
+            approach, frequency, other important considerations). May also include links to web pages
+            describing such information.
+          range: string
+          multivalued: false
+        source_status:
+          description: >-
+            A term indicating the development status of the data provided by resource.
+          range: SourceStatusEnum
+        additional_notes:
+          description: >-
+            Additional notes, considerations, or resources relevant to the source, that were not
+            otherwise captured in dedicated attributes.
+          range: string
+          multivalued: true
+          
+  TermsOfUseInformation:
+    description: >-
+      A structured representation describing terms for re-use of data from an information resource.
+    attributes:
+      terms_of_use_url: 
+        description: >-
+          The url of a document or web page where a source describes its terms of use, and/or
+          references a community license that it adopts. (e.g. "https://ctdbase.org/about/legal.jsp")
+        range: uriorcurie
+      terms_of_use_description:
+        description: >-
+          A free text description of the terms of use for a source. 
+          (e.g. "Source only indicates 'all rights reserved' in their documentation")
+        range: string      
+      license_name: 
+        description: >-
+           The name of an established license used by the source (e.g. "CC BY 4.0")
+        range: string
+      license_url: 
+        description: >-
+          The url of an established license (e.g. "https://creativecommons.org/licenses/by/4.0/")
+        range: uriorcurie
+
+  IngestInformation:
+      description: >-
+        A container for capturing information about the rationale and scope of an ingest,
+        including what source content was included and excluded from the ingest, and what
+        additional content might be considered in future iterations.
+      attributes:
+        ingest_categories:
+          description: >- 
+            A term or terms indicating the type of source being ingested, from the perspective
+            of the ingesting system (e.g. primary knowledge provider, supporting data provider,
+            ontology/terminology provider).
+          range: IngestCategoryEnum
+          multivalued: true
+        utility:
+          description: >-
+            Brief description of why the source was ingested, and the utility of the data
+            it provides for target system use cases.
+          range: string
+          required: true
+        scope:
+          description: >-
+            A short, high-level narrative describing of the types of knowledge form the source that
+            are included and excluded in this ingest.
+          range: string
+        relevant_files:
+          description: >-
+            A description of each source file (or API endpoint, database, or table) that contains
+            content in scope for the ingest. Source files containing content which is not retrieved 
+            in this ingest need not be listed or described.
+          range: RelevantFiles
+          multivalued: true
+          required: true
+        included_content:
+          description: >-
+            A description of what types of records from relevant files/endpoints/tables above are
+            included in this ingest, and optionally a list of fields from these records that are part
+            of the ingest or used to inform it.
+          range: IncludedContent
+          multivalued: true
+        filtered_content:
+          description: >-
+           A description of what types of records from each relevant file are not included in the
+           ingest, and the rationale for any filtering rules or exclusion criteria. Only list a file
+           if some but not all records it contains are included in the ingest - to document what subset
+           was excluded, and why.
+          range: FilteredContent
+          multivalued: true
+        future_considerations:
+          description: >-
+            Notes about content additions or changes to consider in future iterations of this ingest.
+            Separately consider content that will be represented as Edges vs Node Properties vs Edge
+            Properties in the target knowledge graph.
+          range: FutureContentConsiderations
+          multivalued: true
+        additional_notes:
+          description: >-
+            Additional notes, considerations or resources relevant to source content ingest, that were not
+            otherwise captured in dedicated attributes.
+          range: string
+          multivalued: true
+
+  RelevantFiles:
+      description: >-
+        A structure for describing each source file (or API endpoint, database, or table) that contains
+        content in scope for the ingest. Source files containing which content is not retrieved 
+        in this ingest need not be listed or described.
+      attributes:
+        file_name:
+          description: The name of the relevant file (or endpoint, or table).
+          range: string
+          required: true
+        location:
+          description: The URL of a web page or ftp site where the indicated file (or endpoint or table) was accessed.
+          range: uriorcurie
+          required: true
+        description:
+          description: An optional brief description of the content and/or utility of the file (or endpoint or table)
+          range: string
+
+  IncludedContent:
+      description: >-
+        A structure for describing the types of records from relevant files/endpoints/tables are
+        included in this ingest, and optionally a list of fields from these records that are part
+        of the ingest or used to inform it.
+      attributes:
+        file_name:
+          description: The name of the relevant file (or endpoint, or table) from which content is included.
+          range: string
+          required: true
+        included_records:
+          description: A description of the types of records that are included in the ingest.
+          range: string
+          required: true
+        fields_used:
+          description: Optional list of the specific source fields that are part of or inform the ingest.
+          range: string
+
+  FilteredContent:
+      description: >-
+        A structure for describing the types of records from each relevant file/endpoint/table not included
+        in the ingest, and the rationale for any filtering rules or exclusion criteria. Only list a file
+        if some but not all records it contains are included in the ingest - to document what subset was excluded,
+        and why.
+      attributes:
+        file_name:
+          description: The name of the relevant file (or endpoint, or table) form which content was filtered.
+          range: string
+          required: true
+        filtered_records:
+          description: A description of what types of records were excluded from the ingest, in terms of filtering
+            rules or exclusion criteria.
+          range: string
+          required: true
+        rationale:
+          description: The rationale for excluding the indicated content (why this subset of records was filtered out).
+          range: string
+          required: true
+
+  FutureContentConsiderations:
+      description: >-
+        A structure for collecting notes about content additions or changes to consider in future iterations
+        of this ingest. Create separate objects for each distinct consideration, and indicate if it relates to 
+        content that will be captured as Edges, Node Properties, or Edge Properties in the target knowledge graph.
+      attributes:
+        category:
+          description: >- 
+            The category of content described by a given consideration, based on how the content
+            will be represented in the target graph (e.g. "Edges", 'Node Properties", 
+            "Edge Properties").
+          range: ContentCategoryEnum
+          required: true
+        consideration:
+          description: A description of what additional content should be considered and why.
+          range: string
+          required: true
+        relevant_files:
+          description: A list of the relevant source file or files that provide the considered content.
+          range: string
+
+  TargetInformation:
+      description: >-
+        A structure for capturing information about the target dataset / knowledge graph
+        output by the ingest, including what types of edges and nodes were produced,
+        modeling rationale, and what modeling changes might be considered in future iterations.
+      attributes:
+        infores_id:
+          description: >-
+            An infores identifier assigned to the target resource that will be created from the
+            ingested content. e.g. "infores:translator-ctd".
+          range: uriorcurie
+        edge_type_info:
+          description: >-
+            A description of each type of edge (metaedge) created in the target knowledge graph by this ingest,
+            including what types of edge properties it holds, and a brief explanation of why this modeling pattern
+            was deemed appropriate to represent the source data (to be displayed for end users in a UI system).
+          range: EdgeType
+          required: true
+          multivalued: true
+        node_type_info:
+          description: >-
+            A description of each type of node created in the target knowledge graph by this ingest, in terms of
+            the high-level Biolink categories of nodes as assumed or assigned by ingestors. 
+            Note however that downstream normalization of node identifiers may result in new/different categories
+            ultimately being assigned in the final graph.
+          range: NodeType
+          required: true
+          multivalued: true
+        future_considerations:
+          description: >-
+            Notes about mapping/modeling changes to consider in future iterations of this ingest.
+          range: FutureModelingConsiderations
+          multivalued: true
+        additional_notes:
+          description:
+            Additional notes, considerations or resources relevant to mapping or modeling source data
+            to the target model, that were not otherwise captured in dedicated attributes.
+          range: string
+          multivalued: true
+
+  EdgeType:
+      description: >-
+        A structure for describing each type of edge (metaedge) created in the target knowledge graph by this ingest,
+        including what types of edge properties it holds, and a brief explanation of why this modeling pattern
+        was deemed appropriate to represent the source data (for display to end users in a UI system). Note that an edge type
+        with multiple subject_category and object_category values does not mean that the full cross-product must be instantiated
+        in the data. e.g. A KG with the edge type sub_cat: [Gene, Protein, Small Molecule], predicate: affects, obj_cat: [disease,
+        phenotype, symptom] might include  Protein-affects-Disease and Gene-affects-Symptom edges, but not include any 
+        Protein-affects-Symptom edges.
+      attributes:
+        subject_categories:
+          description: >-
+            The Biolink category of the subject node of this edge type. e.g. "biolink:SmallMolecule".
+            If two edge types differ only in their subject category, but use the same predicate, object_category, 
+            edge properties, and general provenance, they can be described together in a single NodeType object
+            that captures the alternative subject categories. e.g. if a source provides SmallMolecule-treats-Disease and 
+            MolecularMixture-treats-Disease edge types, these can be described in a single EdgeType object with two
+            subject categories (SmallMolecule and MolecularMixture).
+          range: uriorcurie
+          multivalued: true
+          required: true
+        predicates:
+          description: >-
+            Biolink predicate(s) that defines this type of edge. Multiple values allowed ONLY if they are a predicate
+            and one or more of its descendent predicates (e.g. ["biolink:affects", "biolink:regulates", "biolink:disrupts"]. Otherwise, 
+            separate EdgeType objects should be created for each predicate. 
+          range: uriorcurie
+          multivalued: true
+          required: true
+        object_categories:
+          description: >-
+            The Biolink category of the object node of this edge type. e.g. "biolink:Disease".
+            If two edge types differ only in their object category, but use the same predicate, subject_category, 
+            edge properties, and general provenance, they can be described together in a single NodeType object
+            that captures the alternative object categories. e.g. if a source provides Gene-associated_with-Disease and 
+            Gene-associated_with-PhenotypicFeature edge types, these can be described in a single EdgeType object with two
+            subject categories (Disease and PhenotypicFeature)
+          range: uriorcurie
+          required: true
+          multivalued: true
+        qualifiers:
+          description: >-
+            If relevant, report any qualifiers applied to the edge type, as a Qualifier object that contains a 
+            qualifier_property and qualifier_range pair. e.g. the property "biolink:subject_aspect_qualifier",
+            and range  "biolink:GeneOrGeneProductOrChemicalEntityAspectEnum
+          range: Qualifier
+          multivalued: true
+        knowledge_level:
+          description: >-
+            The knowledge level (or levels) relevant to this type of edge. Multivalued only if instances of this type of edge
+            can have different knowledge levels in the data.
+          range: KnowledgeLevelEnum
+          multivalued: true
+          required: true
+        agent_type:
+          description: >-
+            The agent type (or types) relevant to this type of edge. Multivalued only if instances of this type of edge
+            can have different agent types in the data.
+          range: AgentTypeEnum
+          multivalued: true
+          required: true
+        primary_knowledge_sources:
+          description: >-
+            The infores id(s) of the 'primary knowledge sources' for this type of edge. Note that only one primary knowledge source
+            is allowed per edge, but there may be more than one possible value here across edges for a given type (e.g. see the
+            infores:diseases RIG/data)
+          range: uriorcurie
+          multivalued: true          
+          required: true
+        supporting_data_sources:
+          description: >-
+            The infores id(s) of any 'supporting data sources' for this type of edge.
+          range: uriorcurie
+          multivalued: true
+        aggregator_knowledge_sources:
+          description: >-
+            The infores id(s) of any 'aggregator_knowledge sources' for this type of edge. 
+          range: uriorcurie
+          multivalued: true
+        edge_properties:
+          description: A list of one or more Biolink edge properties used in instances of this edge type in the data.
+          range: uriorcurie
+          multivalued: true
+        ui_explanation:
+          description: >-
+            An explanation of how the source data for an edge of a particular type was generated (as rationale for why
+            the knowledge level, agent type, and knowledge source choices for this edge type were made), along with an explanation
+            for how/why the source data record for a particular edge was transformed into a its current Biolink edge-based representation.
+            Note that this text will be displayed in the UI to explain the provenance of a specific edge, and should be framed accordingly.
+          range: string               
+          required: true
+        source_files: 
+          description: >-
+            The source file or files that provided data included in or informing edges of this type. Will usually be a single file. Multivalued
+            because some edges are based on data that come form more than one file. If the data is ingested from a database instance or API endpoint,
+            provide analogous information here (e.g. the name of an specific API endpoint, a database access url, or a set of tables in a database schema). 
+          range: string
+          multivalued: true
+        additional_notes:
+          description: >-
+            Additional notes, considerations, or explanations of modeling patterns used for this edge type, that were
+            not otherwise captured in dedicated fields.
+          range: string
+          multivalued: true
+
+  Qualifier:
+      description: >-
+        A qualifier property + value tuple that specifies a type of qualifier and value that may be applied to a Statement.
+        Qualified predicates are considered qualifiers and captured here as well. Values can be specified to come from a
+        proper range (e.g. Biolink class, data type, or enum), come from an enumerated list, use a specific id prefix,
+        and/or conform informally to a free-text description. 
+      attributes:
+        property:
+          description: >-
+            The Biolink qualifier slot that defines the kind of Qualifier specified,
+            e.g. "biolink:subject_aspect_qualifier", "qualified_predicate".
+          range: uriorcurie
+          required: true
+        value_range:
+          description: >-
+            The Biolink class(es) or type(s) that specifies the kind of value the qualifier property takes,
+            Reported as the name of a Biolink class, enumeration, or data type, as appropriate. 
+            e.g. "biolink:Disease", "biolink:GeneOrGeneProductOrChemicalEntityAspectEnum", "biolink:string"
+          range: uriorcurie
+          multivalued: true
+        value_enumeration:
+          description: >-
+            A set of one or more specific values for the qualifier in an Edge type (e.g. ["biolink:causes"] as the only
+            value for the "biolink:qualified_predicate" qualifier property, ["activity_or_abundance", "activity", "abundance"] 
+            as the values for the "biolink:object_aspect_qualifier" property). 
+          range: string
+          multivalued: true
+        value_id_prefixes:
+          description: >-
+            One or more id prefixes from which the qualifier value must come. e.g. "HP" if the qualifier must be a
+            Human Phenotype Ontology term. 
+          range: string
+          multivalued: true
+        value_description: 
+          description: >-
+            A free text description of the types of value allowed for the qualifier.
+          range: string
+  NodeType:
+      description: >-
+        A structured object describing each type of node created in the target knowledge graph by this ingest.
+      attributes:
+        node_category:
+          description: >- 
+            The high-level Biolink category of nodes as assumed or assigned by ingestors. e.g. "biolink:Gene".
+            Note that downstream normalization of node identifiers may result in new/different categories
+            ultimately being assigned in the final graph.
+          range: uriorcurie
+          required: true
+        source_identifier_types:
+          description: >- 
+            The type of identifier(s) used for this category of entity by the source system. Report as a prefix
+            for an identifier system where appropriate/possible (preferably a prefix as cataloged in the Biolink
+            prefix map here: https://github.com/biolink/biolink-model/blob/master/project/prefixmap/biolink-model-prefix-map.json).
+            e.g. "MESH", "CTD", "ECTO". If prefix for a public system/database is not in the prefix map, you may make a PR to add it. 
+            If the identifiers used are bespoke, or no identifiers are used, the value can be a free text description.
+            e.g. "The source uses entity names but does not assign identifiers".
+          range: string
+          multivalued: true
+          required: true
+        node_properties:
+          description: A list of one or more Biolink node properties used in instances of this node type in the data.
+          range: uriorcurie
+          multivalued: true
+        additional_notes:
+          description: >-
+            Additional notes, considerations, or explanations concerning this node type, that were not otherwise
+            captured in dedicated attributes.
+          range: string
+          multivalued: true
+          
+  FutureModelingConsiderations:
+      description: >-
+        A structure for collecting discrete considerations about modeling changes to consider in future iterations
+        of this ingest. Create and categorize separate objects for each distinct consideration.
+      attributes:
+        category:
+          description: >-
+            An optional general category for the modeling consideration (e.g. "spoq_pattern", "edge_properties")
+          range: ModelingCategoryEnum
+        consideration:
+          description: A description of the modeling changes to consider, and why.
+          range: string
+          required: true
+
+  ProvenanceInformation:
+      description: >-
+        A container holding information about the provenance of the ingest, including who
+        contributed and how, and links to external provenance artifacts.
+      attributes:
+        contributions:
+          description: >-
+            The name of a person making a contribution, and the type of contribution made.
+            e.g. "code author", "code support", "data modeling", "domain expertise".
+          multivalued: true
+          range: string
+        artifacts:
+          description: >-
+            Links to and descriptions of external artifacts related to the provenance of the ingest, such as
+            Github issues, surveys of prior ingests of the source, etc.
+          multivalued: true
+          range: string
+
+enums:
+  ProvisionMechanismEnum:
+    description: Ways in which data can be made accessible for retrieval.
+    permissible_values:
+      file_download:
+      api_endpoint:
+      database_dump:
+      other:
+
+  SourceStatusEnum:
+    description: >-
+      A term indicating the development status of a resource. 
+    permissible_values:
+      maintained_regular_updates:
+        description: the resource's data is being actively maintained and updated on a regular or recurring schedule
+      maintained_as_needed_updates:
+        description: the resource's data is not being actively maintained and updated on a regular or recurring schedule
+      not_maintained:
+        description: the resource's data is not being actively maintained, and not subject to updates.
+      unknown:
+        description: status of the source w.r.t. its maintenance and updates is not able to be determined.
+
+  DataFormatEnum:
+    description: Formats in which data is serialized.
+    permissible_values:
+      tsv:
+      xml:
+      csv:
+      json:
+      yaml:
+      obo:
+      protobuff:
+      kgx:
+      mysql:
+      postgresql:
+      sqlite:
+      other:
+
+  ContentCategoryEnum:
+    description: Categories of content for future considerations
+    permissible_values:
+      edge_content:
+      node_property_content:
+      edge_property_content:
+      other:
+
+  KnowledgeLevelEnum:
+    exact_mappings:
+      - biolink:KnowledgeLevelEnum
+    description: Knowledge levels relevant to edges of a particular type.
+    permissible_values:
+      knowledge_assertion:
+      logical_entailment:
+      prediction:
+      statistical_association:
+      observation:
+      not_provided:
+      varies:
+
+  AgentTypeEnum:
+    exact_mappings:
+      - biolink:AgentTypeEnum
+    description: Agent types relevant to edges of a particular type.
+    permissible_values:
+      manual_agent:
+      automated_agent:
+      computational_model:
+      data_analysis_pipeline:
+      text_mining_agent:
+      image_processing_agent:
+      manual_validation_of_automated_agent:
+      experimental_agent:
+      not_provided:
+      varies:
+
+
+  ModelingCategoryEnum:
+    description: >-
+      Categories of future modeling considerations (what type of modeling the 
+      consideration is about).
+    permissible_values:
+      spoq_pattern:
+      predicates:
+      qualifiers:
+      edge_properties:
+      node_properties:
+      other:
+
+  IngestCategoryEnum:
+    description: >- 
+      The type of source being ingested, from the perspective of the ingesting system.
+    permissible_values:
+      primary_knowledge_provider:
+        description: >- 
+          Provides knowledge that is curated/created/mined by the source (e.g. via 
+          literature curation/interpretation, analysis of datasets, inference over evidence)
+      aggregation_provider:
+        description: >-
+          Aggregates knowledge from external sources and provides as is - with 
+          minimal alteration/interpretation of what the primary source reported. 
+          (e.g. Monarch, Diseases, Pharos)
+      aggregation_interpreter:
+        description: >- 
+          Aggregates knowledge and assesses/interprets it as evidence to draw and report its 
+          own conclusion (e.g. DGIdb, DisGenNet)
+      supporting_data_provider:
+        description: >- 
+          Provides information (data or prior facts) that is subsequently analyzed/ interpreted 
+          by a Translator tool to derive new knowledge (e.g. TCGA, GTex, Carolina Data Warehouse)
+      translator_knowledge_creator:
+        description: >- 
+          A Translator tool that generates de novo knowledge from statistical 
+          analysis, interpretation, or reasoning with more foundational data/ or facts 
+          (e.g. ICEES, COHD, Multiomics Wellness, BigGIM)
+      ontology_provider:
+        description: >- 
+          An ontology or terminology artifact providing concept identifiers, 
+          definitions, mappings, hierarchical relationships that are ingested into Translator KGs
+      node_property_only_provider:
+        description: >- 
+          Provides only information that is used to annotate nodes of a particular kind in 
+          Translator graphs.
+      other:
+        description: >-
+          Used when the information provided by a source is not known, or does not fit into 
+          the defined categories above
