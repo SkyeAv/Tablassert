@@ -415,18 +415,18 @@ def test_class_field_overrides_track_the_installed_model() -> None:
     philosophy as the ``UNSATISFIABLE_EDGE_FIELDS`` derivation guard). A field the
     family allow-list would strip anyway must never be granted. The biolink-model
     4.4.5 mixin consolidation (plus the ``regulatory_approvals`` rename and the
-    phenotypic-feature ``sex_qualifier`` attachment) fired exactly this tripwire for
-    the original seven-field grant stack; the remaining grants are DAKP's sparse
-    qualifier slots still absent from the pinned classes
-    (``population_context_qualifier`` / ``temporal_context_qualifier`` on both, and
-    ``sex_qualifier`` on the disease side only). Deliberately excluded from the
-    grants: ``species_context_qualifier`` (disabled) plus
-    ``temporal_interval_qualifier`` and ``severity_qualifier`` (unsatisfiable -- a
-    grant could never validate).
+    phenotypic-feature ``sex_qualifier`` attachment) and the 4.4.6
+    ``population_context_qualifier`` attachment to both pinned classes fired exactly
+    this tripwire for the original eight-field grant stack; the remaining grants are
+    DAKP's sparse qualifier slots still absent from the pinned classes
+    (``temporal_context_qualifier`` on both, and ``sex_qualifier`` on the disease
+    side only). Deliberately excluded from the grants: ``species_context_qualifier``
+    (disabled) plus ``temporal_interval_qualifier`` and ``severity_qualifier``
+    (unsatisfiable -- a grant could never validate).
     """
     assert {
-        "EntityToDiseaseAssociation": frozenset({"population_context_qualifier", "sex_qualifier", "temporal_context_qualifier"}),
-        "EntityToPhenotypicFeatureAssociation": frozenset({"population_context_qualifier", "temporal_context_qualifier"}),
+        "EntityToDiseaseAssociation": frozenset({"sex_qualifier", "temporal_context_qualifier"}),
+        "EntityToPhenotypicFeatureAssociation": frozenset({"temporal_context_qualifier"}),
     } == CLASS_FIELD_OVERRIDES
     for class_name, fields in CLASS_FIELD_OVERRIDES.items():
         cls: type[Any] = association_class(f"biolink:{class_name}")
@@ -442,9 +442,10 @@ def test_validate_record_tolerates_class_field_override_grants() -> None:
     The grant is a deliberate, class-scoped step ahead of the pinned model, so its
     ``extra_forbidden`` must not surface on either intended target -- while the same
     field on an ungranted class stays a real defect through the installed-model boundary.
-    ``population_context_qualifier`` is the probe because it is still granted on both
-    targets: ``regulatory_approvals`` was absorbed by the model itself in 4.4.5, so a
-    probe on it would pass natively and exercise nothing.
+    ``temporal_context_qualifier`` is the probe because it is still granted on both
+    targets: ``regulatory_approvals`` and ``population_context_qualifier`` were
+    absorbed by the model itself (in 4.4.5 and 4.4.6), so a probe on either would
+    pass natively and exercise nothing.
     """
     base: dict[str, Any] = {
         "id": "e1",
@@ -453,13 +454,16 @@ def test_validate_record_tolerates_class_field_override_grants() -> None:
         "object": "MONDO:0005148",
         "knowledge_level": "statistical_association",
         "agent_type": "data_analysis_pipeline",
+        "temporal_context_qualifier": "TIME:1",
+        # 4.4.6 attached population_context_qualifier to the whole family: native on
+        # both granted targets AND the control, so it cannot serve as a rejection probe.
         "population_context_qualifier": "NCIT:C25667",
     }
     for category in ("EntityToDiseaseAssociation", "EntityToPhenotypicFeatureAssociation"):
         record: dict[str, Any] = {**base, "category": [f"biolink:{category}"]}
         assert validate_record(record, edge=True) == []
     control: dict[str, Any] = {**base, "category": ["biolink:GeneToDiseaseAssociation"]}
-    assert "population_context_qualifier: extra_forbidden" in validate_record(control, edge=True)
+    assert "temporal_context_qualifier: extra_forbidden" in validate_record(control, edge=True)
     unknown: dict[str, Any] = {**base, "category": ["biolink:EntityToDiseaseAssociation"], "not_a_biolink_field": "x"}
     assert "not_a_biolink_field: extra_forbidden" in validate_record(unknown, edge=True)
 

@@ -1995,15 +1995,16 @@ def test_prune_to_class_keeps_class_field_override_grants() -> None:
 
     DAKP's sparse qualifier stack rides the pinned ``EntityToDiseaseAssociation`` /
     ``EntityToPhenotypicFeatureAssociation`` rows through ``prune_to_class`` via the
-    grants: ``population_context_qualifier`` / ``temporal_context_qualifier`` (both
-    classes) and ``sex_qualifier`` (disease side only) are kept even though the
-    installed model does not declare them there. ``regulatory_approvals`` needs no
-    grant anymore -- biolink-model 4.4.5 attached it natively to the two pinned
-    classes -- but the ungranted control class still prunes it, alongside the
-    still-granted qualifiers. The qualifiers the 4.4.5 mixin consolidation attached
-    to the whole disease/phenotype family (``disease_context_qualifier``,
-    ``anatomical_context_qualifier``, ``frequency_qualifier``) survive on every row
-    including the control.
+    grants: ``temporal_context_qualifier`` (both classes) and ``sex_qualifier``
+    (disease side only) are kept even though the installed model does not declare
+    them there. ``regulatory_approvals`` (biolink-model 4.4.5) needs no grant
+    anymore on the two pinned classes, but the ungranted control class still
+    prunes it, alongside the still-granted qualifiers; and biolink-model 4.4.6
+    attached ``population_context_qualifier`` to the whole disease/phenotype
+    family, so it survives on every row including the control. The qualifiers the
+    4.4.5 mixin consolidation attached to the family (``disease_context_qualifier``,
+    ``anatomical_context_qualifier``, ``frequency_qualifier``) also survive on
+    every row.
     """
     from tablassert.lib import PRUNED_COLUMN, prune_to_class
 
@@ -2029,10 +2030,14 @@ def test_prune_to_class_keeps_class_field_override_grants() -> None:
     assert out["anatomical_context_qualifier"].to_list() == [["UBERON:0001557"]] * 3
     assert out["frequency_qualifier"].to_list() == ["HP:0012823"] * 3
     assert out["regulatory_approvals"].to_list() == [["FDA:1"], None, ["FDA:3"]]
-    for col in ("sex_qualifier", "population_context_qualifier", "temporal_context_qualifier"):
+    # 4.4.6 attached population_context_qualifier to the whole disease/phenotype
+    # family (not just the two pinned classes): kept natively on the ungranted
+    # control row too.
+    assert out["population_context_qualifier"].to_list() == ["NCIT:C25667"] * 3
+    for col in ("sex_qualifier", "temporal_context_qualifier"):
         assert out[col].to_list() == [out[col].to_list()[0], None, out[col].to_list()[2]], col
     pruned_second: list[str] = out[PRUNED_COLUMN].to_list()[1]
-    for col in ("regulatory_approvals", "sex_qualifier", "population_context_qualifier", "temporal_context_qualifier"):
+    for col in ("sex_qualifier", "temporal_context_qualifier"):
         assert any(entry.startswith(f"{col}=") for entry in pruned_second), col
     assert out[PRUNED_COLUMN].to_list()[0] == []
     assert out[PRUNED_COLUMN].to_list()[2] == []

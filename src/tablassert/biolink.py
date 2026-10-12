@@ -593,8 +593,12 @@ release from making ``species_context_qualifier`` silently emittable again.
 
 
 CLASS_FIELD_OVERRIDES: dict[str, frozenset[str]] = {
-    "EntityToDiseaseAssociation": frozenset({"population_context_qualifier", "sex_qualifier", "temporal_context_qualifier"}),
-    "EntityToPhenotypicFeatureAssociation": frozenset({"population_context_qualifier", "temporal_context_qualifier"}),
+    # Absorbed by biolink-model 4.4.6 (now declared natively on both pinned classes,
+    # removed by the tripwire; kept here commented as the pattern for future grants):
+    # "EntityToDiseaseAssociation": frozenset({"population_context_qualifier", "sex_qualifier", "temporal_context_qualifier"}),
+    # "EntityToPhenotypicFeatureAssociation": frozenset({"population_context_qualifier", "temporal_context_qualifier"}),
+    "EntityToDiseaseAssociation": frozenset({"sex_qualifier", "temporal_context_qualifier"}),
+    "EntityToPhenotypicFeatureAssociation": frozenset({"temporal_context_qualifier"}),
 }
 """Per-class grants of edge fields the resolved association class does not declare.
 
@@ -612,11 +616,12 @@ mixin consolidation attached ``disease_context_qualifier``,
 ``anatomical_context_qualifier``, and ``frequency_qualifier`` to the whole
 disease/phenotype family, renamed ``FDA_regulatory_approvals`` to the canonical
 ``regulatory_approvals`` on the pinned classes, and added ``sex_qualifier`` to
-``EntityToPhenotypicFeatureAssociation``); the tripwire removed those grants the day
-the release landed, and the remaining ones stay deliberately ahead of the model
-(pending an upstream Biolink widening). ``_validation_record`` strips granted fields
-before record validation so the deliberate gap is not reported as
-``extra_forbidden``.
+``EntityToPhenotypicFeatureAssociation``; biolink-model 4.4.6 then attached
+``population_context_qualifier`` to both pinned classes, so the tripwire removed
+those grants the day each release landed). The remaining ones stay deliberately
+ahead of the model (pending an upstream Biolink widening).
+``_validation_record`` strips granted fields before record validation so the
+deliberate gap is not reported as ``extra_forbidden``.
 
 A tripwire test asserts every granted field is still absent from its class: the moment
 a biolink-model release attaches the slot, the suite fails and the stale grant is
