@@ -455,6 +455,9 @@ def test_validate_record_tolerates_class_field_override_grants() -> None:
         "knowledge_level": "statistical_association",
         "agent_type": "data_analysis_pipeline",
         "temporal_context_qualifier": "TIME:1",
+        # 4.4.6 attached population_context_qualifier to the whole family: native on
+        # both granted targets AND the control, so it cannot serve as a rejection probe.
+        "population_context_qualifier": "NCIT:C25667",
     }
     for category in ("EntityToDiseaseAssociation", "EntityToPhenotypicFeatureAssociation"):
         record: dict[str, Any] = {**base, "category": [f"biolink:{category}"]}
