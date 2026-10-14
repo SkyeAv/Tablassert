@@ -340,25 +340,6 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../agent/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Agent
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
     
     
       <li class="md-tabs__item">
@@ -859,33 +840,6 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../agent/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Agent
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
     
     
     
@@ -900,10 +854,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -921,8 +875,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_8">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1043,10 +997,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
         
           
-          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
             
   
   
@@ -1064,8 +1018,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1462,7 +1416,7 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p>Install Tablassert's Python API, then add the <code>[cli]</code> extra to use the <code>tablassert</code> command and any of the <code>rt</code> / <code>aria2</code> / <code>qc</code> / <code>agent</code> / <code>optimize</code> / <code>distill</code> / <code>log</code> extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging). The <code>agent</code>, <code>optimize</code>, and <code>distill</code> extras back experimental surfaces: their APIs may change without notice.</p>
+<p>Install Tablassert's Python API, then add the <code>[cli]</code> extra to use the <code>tablassert</code> command and any of the <code>rt</code> / <code>aria2</code> / <code>qc</code> / <code>log</code> extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, or loguru-backed logging).</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Python 3.11 or higher</strong>: Tablassert requires Python 3.11+ for compatibility with modern tooling</li>
@@ -1512,21 +1466,6 @@
 <td><code>scikit-learn</code>, <code>sentence-transformers</code> (<code>torch</code> + <code>numpy</code> arrive transitively; <code>rapidfuzz</code> is a core dependency)</td>
 </tr>
 <tr>
-<td><code>agent</code></td>
-<td>Autonomous PMC -&gt; KG agent (<code>tablassert agent</code>); experimental, API may change</td>
-<td><code>smolagents</code>, <code>litellm</code></td>
-</tr>
-<tr>
-<td><code>optimize</code></td>
-<td>GEPA prompt optimization (<code>tablassert agent --optimize</code>); experimental, API may change</td>
-<td><code>dspy</code></td>
-</tr>
-<tr>
-<td><code>distill</code></td>
-<td>Distillation dataset export (<code>tablassert distill-export</code> -&gt; on-disk Hugging Face dataset); experimental, API may change</td>
-<td><code>datasets&gt;=3.0.0</code></td>
-</tr>
-<tr>
 <td><code>log</code></td>
 <td>loguru-backed file/progress logging (rotation, enqueue)</td>
 <td><code>loguru</code></td>
@@ -1574,21 +1513,6 @@ fails, not a failure report):</p>
 <td>Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass</td>
 </tr>
 <tr>
-<td><code>tablassert agent</code></td>
-<td><code>[agent]</code></td>
-<td>After flag validation, before any model is built or any article fetched</td>
-</tr>
-<tr>
-<td><code>tablassert agent --optimize</code></td>
-<td><code>[agent]</code> + <code>[optimize]</code></td>
-<td>Same point; both are reported at once</td>
-</tr>
-<tr>
-<td><code>tablassert distill-export</code></td>
-<td><code>[distill]</code></td>
-<td>After the recorded-NDJSON input check (an empty <code>--distill-dir</code> is reported first, since that typo is the faster loop to close) and before <code>datasets</code> is imported</td>
-</tr>
-<tr>
 <td><code>build-fullmap</code></td>
 <td><code>[aria2]</code></td>
 <td>Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure)</td>
@@ -1597,10 +1521,7 @@ fails, not a failure report):</p>
 </table>
 <p>A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example
-<code>fullmap_audit()</code> or the agent's lazy <code>dspy</code> import) raise the same message at that point.</p>
-<p>Recording needs no extra beyond <code>[agent]</code> itself: <code>tablassert agent --distill</code> writes ChatML
-NDJSON with zero additional extra dependencies, while only the export step (<code>tablassert
-distill-export</code>) additionally requires the <code>distill</code> extra.</p>
+<code>fullmap_audit()</code>) raise the same message at that point.</p>
 <p>The <code>rt</code> extra is the exception: it installs <code>polars[rtcompat]</code>, which imports as plain <code>polars</code>, so
 it cannot be detected by inspection. It is suggested when polars itself fails to import; the usual
 cause is a CPU that lacks the instructions the default polars wheel requires.</p>
