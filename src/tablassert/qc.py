@@ -22,11 +22,13 @@ from tablassert.utils import BASE
 
 logger = cat("QC")
 
-MODEL: Path = BASE / "sapbert"
+# Cache dir is keyed to the model: swapping HF repos must move the dir, or
+# existing installs would silently keep serving the previous checkpoint.
+MODEL: Path = BASE / "sapbert-babel"
 
 # Pass threshold for the SapBERT cosine-similarity stage. Carried over from the
-# BioBERT gate; SapBERT's UMLS synonym-alignment training shifts true synonym
-# pairs upward, so a tuning pass against real reject logs is the natural follow-up.
+# BioBERT gate; synonym-alignment fine-tuning shifts true synonym pairs upward,
+# so a tuning pass against real reject logs is the natural follow-up.
 SIMILARITY_THRESHOLD: float = 0.5
 FUZZ_RATIO_THRESHOLD: float = 70.0
 FUZZ_PARTIAL_THRESHOLD: float = 80.0
@@ -103,8 +105,8 @@ def get_sapbert() -> object:
     """Lazy-load and memoize the SapBERT sentence-transformer (``functools.cache``).
 
     Loads from the local cache at ``MODEL`` when present; otherwise downloads
-    ``cambridgeltl/SapBERT-from-PubMedBERT-fulltext`` and saves it for future
-    runs.
+    ``RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`` and
+    saves it for future runs.
 
     Returns:
         The memoized ``SentenceTransformer`` instance.
@@ -117,7 +119,7 @@ def get_sapbert() -> object:
             model: object = sentence_transformers.SentenceTransformer(str(MODEL))  # pyright: ignore
         else:
             model = sentence_transformers.SentenceTransformer(  # pyright: ignore
-                "cambridgeltl/SapBERT-from-PubMedBERT-fulltext"
+                "RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23"
             )
             MODEL.mkdir(parents=True, exist_ok=True)
             model.save(MODEL)  # pyright: ignore

@@ -17,7 +17,7 @@ import pytest
 import tablassert.qc as qc
 from tablassert.errors import QcRuntimeMissingError
 
-HF_REPO: str = "cambridgeltl/SapBERT-from-PubMedBERT-fulltext"
+HF_REPO: str = "RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23"
 
 
 class FakeModel:
