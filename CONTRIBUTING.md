@@ -68,7 +68,6 @@ src/tablassert/       Python package and CLI
 rust/src/             PyO3 Rust extension exposed as tablassert.rs
 tests/                Python tests and fixtures
 docs/                 MkDocs site
-examples/             Runnable examples (autonomous agent walkthrough)
 .github/              CI and docs workflows, issue and PR templates
 Makefile              Local task runner mirroring the stable commands
 mkdocs.yml            Documentation navigation and theme settings

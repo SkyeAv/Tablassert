@@ -58,7 +58,6 @@ nav:
   - Use Case Gallery: examples.md
   - CLI Reference: cli.md
   - Fullmap: fullmap.md
-  - Agent: agent.md
   - Configuration:
     - Graph Config: configuration/graph.md
     - Table Config: configuration/table.md

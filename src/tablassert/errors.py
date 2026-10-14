@@ -81,8 +81,6 @@ TablassertErrorCodes = Literal[
     "uuid-fields-not-a-key",
     "uuid-merge-without-fields",
     "network-transient",
-    "llm-transient",
-    "reward-config-invalid",
     "infores-registry-unreadable",
 ]
 
@@ -163,19 +161,18 @@ def error_code_of(exc: BaseException) -> str | None:
         error added later); ``None`` for everything else.
 
     Notes:
-        WHY a helper: ``_Coded`` is private by design, but a consumer (the agent supervisor) needs the
-        code without an ``isinstance`` ladder over every concrete class -- a ladder that would silently
-        stop covering new codes. Reading it through one function means a newly added coded error is
-        machine-readable in ``state.json`` with no further wiring.
+        WHY a helper: ``_Coded`` is private by design, but callers that record structured failures
+        need the code without an ``isinstance`` ladder over every concrete class -- a ladder that
+        would silently stop covering new codes. Reading it through one function means a newly added
+        coded error is machine-readable with no further wiring.
 
         This function NEVER raises for a bad ``code``: a non-string degrades to ``None``, and even a
         subclass whose ``code`` descriptor raises a ``BaseException`` cannot take the caller's error
         handler down with it. This deliberately treats hostile ``KeyboardInterrupt``/``SystemExit``
         descriptors as malformed code attributes, because this helper runs inside a catch-all handler.
     """
-    # smolagents wraps provider failures in an uncoded ``AgentGenerationError``; a cause/context walk
-    # preserves the machine-readable ``llm-transient`` code through that wrapper, matching the bounded
-    # classification walk already used by ``net.is_transient``.
+    # A cause/context walk preserves the machine-readable code through third-party wrapper
+    # exceptions, matching the bounded classification walk already used by ``net.is_transient``.
     current: BaseException | None = exc
     for _ in range(3):
         if current is None:
@@ -199,7 +196,7 @@ def format_missing_extra(extra: str, problem: str) -> str:
     which installer their CLI came from.
 
     Args:
-        extra: Extra name as it appears in ``pyproject.toml`` (``qc``, ``agent``, ...).
+        extra: Extra name as it appears in ``pyproject.toml`` (``qc``, ``aria2``, ...).
         problem: One complete sentence stating what is missing and what needed it.
 
     Returns:
@@ -300,12 +297,12 @@ class NetworkTransientError(TablassertError):
     """A network operation exhausted its retries on a failure classified as TRANSIENT.
 
     Notes:
-        WHY its own code: the agent supervisor records ``error_code`` on the article record, and a fleet
-        consumer must be able to requeue these without keyword-matching the notes string. The underlying
-        condition -- DNS ``EAI_NONAME`` behind ``resolve [!UNAVAIL=return]``, a gateway 503 wrapping an
-        upstream 429, a reset socket -- is recoverable by simply trying again later, which is the opposite
-        of the terminal ``PermissionError`` / ``FileNotFoundError`` skips it was previously
-        indistinguishable from.
+        WHY its own code: consumers that log or requeue failed operations must be able to tell
+        "retryable later" from a terminal rejection without keyword-matching the message string. The
+        underlying condition -- DNS ``EAI_NONAME`` behind ``resolve [!UNAVAIL=return]``, a gateway 503
+        wrapping an upstream 429, a reset socket -- is recoverable by simply trying again later, which
+        is the opposite of the terminal ``PermissionError`` / ``FileNotFoundError`` failures it was
+        previously indistinguishable from.
     """
 
     def __init__(self, target: str, attempts: int, last_error: BaseException, *, secrets: Sequence[str] = ()) -> None:
@@ -318,38 +315,6 @@ class NetworkTransientError(TablassertError):
         self.target: str = target
         self.attempts: int = attempts
         self.last_error: BaseException = last_error
-
-
-class LlmTransientError(TablassertError):
-    """An LLM call exhausted its bounded retries on a transient failure."""
-
-    def __init__(self, target: str, attempts: int, last_error: BaseException, *, secrets: Sequence[str] = ()) -> None:
-        # Provider exceptions may include request URLs, headers, or provider messages. The retry
-        # wrapper sanitizes its model target, but this final error must also avoid echoing credentials
-        # into state.json and worker logs.
-        safe_error: str = redact_secrets(str(last_error), secrets)
-        super().__init__(
-            f"Transient LLM failure for {target} after {attempts} attempts (last error: {safe_error}). "
-            "This is retryable later — it is not a permanent rejection of the request.",
-            code="llm-transient",
-        )
-        self.target: str = target
-        self.attempts: int = attempts
-        self.last_error: BaseException = last_error
-
-
-class RewardConfigError(TablassertError):
-    """A reward-config file failed to load or validate.
-
-    Notes:
-        The caller builds the full message (naming the offending file and key and
-        stating the valid set); this class only pins the stable
-        ``reward-config-invalid`` slug so a bad weighting policy is greppable and
-        docs-linkable like every other coded failure.
-    """
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, code="reward-config-invalid")
 
 
 class SourceFileError(TablassertError):

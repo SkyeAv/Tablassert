@@ -2,7 +2,7 @@
 
 The expected command/option surface is derived from ``tablassert.cli.APP`` and the registered command
 callbacks rather than copied from the Markdown pages. These tests intentionally fail when a live flag,
-alias, default, or agent environment variable is no longer mentioned in its documentation page.
+alias, or default is no longer mentioned in its documentation page.
 """
 
 from __future__ import annotations
@@ -15,29 +15,22 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 import cyclopts  # pyright: ignore[reportMissingImports]
 
-from tablassert import agent as agent_module
 from tablassert.cli import APP
 
 ROOT: Path = Path(__file__).resolve().parent.parent
 DOCS: Path = ROOT / "docs"
 
 COMMAND_NAME_DOCS: dict[str, tuple[str, ...]] = {
-    "agent": ("agent.md",),
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
-    "distill-export": ("cli.md",),
-    "distill-weigh": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
     "validate-infores": ("cli.md",),
     "validate-kgx": ("cli.md",),
 }
 COMMAND_FLAG_DOCS: dict[str, tuple[str, ...]] = {
-    "agent": ("agent.md", "cli.md"),
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
-    "distill-export": ("cli.md",),
-    "distill-weigh": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
     "validate-infores": ("cli.md",),
@@ -168,17 +161,6 @@ def _documented_default_token(default: object) -> str | None:
     return str(default)
 
 
-def _agent_env_vars() -> tuple[str, ...]:
-    """Read the live agent model env-var constants without requiring the optional ``[agent]`` extra."""
-    return tuple(
-        sorted(
-            value
-            for name in dir(agent_module)
-            if name.startswith("ENV_") and isinstance((value := getattr(agent_module, name)), str) and value.startswith("TABLASSERT_AGENT_")
-        )
-    )
-
-
 def test_live_app_command_names_are_documented() -> None:
     """Every registered live command has a reachable documentation page mentioning the command name.
 
@@ -204,7 +186,7 @@ def test_app_version_flag_is_documented_in_cli_reference() -> None:
 def test_live_command_flags_aliases_and_positionals_are_documented() -> None:
     """Every explicit live Cyclopts flag/alias, plus every positional argument, is documented.
 
-    Removing a real flag mention such as ``--map-threshold`` from ``docs/agent.md`` trips this assertion;
+    Removing a real flag mention such as ``--map-threshold`` from ``docs/cli.md`` trips this assertion;
     adding a new ``cyclopts.Parameter(name=[...])`` in ``cli.py`` does the same until docs are updated.
     """
     for parameter in _live_cli_parameters():
@@ -231,20 +213,11 @@ def test_live_command_defaults_are_documented_on_the_flag_page() -> None:
         assert locations, f"docs missing default {default_token!r} beside {parameter.command} {parameter.flags}; checked {pages}"
 
 
-def test_agent_model_environment_variables_are_documented() -> None:
-    """The live agent model environment variable constants are documented for secret-free configuration."""
-    env_vars = _agent_env_vars()
-    assert env_vars, "no live TABLASSERT_AGENT_* environment variables found"
-    pages = COMMAND_FLAG_DOCS["agent"]
-    for env_var in env_vars:
-        assert _pages_with_token(pages, env_var), f"docs missing agent environment variable {env_var} in {pages}"
-
-
 def _positional_in_cli_md(parameter: CliParameter) -> bool:
     """Return whether a positional argument is documented in ``docs/cli.md`` specifically (SSOT check).
 
     Mirrors ``_positional_documented`` but scoped to ``cli.md`` alone, so the single-source-of-truth
-    guarantee does not lean on ``agent.md`` or ``fullmap.md`` for the positional spelling.
+    guarantee does not lean on ``fullmap.md`` for the positional spelling.
     """
     tokens = {
         parameter.python_name,
@@ -261,11 +234,11 @@ def _positional_in_cli_md(parameter: CliParameter) -> bool:
 def test_cli_md_is_self_complete_for_every_command() -> None:
     """US-003: ``docs/cli.md`` is the single source of truth for the complete CLI flag tables.
 
-    The per-command coverage mapping above lets agent flags live in ``agent.md`` and build-fullmap flags
-    live in ``fullmap.md``. This stricter guard requires ``cli.md`` ITSELF to document every live command
+    The per-command coverage mapping above lets build-fullmap flags live in ``fullmap.md``. This
+    stricter guard requires ``cli.md`` ITSELF to document every live command
     name, the app ``--version`` flag, and every flag/alias/positional/default — so a reader never has to
     leave the page for the full option surface. Removing any flag mention from ``cli.md`` trips this even
-    when ``agent.md``/``fullmap.md`` still carry it.
+    when ``fullmap.md`` still carries it.
     """
     cli_text = _doc_text("cli.md")
     # Every live command name and the app-level --version flag.

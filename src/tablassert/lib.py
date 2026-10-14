@@ -1631,8 +1631,7 @@ def compile_subgraph(
         written ``Path``.
 
         The two new parameters are keyword-only and default to ``None`` so every existing call
-        site — and ``agent.py``'s ``_reduce_ops`` mirror, which does not use the run cache —
-        keeps its exact behavior. ``runcache`` is imported lazily inside the body because it
+        site keeps its exact behavior. ``runcache`` is imported lazily inside the body because it
         imports this module at module level (``OP_COST`` is keyed on the real op callables); a
         top-level import here would be circular.
     """

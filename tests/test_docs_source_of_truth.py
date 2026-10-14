@@ -49,9 +49,8 @@ from dataclasses import dataclass
 from enum import Enum
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Annotated, Any, Literal, get_args, get_origin, get_type_hints
+from typing import Any, Literal
 
-import cyclopts  # pyright: ignore[reportMissingImports]
 import polars as pl
 import pytest
 import yaml
@@ -60,7 +59,6 @@ from pydantic.fields import FieldInfo
 from yaml import CSafeLoader
 
 import tablassert.biolink as biolink_api
-import tablassert.cli as cli_module
 import tablassert.enums as enums_api
 import tablassert.fullmap as fullmap_api
 import tablassert.lib as lib_api
@@ -1510,9 +1508,8 @@ def test_api_utils_paths_distinguish_log_directory_from_log_file() -> None:
 
 
 # --- Optional-extra enumerations (US-004) ---------------------------- #
-# The `distill` extra shipped in pyproject.toml with the `tablassert distill-export` command
-# while the README extras table, the installation guide, and both llms.txt enumerations still
-# listed five extras -- and nothing failed. These guards derive the extra set from the live
+# An extra once shipped in pyproject.toml while the README extras table, the installation guide,
+# and both llms.txt enumerations still listed fewer extras -- and nothing failed. These guards derive the extra set from the live
 # `[project.optional-dependencies]` table (parsed with stdlib tomllib; the sole extra authority)
 # and the preflight set from live `extras.require(...)` / `extras.is_installed(...)` call sites
 # under src/tablassert (an AST walk, never a copied list), so the next extra fails here the
@@ -1642,8 +1639,8 @@ def test_declared_extras_guard_is_not_vacuous() -> None:
 def test_declared_extras_documented_on_every_extras_surface(page: Path, extra: str) -> None:
     """Every extra declared in pyproject.toml is named (backticked) on each extras enumeration surface.
 
-    US-004: ``distill`` shipped in ``[project.optional-dependencies]`` while the README extras
-    table, the installation guide, and both ``llms.txt`` enumerations still listed five extras.
+    US-004: an extra once shipped in ``[project.optional-dependencies]`` while the README extras
+    table, the installation guide, and both ``llms.txt`` enumerations still listed fewer extras.
     The set under test is parsed from the live pyproject, so the NEXT extra fails here the moment
     it is declared.
 
@@ -1713,16 +1710,6 @@ def test_installation_preflight_docs_cover_source_preflight_calls() -> None:
         f"{INSTALLATION.relative_to(ROOT)} must keep the `rt` exception: polars[rtcompat] imports as plain polars and cannot be detected"
     )
     assert "no logs" in section, f"{INSTALLATION.relative_to(ROOT)} must keep the `log` exception: without loguru, Tablassert produces no logs at all"
-    if "distill" in sites:
-        # Live: the agent command's `--distill` flag records ChatML NDJSON with zero extra
-        # dependencies (cli.py), so the section must not imply RECORDING needs the extra --
-        # only the `distill-export` step does.
-        assert "agent --distill" in section, (
-            f"{INSTALLATION.relative_to(ROOT)} must state that recording via `agent --distill` is zero-dependency while exporting needs the extra"
-        )
-        assert "zero" in section.lower(), (
-            f"{INSTALLATION.relative_to(ROOT)} must state that recording via `agent --distill` is zero-dependency while exporting needs the extra"
-        )
 
 
 def test_installation_extra_package_sets_match_pyproject_requirements() -> None:
@@ -1970,8 +1957,6 @@ def test_llms_indexes_every_mkdocs_page_and_changelog_pointer() -> None:
         else:
             expected: str = f"docs/{page}"
             assert expected in targets, f"llms.txt omits MkDocs nav page {expected}"
-    assert "docs/agent.md" in targets, "llms.txt must index docs/agent.md"
-    assert "examples/agent/README.md" in targets, "llms.txt must index examples/agent/README.md"
 
 
 def test_llms_preserves_authority_and_migration_notes() -> None:
@@ -2152,7 +2137,7 @@ def test_retired_flag_guard_spares_a_legitimate_short_flag_on_another_command(tm
     """The scoping is real: a legitimate ``-a`` on ANOTHER command's row is no false positive.
 
     Why: this is the failure the scoping exists to prevent -- `-a` is generic enough that a
-    future short flag on, say, ``agent`` produces an option-table cell indistinguishable from
+    future short flag on, say, ``quick-map`` produces an option-table cell indistinguishable from
     the retired one, and an unscoped guard would fail that correct row with a misleading
     "retired flag" message. The same scratch page also proves the scoping did not blunt the long
     flag: ``--aria2c`` stays GLOBAL, so it still fires outside any ``build-fullmap`` section.
@@ -2163,7 +2148,7 @@ def test_retired_flag_guard_spares_a_legitimate_short_flag_on_another_command(tm
             [
                 "# CLI Reference",
                 "",
-                "## agent",
+                "## quick-map",
                 "",
                 "| Option | Type | Required | Default | Description |",
                 "| --- | --- | --- | --- | --- |",
@@ -2183,7 +2168,7 @@ def test_retired_flag_guard_spares_a_legitimate_short_flag_on_another_command(tm
             f"pattern {legit_pattern!r} fired on another command's legitimate short flag -- the scoping that prevents that false positive is broken"
         )
         if not scoped:
-            assert _mentions_retired_flag(f"{text}\nRetired: tablassert agent --aria2c\n", legit_pattern, command_scoped=False), (
+            assert _mentions_retired_flag(f"{text}\nRetired: tablassert quick-map --aria2c\n", legit_pattern, command_scoped=False), (
                 f"pattern {legit_pattern!r} must stay GLOBAL: it has to fire outside any build-fullmap section too"
             )
 
@@ -2203,163 +2188,6 @@ def test_retired_short_flag_guard_is_anchored_to_a_real_build_fullmap_section() 
     )
     assert any("`--output`, `-o`" in section for section in sections), (
         f"{CLI_DOC.relative_to(ROOT)}'s '## {RETIRED_FLAG_COMMAND}' section no longer holds the option table the short-flag guard is scoped to"
-    )
-
-
-# --- Agent page dependency tables and flag reminder (US-006) ------------ #
-# docs/agent.md presented the [agent]/[optimize] requirements as `==` pins (and litellm as
-# `(any)`) where pyproject declares lower bounds, and its compact flag reminder never listed
-# `--task-model` or `--distill` -- and nothing failed. These guards parse the requirement
-# strings from the live `[project.optional-dependencies]` table (tomllib) and the flag set
-# from the live `tablassert.cli.agent` callback signature plus its cyclopts.Parameter
-# metadata, so a pyproject bump or a new agent flag fails here until the page is re-synced.
-
-AGENT_DOC: Path = DOCS / "agent.md"
-
-
-def _agent_doc_text() -> str:
-    """Return the live agent documentation page source."""
-    return AGENT_DOC.read_text(encoding="utf-8")
-
-
-def _agent_installation_section(text: str) -> str:
-    """Return the agent page's Installation section body, delimited by the next ``## `` heading.
-
-    ``_section_range`` cannot scope this section: its fenced bash block carries a ``#`` comment
-    line that the shared heading regex reads as a level-1 heading, truncating the span before the
-    dependency tables.
-
-    Args:
-        text: Full ``docs/agent.md`` source.
-
-    Returns:
-        The section body between ``## Installation`` and the next level-2 heading.
-    """
-    parts: list[str] = text.split("## Installation", 1)
-    assert len(parts) == 2, f"{AGENT_DOC.relative_to(ROOT)} no longer holds exactly one '## Installation' heading; the section anchor is stale"
-    return parts[1].split("\n## ", 1)[0]
-
-
-def test_agent_doc_dependencies_quote_pyproject_requirements() -> None:
-    """The [agent]/[optimize] dependency tables quote the live pyproject requirement strings verbatim.
-
-    ``pyproject.toml`` declares lower bounds (``smolagents>=1.26.0``, ``litellm>=1.93.0``,
-    ``dspy>=3.2.1``); the page once showed ``==`` pins and a litellm ``(any)`` instead. The
-    verbatim strings and the absence of stale ``==`` pins are both checked against the live
-    ``[project.optional-dependencies]`` table -- never a copied list -- so a version bump in
-    pyproject fails here until the page is re-quoted.
-    """
-    declared: dict[str, list[str]] = _declared_extras()
-    assert {"agent", "optimize"} <= set(declared), f"{PYPROJECT.name} no longer declares the [agent]/[optimize] extras; re-derive this guard"
-    text: str = _agent_doc_text()
-    section: str = _agent_installation_section(text)
-    assert "pins" not in section, (
-        f"{AGENT_DOC.relative_to(ROOT)} Installation still calls the requirements 'pins'; {PYPROJECT.name} declares lower bounds"
-    )
-    assert "lower bound" in section, (
-        f"{AGENT_DOC.relative_to(ROOT)} Installation must say the extras declare lower bounds (minimum versions), not pins"
-    )
-    for extra in ("agent", "optimize"):
-        for requirement in declared[extra]:
-            assert f"`{requirement}`" in section, (
-                f"{AGENT_DOC.relative_to(ROOT)} Installation must quote the live `[{extra}]` requirement `{requirement}` verbatim "
-                f"({PYPROJECT.name} [project.optional-dependencies])"
-            )
-            name: str = _requirement_name(requirement)
-            assert f"{name}==" not in text, (
-                f"{AGENT_DOC.relative_to(ROOT)} carries a stale `==` pin for `{name}`; {PYPROJECT.name} declares `{requirement}` (a lower bound)"
-            )
-    assert not re.search(r"`==\d", section), (
-        f"{AGENT_DOC.relative_to(ROOT)} Installation still shows backticked `==` pinned versions; quote the live requirement strings instead"
-    )
-
-
-def _agent_command_flags() -> dict[str, tuple[str, ...]]:
-    """Return the live ``agent`` command's explicit flag names per parameter.
-
-    Derived from ``inspect.signature(tablassert.cli.agent)`` plus the
-    ``Annotated[..., cyclopts.Parameter(name=[...])]`` metadata -- the same authority
-    ``tests/test_docs_cli_coverage.py`` uses -- never a copied list.
-
-    Returns:
-        Parameter name -> explicit flag/alias names (empty for the positional PMC ids).
-    """
-    signature: inspect.Signature = inspect.signature(cli_module.agent)
-    type_hints: dict[str, Any] = get_type_hints(cli_module.agent, include_extras=True)
-    flags: dict[str, tuple[str, ...]] = {}
-    for python_name, parameter in signature.parameters.items():
-        annotation: Any = type_hints.get(python_name, parameter.annotation)
-        names: tuple[str, ...] = ()
-        if get_origin(annotation) is Annotated:
-            for metadata in get_args(annotation)[1:]:
-                if isinstance(metadata, cyclopts.Parameter):
-                    raw: Any = metadata.name
-                    names = (raw,) if isinstance(raw, str) else tuple(raw or ())
-        flags[python_name] = names
-    return flags
-
-
-def _agent_model_config_parameters() -> frozenset[str]:
-    """Return the agent parameters the page documents in its own Model configuration table.
-
-    Those parameters are exempt from the "Running it for real" reminder list because the page
-    gives them a dedicated flag/env-var table. The set is derived from the live callback
-    docstring: a parameter whose ``Args:`` entry names a ``TABLASSERT_AGENT_`` env var.
-
-    Returns:
-        Live agent parameter names with a documented env-var fallback.
-    """
-    docstring: str = inspect.getdoc(cli_module.agent) or ""
-    entries: list[re.Match[str]] = list(re.finditer(r"^    (\w+):", docstring, re.MULTILINE))
-    assert entries, "the live agent callback docstring lost its Args: entries; re-derive this guard"
-    model_config: set[str] = set()
-    for index, entry in enumerate(entries):
-        stop: int = entries[index + 1].start() if index + 1 < len(entries) else len(docstring)
-        if "TABLASSERT_AGENT_" in docstring[entry.start() : stop]:
-            model_config.add(entry.group(1))
-    assert model_config, "no live agent parameter documents a TABLASSERT_AGENT_ env-var fallback; re-derive this guard"
-    return frozenset(model_config)
-
-
-def test_agent_doc_flag_reminder_lists_every_live_agent_flag() -> None:
-    """The compact flag reminder names every live agent flag and keeps cli.md#agent authoritative.
-
-    ``--task-model`` and ``--distill`` shipped on the ``agent`` command while the page's compact
-    reminder still ended at the older flag set -- and nothing failed. The expected set is derived
-    from ``inspect.signature(tablassert.cli.agent)`` plus ``cyclopts.Parameter`` metadata: every
-    parameter with explicit flags must appear in the reminder paragraph -- the optimize-path and
-    gate flags included -- except the model-config triple the page documents in its own Model
-    configuration table (exempted live via the callback docstring's ``TABLASSERT_AGENT_``
-    env-var fallbacks). The reminder must keep pointing at ``docs/cli.md#agent`` as the
-    authoritative flag table.
-    """
-    flags: dict[str, tuple[str, ...]] = _agent_command_flags()
-    assert flags, "the live agent command exposes no parameters; this guard went vacuous"
-    exempt: frozenset[str] = _agent_model_config_parameters()
-    unknown_exemptions: list[str] = sorted(exempt - set(flags))
-    assert not unknown_exemptions, f"docstring env-var fallbacks {unknown_exemptions} are not live agent parameters; re-derive this guard"
-    text: str = _agent_doc_text()
-    start, end = _section_range(text, "Running it for real")
-    reminders: list[str] = [paragraph for paragraph in _paragraphs(text[start:end]) if "cli.md#agent" in paragraph]
-    assert len(reminders) == 1, (
-        f"{AGENT_DOC.relative_to(ROOT)} 'Running it for real' must hold exactly one compact-reminder paragraph pointing at cli.md#agent; "
-        f"found {len(reminders)}"
-    )
-    reminder: str = reminders[0]
-    assert "authoritative" in reminder, (
-        f"{AGENT_DOC.relative_to(ROOT)} reminder must keep stating that docs/cli.md#agent is the authoritative flag table"
-    )
-    missing: list[str] = []
-    for python_name, names in flags.items():
-        if python_name in exempt or not names:
-            continue
-        long_flags: list[str] = [name for name in names if name.startswith("--")]
-        assert long_flags, f"live agent parameter `{python_name}` has aliases but no long flag; this guard cannot check it"
-        if not any(re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", reminder) for flag in long_flags):
-            missing.append(f"{python_name} ({', '.join(names)})")
-    assert not missing, (
-        f"{AGENT_DOC.relative_to(ROOT)} compact flag reminder omits live agent flags: {missing}; "
-        "add them to the reminder or remove the flag from tablassert.cli.agent"
     )
 
 
@@ -2537,7 +2365,7 @@ def test_contributing_layout_block_lists_only_existing_paths() -> None:
 
     Every listed path must exist, and every line must keep the two-column shape (path, then a
     purpose separated by whitespace). The explicit required-path tuple captures the US-007 story
-    additions (``examples/``, ``.github/``, and ``Makefile``); this guard intentionally does not
+    additions (``.github/`` and ``Makefile``); this guard intentionally does not
     require the block to enumerate every top-level repository path.
     """
     text: str = CONTRIBUTING.read_text(encoding="utf-8")
@@ -2552,7 +2380,7 @@ def test_contributing_layout_block_lists_only_existing_paths() -> None:
         entries.append(line.split()[0])
     missing: list[str] = [entry for entry in entries if not (ROOT / entry).exists()]
     assert not missing, f"{CONTRIBUTING.name} 'Project layout' lists paths that do not exist: {missing}"
-    required_paths: tuple[str, ...] = ("examples/", ".github/", "Makefile")
+    required_paths: tuple[str, ...] = (".github/", "Makefile")
     for required in required_paths:
         assert required in entries, f"{CONTRIBUTING.name} 'Project layout' omits the required US-007 path {required!r}"
 

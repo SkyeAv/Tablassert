@@ -131,8 +131,6 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
   low-confidence mappings
 - **KGX compliance**: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories
   and predicates
-- **Autonomous agent (experimental)**: `tablassert agent` derives, builds, and refines configs for
-  whole papers
 - **Performance & reproducibility**: lazy Polars pipelines and a deterministic UV-based
   development environment
 
@@ -151,9 +149,6 @@ provides the `tablassert` command. Other extras are opt-in:
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) | `pip install "tablassert[qc]"` |
-| `agent` | autonomous agent (smolagents, litellm, article/table context) -- experimental, API may change | `pip install "tablassert[agent]"` |
-| `optimize` | GEPA prompt optimization for `agent --optimize` (dspy) -- experimental, API may change | `pip install "tablassert[optimize]"` |
-| `distill` | distillation dataset export (`tablassert distill-export`, HF `datasets`) -- experimental, API may change | `pip install "tablassert[distill]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
 Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
@@ -189,7 +184,6 @@ no LazyFrame setup or NLP preprocessing required. See the
 - **[Use Case Gallery](https://skyeav.github.io/Tablassert/examples/)**: real-world configuration patterns
 - **[CLI Reference](https://skyeav.github.io/Tablassert/cli/)**: complete command-line flag reference
 - **[Fullmap](https://skyeav.github.io/Tablassert/fullmap/)**: building and querying the entity-resolution database
-- **[Agent](https://skyeav.github.io/Tablassert/agent/)**: the autonomous agent pipeline
 - **[Configuration](https://skyeav.github.io/Tablassert/configuration/graph/)**: graph and table configuration reference
 - **[API Reference](https://skyeav.github.io/Tablassert/api/fullmap/)**: core functions documentation
 - **[Development](https://skyeav.github.io/Tablassert/development/)**: dev environment setup and contributor workflow

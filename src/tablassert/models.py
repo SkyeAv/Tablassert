@@ -867,7 +867,7 @@ class Section(TablaBase):
 def _contains_url(value: str) -> bool:
     """Whether a free-text RIG location string carries an http(s) or file URL.
 
-    ``file://`` is accepted because unpublished/local artifact bases (agent
+    ``file://`` is accepted because unpublished/local artifact bases (local
     measurement builds) are honest local URIs; a PR to upstream should swap them
     for public https locations, which the docs call out.
     """

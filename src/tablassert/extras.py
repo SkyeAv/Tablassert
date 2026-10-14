@@ -1,8 +1,7 @@
 """Optional-extra registry: which extra ships which package, and how to install it.
 
 Tablassert's base install exposes the Python API for building knowledge graphs from
-CSV/TSV sources. The command-line interface, QC, the autonomous agent, and GEPA prompt
-optimization are OPTIONAL extras, so a user can
+CSV/TSV sources. The command-line interface and QC are OPTIONAL extras, so a user can
 reach a code path whose dependencies were never installed. When that happens the
 failure must name the extra and the exact install command — never a bare
 ``ModuleNotFoundError: No module named 'sklearn'`` raised hours into a build.
@@ -12,13 +11,12 @@ This module is the single source of truth for that mapping. Two entry points:
 - :func:`require` is a PREFLIGHT check. It probes with ``importlib.util.find_spec``
   (which does not execute the module, so it costs nothing) and is called at the CLI
   boundary, before any expensive work starts.
-- :func:`require_module` is the LATE check for a lazy import that has already been
-  reached, used by :mod:`tablassert.agent` and :class:`tablassert._lazy.LazyModule`.
+- :func:`actionable_import_error` is the LATE check for a lazy import that has already
+  been reached, used by :class:`tablassert._lazy.LazyModule`.
 """
 
 from __future__ import annotations
 
-from importlib import import_module
 from importlib.util import find_spec
 from typing import Final
 
@@ -35,9 +33,6 @@ EXTRA_PACKAGES: Final[dict[str, dict[str, str]]] = {
     "cli": {"cyclopts": "cyclopts", "rich": "rich"},
     "aria2": {"aria2c": "aria2"},
     "qc": {"sklearn": "scikit-learn", "sentence_transformers": "sentence-transformers"},
-    "agent": {"smolagents": "smolagents", "litellm": "litellm"},
-    "optimize": {"dspy": "dspy"},
-    "distill": {"datasets": "datasets"},
     "log": {"loguru": "loguru"},
 }
 
@@ -50,15 +45,8 @@ FEATURES: Final[dict[str, str]] = {
     "rt": "the runtime-compatible polars build",
     "aria2": "the bundled aria2c downloader (used automatically by build-fullmap when installed)",
     "qc": "the QC audit",
-    "agent": "the tablassert agent",
-    "optimize": "GEPA prompt optimization (tablassert agent --optimize)",
-    "distill": "the distillation dataset export (tablassert distill-export)",
     "log": "file and progress logging",
 }
-
-# An unregistered module reaching :func:`require_module` came from the agent's dynamic
-# lazy-import path (the only place a module name is not known statically).
-_FALLBACK_EXTRA: Final[str] = "agent"
 
 
 def install_command(extra: str) -> str:
@@ -77,7 +65,7 @@ def missing(extra: str) -> tuple[str, ...]:
     one costs nothing: safe to call on every invocation of a command.
 
     Args:
-        extra: A detectable extra (``cli``, ``qc``, ``agent``, ``optimize``, ``distill`` or ``log``).
+        extra: A detectable extra (``cli``, ``qc`` or ``log``).
 
     Returns:
         Distribution names that could not be found, in declaration order; empty when
@@ -98,11 +86,11 @@ def require(extra: str, *, required_by: str | None = None) -> None:
     """Fail loudly unless ``extra`` is fully installed.
 
     Preflight guard: call it at the point the user's intent is known (the ``tablassert``
-    command, a ``--qc`` flag, the ``agent`` command) rather than where the import happens,
-    so the error arrives before the work instead of after it.
+    command, a ``--qc`` flag) rather than where the import happens, so the error arrives
+    before the work instead of after it.
 
     Args:
-        extra: A detectable extra (``cli``, ``qc``, ``agent``, ``optimize``, ``distill`` or ``log``).
+        extra: A detectable extra (``cli``, ``qc`` or ``log``).
         required_by: Feature name for the message, phrased to follow "required by".
             Defaults to the extra's entry in :data:`FEATURES`.
 
@@ -117,28 +105,6 @@ def require(extra: str, *, required_by: str | None = None) -> None:
     if extra == "qc":
         raise QcRuntimeMissingError(absent)
     raise MissingExtraError(extra, describe_missing(absent, required_by or FEATURES[extra]), missing=absent)
-
-
-def require_module(module: str, *, required_by: str | None = None) -> None:
-    """Import one optional module or raise an error naming the extra that ships it.
-
-    Unlike :func:`require` this actually imports, so a package that is present but broken
-    still fails here (with its own error) rather than being reported as missing.
-
-    Args:
-        module: Import name (``smolagents``, ``dspy``, ...).
-        required_by: Feature name for the message; defaults to the owning extra's entry
-            in :data:`FEATURES`.
-
-    Raises:
-        MissingExtraError: If ``module`` cannot be imported.
-    """
-    extra: str = EXTRA_FOR_MODULE.get(module, _FALLBACK_EXTRA)
-    try:
-        import_module(module)
-    except ImportError as exc:
-        dist: str = EXTRA_PACKAGES.get(extra, {}).get(module, module)
-        raise MissingExtraError(extra, describe_missing((dist,), required_by or FEATURES[extra]), missing=(dist,)) from exc
 
 
 def actionable_import_error(module: str) -> MissingExtraError | None:

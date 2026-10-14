@@ -16,7 +16,6 @@ import pytest
 
 from tablassert import extras
 from tablassert._lazy import LazyModule
-from tablassert.agent import AGENT_EXTRA
 from tablassert.errors import MissingExtraError, QcRuntimeMissingError, format_missing_extra
 
 PYPROJECT: Path = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -41,7 +40,7 @@ def test_registry_covers_every_declared_extra() -> None:
     assert set(extras.EXTRA_PACKAGES) == declared - {"rt"}
 
 
-@pytest.mark.parametrize("extra", ["cli", "qc", "agent", "optimize"])
+@pytest.mark.parametrize("extra", ["cli", "qc", "aria2", "log"])
 def test_registered_packages_are_actually_shipped_by_their_extra(extra: str) -> None:
     """Each import name maps to a distribution that its extra really installs.
 
@@ -55,16 +54,17 @@ def test_registered_packages_are_actually_shipped_by_their_extra(extra: str) -> 
 
 
 def test_module_lookup_is_derived_and_unambiguous() -> None:
-    """``EXTRA_FOR_MODULE`` is derived from ``EXTRA_PACKAGES``, and dspy belongs to [optimize].
+    """``EXTRA_FOR_MODULE`` is derived from ``EXTRA_PACKAGES``.
 
     Why: the two tables must never disagree about which extra owns a package — pointing a user
-    at ``[agent]`` for dspy sends someone who already installed it in a circle.
+    at one extra for another's package sends someone who already installed it in a circle.
     """
     assert extras.EXTRA_FOR_MODULE["cyclopts"] == "cli"
     assert extras.EXTRA_FOR_MODULE["rich"] == "cli"
-    assert extras.EXTRA_FOR_MODULE["dspy"] == "optimize"
-    assert extras.EXTRA_FOR_MODULE["smolagents"] == "agent"
+    assert extras.EXTRA_FOR_MODULE["aria2c"] == "aria2"
     assert extras.EXTRA_FOR_MODULE["sklearn"] == "qc"
+    assert extras.EXTRA_FOR_MODULE["sentence_transformers"] == "qc"
+    assert extras.EXTRA_FOR_MODULE["loguru"] == "log"
     assert len(extras.EXTRA_FOR_MODULE) == sum(len(packages) for packages in extras.EXTRA_PACKAGES.values())
 
 
@@ -122,9 +122,9 @@ def test_missing_reports_distribution_names_not_import_names(monkeypatch: pytest
 def test_missing_is_empty_when_every_package_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
     """A fully installed extra reports nothing missing and passes ``require`` silently."""
     monkeypatch.setattr(extras, "find_spec", lambda module: object())
-    assert extras.missing("agent") == ()
-    assert extras.is_installed("agent")
-    extras.require("agent")  # must not raise
+    assert extras.missing("log") == ()
+    assert extras.is_installed("log")
+    extras.require("log")  # must not raise
 
 
 def test_require_reports_every_missing_package_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,10 +163,10 @@ def test_require_is_an_import_error_for_the_other_extras(monkeypatch: pytest.Mon
     """
     monkeypatch.setattr(extras, "find_spec", lambda module: None)
     with pytest.raises(ImportError) as excinfo:
-        extras.require("optimize")
+        extras.require("log")
     assert isinstance(excinfo.value, MissingExtraError)
-    assert excinfo.value.extra == "optimize"
-    assert excinfo.value.missing == ("dspy",)
+    assert excinfo.value.extra == "log"
+    assert excinfo.value.missing == ("loguru",)
 
 
 def test_require_uses_find_spec_and_never_imports(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,20 +182,8 @@ def test_require_uses_find_spec_and_never_imports(monkeypatch: pytest.MonkeyPatc
         return object()
 
     monkeypatch.setattr(extras, "find_spec", _spy)
-    monkeypatch.setattr(extras, "import_module", lambda module: pytest.fail(f"preflight imported {module}"))
     extras.require("qc")
     assert probed == ["sklearn", "sentence_transformers"]
-
-
-def test_require_module_names_the_extra_for_an_unregistered_package() -> None:
-    """An unknown module falls back to ``[agent]``, the only dynamic lazy-import path.
-
-    Why: ``tablassert.agent`` calls ``_require`` with names the registry may not list. The
-    fallback must still hand back a real install command instead of a bare import error.
-    """
-    with pytest.raises(MissingExtraError) as excinfo:
-        extras.require_module("definitely_not_a_real_package_xyz_123")
-    assert 'pip install "tablassert[agent]"' in str(excinfo.value)
 
 
 def test_lazy_module_failure_names_the_extra() -> None:
@@ -204,12 +192,12 @@ def test_lazy_module_failure_names_the_extra() -> None:
     Why: :class:`LazyModule` is the LAST place that knows which module was wanted — by the time
     the caller sees the failure, the module name is all that is left of the context.
     """
-    if extras.is_installed("optimize"):
-        pytest.skip("dspy installed: the failure path is unreachable")
+    if extras.is_installed("aria2"):
+        pytest.skip("aria2 installed: the failure path is unreachable")
 
     with pytest.raises(MissingExtraError) as excinfo:
-        LazyModule("dspy").LM  # noqa: B018 - attribute access is what triggers the import
-    assert 'pip install "tablassert[optimize]"' in str(excinfo.value)
+        LazyModule("aria2c").anything  # noqa: B018 - attribute access is what triggers the import
+    assert 'pip install "tablassert[aria2]"' in str(excinfo.value)
 
 
 def test_lazy_module_reraises_untouched_for_unregistered_modules() -> None:
@@ -247,7 +235,6 @@ def test_install_commands_quote_the_extra() -> None:
     """
     for extra in extras.FEATURES:
         assert extras.install_command(extra) == f'pip install "tablassert[{extra}]"'
-    assert extras.install_command("agent") == AGENT_EXTRA
 
 
 def test_every_extra_message_carries_both_installers() -> None:

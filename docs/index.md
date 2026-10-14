@@ -4,8 +4,7 @@ Tablassert turns biomedical tables (Excel, CSV, TSV) into NCATS Translator-compl
 graphs, declaratively, with entity resolution built in and optional quality control.
 
 **Installing?** See [Installation](installation.md). **First build?** Follow the
-[Tutorial](tutorial.md). **Automating?** Use the [CLI](cli.md) or the autonomous
-[Agent](agent.md).
+[Tutorial](tutorial.md). **Automating?** Use the [CLI](cli.md).
 
 ## Who this is for
 
@@ -34,10 +33,8 @@ expectations.
 **How-to guides**
 
 - **[CLI Reference](cli.md)**: every command and flag: `build-kg`, `build-fullmap`, `validate`,
-  `validate-kgx`, `quick-map`, `agent`, `distill-export`, `distill-weigh`
+  `validate-kgx`, `quick-map`
 - **[Fullmap](fullmap.md)**: obtain and build the entity-resolution database
-- **[Agent](agent.md)**: run the autonomous PMC-to-graph pipeline, with checkpoints and tooling
-  (experimental: API may change)
 
 **Reference**
 

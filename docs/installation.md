@@ -1,6 +1,6 @@
 # Installation
 
-Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `agent` / `optimize` / `distill` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, running the autonomous agent, GEPA prompt optimization, distillation dataset export, or loguru-backed logging). The `agent`, `optimize`, and `distill` extras back experimental surfaces: their APIs may change without notice.
+Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, or loguru-backed logging).
 
 ## Prerequisites
 
@@ -37,9 +37,6 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact -> fuzzy -> abbreviation -> SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
-| `agent` | Autonomous PMC -> KG agent (`tablassert agent`); experimental, API may change | `smolagents`, `litellm` |
-| `optimize` | GEPA prompt optimization (`tablassert agent --optimize`); experimental, API may change | `dspy` |
-| `distill` | Distillation dataset export (`tablassert distill-export` -> on-disk Hugging Face dataset); experimental, API may change | `datasets>=3.0.0` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
 Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
@@ -74,18 +71,11 @@ fails, not a failure report):
 |---|---|---|
 | `tablassert` | `[cli]` | Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error |
 | `build-kg --qc` | `[qc]` | Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass |
-| `tablassert agent` | `[agent]` | After flag validation, before any model is built or any article fetched |
-| `tablassert agent --optimize` | `[agent]` + `[optimize]` | Same point; both are reported at once |
-| `tablassert distill-export` | `[distill]` | After the recorded-NDJSON input check (an empty `--distill-dir` is reported first, since that typo is the faster loop to close) and before `datasets` is imported |
 | `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example
-`fullmap_audit()` or the agent's lazy `dspy` import) raise the same message at that point.
-
-Recording needs no extra beyond `[agent]` itself: `tablassert agent --distill` writes ChatML
-NDJSON with zero additional extra dependencies, while only the export step (`tablassert
-distill-export`) additionally requires the `distill` extra.
+`fullmap_audit()`) raise the same message at that point.
 
 The `rt` extra is the exception: it installs `polars[rtcompat]`, which imports as plain `polars`, so
 it cannot be detected by inspection. It is suggested when polars itself fails to import; the usual

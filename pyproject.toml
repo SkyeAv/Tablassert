@@ -17,7 +17,6 @@ keywords = [
     "yaml configuration",
     "declarative pipeline",
     "quality control",
-    "llm agent",
 ]
 readme = "README.md"
 license = "Apache-2.0"
@@ -91,16 +90,6 @@ aria2 = [
 qc = [
     "scikit-learn>=1.8.0",
     "sentence-transformers>=5.3.0",
-]
-agent = [
-    "smolagents>=1.26.0",
-    "litellm>=1.93.0",
-]
-optimize = [
-    "dspy>=3.2.1",
-]
-distill = [
-    "datasets>=3.0.0",
 ]
 log = [
     "loguru>=0.7.3",

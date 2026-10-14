@@ -2,7 +2,7 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **nine subcommands**: `agent`, `build-fullmap`, `build-kg`, `distill-export`, `distill-weigh`, `quick-map`, `validate`,
+exposes **six subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
 `validate-infores`, and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -10,11 +10,8 @@ for the live surface.
 
 | Command | Use this to... |
 | --- | --- |
-| [`agent`](#agent) | Autonomously derive, build, audit, and improve KG configs from PMC articles (experimental) |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
-| [`distill-export`](#distill-export) | Export a recorded distillation NDJSON dataset to an on-disk Hugging Face dataset (experimental) |
-| [`distill-weigh`](#distill-weigh) | Join distillation records to outcomes and prepare LoRA-SFT training rows (experimental) |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-infores`](#validate-infores) | Validate emitted infores CURIEs against the Translator registry |
@@ -34,150 +31,6 @@ These are flags on the root `tablassert` command, **not** subcommands.
     flag is unrelated: it selects a **RENCI BABEL snapshot date** (default `2026jul22`). It is deliberately
     not named `--version`, because the app-level `--version` flag shadowed that long form: `build-fullmap
     --version <snapshot>` printed the app version and exited 0 without running the command.
-
----
-
-## agent
-
-!!! warning "Experimental"
-    The agent surface (`tablassert agent`, its flags, and the workspace layout it writes) is
-    experimental: the API may change without notice or a deprecation cycle. The core pipeline
-    (`build-kg`, `validate`, `validate-kgx`, `build-fullmap`, `quick-map`) is stable.
-
-Use this to autonomously turn one or more PMC articles into audited, improved KG configs and graphs
-(fetch -> derive config -> build + audit -> improve until coverage maps). Requires the `[agent]` extra
-(`pip install "tablassert[agent]"`); `--optimize` additionally needs the `[optimize]` extra
-(`pip install "tablassert[optimize]"`, pulls `dspy`). Both are checked after flag validation and
-before any model is built or article fetched, so a missing extra is reported with its install
-command instead of surfacing mid-run; see [When an extra is missing](installation.md#when-an-extra-is-missing).
-
-```bash
-tablassert agent PMC-IDS... --configuration-file GRAPH.yaml [OPTIONS]
-```
-
-PMC ids are passed positionally (also accepted as `--pmc-ids`). The required graph target is accepted
-as `--configuration-file` or `-f`; it is modified in place after successful article builds. The graph's
-`fullmap`, name, version, RIG, and artifact metadata replace the old standalone fullmap argument. This
-page lists the flags; see
-[Agent](agent.md) for the full pipeline, workspace layout, checkpoint/resume, and tooling.
-
-| Option | Type | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `PMC-IDS` (`--pmc-ids`) | list[str] | Yes | n/a | One or more PMC article ids (positional) |
-| `--configuration-file`, `-f` | Path | Yes | n/a | Caller-owned Graph YAML; supplies build metadata/fullmap and receives successful absolute table entries |
-| `--model-id`, `-m` | str | No | `None` | Model id (env `TABLASSERT_AGENT_MODEL_ID`) |
-| `--api-base`, `-ab` | str | No | `None` | OpenAI-compatible base URL (env `TABLASSERT_AGENT_API_BASE`) |
-| `--api-key`, `-ak` | str | No | `None` | API key secret (env `TABLASSERT_AGENT_API_KEY`) |
-| `--max-steps`, `-ms` | int | No | `20` | Max inner-agent steps per article |
-| `--min-rows`, `-mr` | int | No | `50` | Minimum non-empty data rows for a table/worksheet to reach the agent; `0` disables the small-table guard |
-| `--map-threshold`, `-mt` | float | No | `0.25` | Coverage an article must reach to be MAPPED |
-| `--max-improve-iters`, `-mi` | int | No | `3` | Max deterministic improve iterations per article |
-| `--state-dir`, `-sd` | Path | No | `.tablassert/agent` | Checkpoint/resume workspace directory |
-| `--backend`, `-b` | {openai, litellm} | No | `openai` | Model backend |
-| `--reflexion` | bool | No | `False` | Enable the tier-2 LLM reflexion improver (same model config) when the deterministic proposer stalls |
-| `--judge-model` | str | No | `None` | Model id for the semantic judge gate; MAPPED then also requires the score to clear `--judge-threshold` |
-| `--judge-threshold` | float | No | `None` | Semantic judge normalized-score threshold for MAPPED (`0.5` when unset) |
-| `--biolink-threshold` | float | No | `0.0` | Minimum Biolink pass rate of the built KGX for MAPPED; `0.0` reports the rate without gating |
-| `--local`, `-l` | list[str] | No | `None` | Local payload: one DIR for all ids, or `PMCid=DIR` mappings; skips the PMC-AWS fetch (exit 2 on a missing DIR) |
-| `--optimize`, `-o` | bool | No | `False` | Run GEPA prompt optimization and persist optimized instructions instead of running the supervisor |
-| `--distill`, `-d`, `-dt` | bool | No | `False` | Record every LLM call (agent, judge, reflexion) as ChatML NDJSON under `<state-dir>/distill/records.ndjson` for fine-tuning; not supported with `--optimize` |
-| `--instructions-file` | Path | No | `None` | Load GEPA-optimized instructions from a prior `--optimize` run |
-| `--instructions-out` | Path | No | `None` | Where `--optimize` writes optimized instructions (default `<state-dir>/optimized_instructions.yaml`) |
-| `--max-metric-calls` | int | No | `8` | GEPA metric-call budget for `--optimize` |
-| `--dataset` | Path | No | `None` | YAML/JSON list of `{table_summary, coverage_feedback}` examples for `--optimize` (an example may also carry `fullmap`, `workdir`, and `head` to score each proposed config with real coverage) |
-| `--task-model` | str | No | `None` | Fast model id for GEPA's many program evaluations (cheap task LM + strong reflection LM); `--model-id` is the reflection LM. Defaults to the reflection LM |
-
-```bash
-tablassert agent PMC11708054 --configuration-file ./graph.yaml
-# equivalent short form:
-tablassert agent PMC11708054 -f ./graph.yaml
-```
-
-!!! warning "Secrets"
-    Model config comes from the flags above **or** the `TABLASSERT_AGENT_*` environment variables
-    (explicit flags win). Secrets are **never** hardcoded or defaulted: a missing value fails loud
-    (exit 2) **before** any model is built.
-
----
-
-## distill-export
-
-!!! warning "Experimental"
-    The distillation surface (`--distill` recording, `distill-export`, `distill-weigh`, and the
-    record/outcome NDJSON schemas) is experimental: the API and file formats may change without
-    notice or a deprecation cycle.
-
-Use this to convert a distillation dataset recorded with
-[`agent --distill`](#agent) into an on-disk Hugging Face dataset (`save_to_disk`). Requires the
-`[distill]` extra (`pip install "tablassert[distill]"`, pulls `datasets`). The raw NDJSON already
-loads directly in Unsloth Studio and via `datasets.load_dataset("json", ...)`; this export is
-only needed for `datasets`-native workflows.
-
-Outcome files are skipped: export recognizes `outcomes.ndjson` by its **content** (a first line
-whose `record_type` is `outcome`), not its name, and loads only the record files, so a directory
-holding nothing else exits 2 with a message that says so. A directory with no `*.ndjson` at all
-still fails with the original empty-directory error. Keep derived training output (e.g.
-`distill-weigh`'s `train.ndjson`) in a separate directory: export loads every record `*.ndjson`
-under its input directory, so a weighed file placed there would be loaded as if it were raw
-corpus.
-
-The corpus is schema-normalized before loading: export reads every record file, unions the keys
-seen anywhere in the corpus, and re-emits every row with an explicit `null` for absent keys into
-one uniform temporary file (outside the input directory) that is what actually gets passed to
-`load_dataset`. `datasets` otherwise infers its schema from the **first block of the first file
-only** and dies with a `CastError` the moment a later file carries a column that block lacked, which an
-append-only corpus spanning schema versions (v1 rows without `run_id` next to v2 rows)
-would always trigger. Normalization makes the schema correct by construction, so a v1-only
-corpus still exports. A column whose type varies across rows (say `"2"` in one line and `2` in
-another) is **rejected** with exit 2 naming the column and the types: `datasets` would otherwise
-silently JSON-encode that column into a string, corrupting the corpus without an error.
-
-```bash
-tablassert distill-export --distill-dir .tablassert/agent/distill --out ./hf-dataset
-```
-
-| Option | Type | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `--distill-dir`, `-dd` | Path | Yes | n/a | Directory holding the recorded `*.ndjson` files (exit 2 when empty) |
-| `--out`, `-o` | Path | Yes | n/a | Destination directory for the `save_to_disk` dataset |
-
-## distill-weigh
-
-Experimental, like [`distill-export`](#distill-export): the record/outcome schemas and flags may
-change without notice.
-
-Join `agent --distill` records to their sibling outcomes, compute deterministic reward weights, and
-write one flat training row per input record for LoRA/QLoRA supervised fine-tuning. This is data
-selection, not RLHF: no reward model or online trainer is involved. Keep the output outside the
-input directory because `distill-export` loads every `*.ndjson` in its directory.
-
-```bash
-tablassert distill-weigh --distill-dir .tablassert/agent/distill --out ./training/train.ndjson
-# Then optionally convert the weighed rows to a Hugging Face dataset:
-tablassert distill-export --distill-dir ./training --out ./hf-dataset
-```
-
-| Option | Type | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `--distill-dir`, `-dd` | Path | Yes | n/a | Input directory containing record and outcome `*.ndjson` files |
-| `--out`, `-o` | Path | Yes | n/a | Training NDJSON destination; must be outside `--distill-dir` |
-| `--policy`, `-p` | string (`threshold`, `best-of-n`, or `replication`) | No | `threshold` | Selection policy; an unknown value is rejected at parse time |
-| `--threshold`, `-t` | float | No | `0.75` | Minimum weight for the `threshold` policy |
-| `--top-n`, `-tn` | int | No | `2` | Number retained per `pmc_id` group for `best-of-n` |
-| `--replication-k`, `-rk` | int | No | `2` | Replication slope for `replication`, bounded to 0-3 |
-| `--reward-config`, `-rc` | Path | No | `None` | YAML/JSON reward configuration override |
-| `--edge-ref` | float | No | `None` | Breadth reference override; otherwise the corpus median |
-| `--purpose` | str | No | `agent` | Keep this purpose, or use literal `all` to disable filtering |
-| `--final-call-only` | bool flag | No | `False` | Keep only the highest `call_index` per run |
-| `--manifest` | Path | No | `<out>.manifest.json` | Reproducibility manifest destination |
-
-The manifest JSON records the resolved reward configuration, resolved `edge_ref` and its source, join
-statistics, selected/unmatched counts, and nested `distinct` diversity counters for `pmc_id` and
-`config_yaml_sha256` before and after selection. Source paths are resolved absolute paths for portable
-provenance. Malformed input, missing records/outcomes, invalid policies or knobs, unmatched records,
-and an output inside the input directory fail with exit 2 and an actionable message. A corpus without a
-comparable build emits a warning and records a null `edge_ref`; its breadth contribution is 0.0. Replicas
-are counts on rows, not physical row duplication.
 
 ---
 
@@ -291,7 +144,7 @@ tablassert quick-map "TNF-alpha" -f ./fullmap -t 9606 -p Gene -a Disease -ep OMI
     An invalid value exits 2 naming the nearest valid names.
 
 !!! note "`-f` means `--fullmap` here"
-    On `build-kg`, `validate`, and `agent`, `-f` is `--configuration-file`; on `build-fullmap` it is
+    On `build-kg` and `validate`, `-f` is `--configuration-file`; on `build-fullmap` it is
     `--force`. Aliases are per-command, and `quick-map` takes no config and has no force mode.
     `-f` is its one required input path.
 
@@ -428,8 +281,8 @@ it, as `effect_size` / `effect_type` did when 4.4.4 shipped
 edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model support)
 ```
 
-The strict count is what `ok` and the exit code use; the pending count is what
-[`tablassert agent`](#agent) optimizes against, so a deliberate gap never reads as a modelling error.
+The strict count is what `ok` and the exit code use; the pending count is reported separately, so a
+deliberate gap never reads as a modelling error.
 
 ### Repairing a graph with `--prune`
 
@@ -524,4 +377,3 @@ non-zero in every mode: a file that was never read must never count as a pass.
 - **[Tutorial](tutorial.md)**: complete example walkthrough
 - **[Configuration Guide](configuration/graph.md)**: YAML configuration reference
 - **[Fullmap](fullmap.md)**: entity-resolution database build and schema
-- **[Agent](agent.md)**: autonomous PMC -> KG pipeline depth
