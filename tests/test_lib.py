@@ -357,8 +357,83 @@ def test_section_store_path_suffixes_every_build_mode() -> None:
     assert cli._section_store_path("abc123", head=True).name == "abc123.head.parquet"
     assert cli._section_store_path("abc123", release=True).name == "abc123.release.parquet"
     assert cli._section_store_path("abc123", qc=True).name == "abc123.qc.parquet"
+    assert cli._section_store_path("abc123", linkouts=True).name == "abc123.linkouts.parquet"
     # Modes compose instead of overwriting one another's suffix.
-    assert cli._section_store_path("abc123", head=True, release=True, qc=True).name == "abc123.head.release.qc.parquet"
+    assert cli._section_store_path("abc123", head=True, release=True, qc=True, linkouts=True).name == "abc123.head.release.qc.linkouts.parquet"
+
+
+def test_tcode_collect_appends_edge_linkout_when_linkouts(fixtures_path: Path) -> None:
+    """--linkouts appends the EdgeLinkouts template to the primary entry's record URLs.
+
+    Why: the flag's whole contract is that the graph-infores primary ``sources`` entry
+    gains ``https://linkouts.skyelanegoetz.com/edges/{edge_id}`` AFTER the section's own
+    source URLs; the template must reach ``retrieval_sources`` unresolved so the
+    post-dedup sweep can substitute each edge's own id.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {
+            **data,
+            "config": fixtures_path / "minimal_section.yaml",
+            "store": Path("/tmp/sectionhash_linkouts.parquet"),
+            "infores": "infores:test-kg",
+            "linkouts": True,
+        }
+    )
+
+    collected: list[tuple[Any, tuple[Any, ...]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    linkout_ops: list[tuple[Any, tuple[Any, ...]]] = [op for op in collected if op[0].__name__ == "retrieval_sources"]
+
+    assert len(linkout_ops) == 1
+    urls: list[str] = linkout_ops[0][1][2]
+    assert urls == ["https://example.com/test.tsv", "https://linkouts.skyelanegoetz.com/edges/{edge_id}"]
+
+
+def test_tcode_collect_omits_edge_linkout_by_default(fixtures_path: Path) -> None:
+    """Without --linkouts the primary entry's record URLs are exactly the section's source URLs.
+
+    Why: the flag is opt-in; default-off emission must be byte-identical to a build
+    without the flag, so the op list must carry no linkout template whatsoever.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": Path("/tmp/sectionhash_nolinkouts.parquet"), "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any, ...]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    urls: list[str] = next(op for op in collected if op[0].__name__ == "retrieval_sources")[1][2]
+
+    assert urls == ["https://example.com/test.tsv"]
+
+
+def test_tcode_collect_omits_edge_linkout_when_override(fixtures_path: Path) -> None:
+    """--linkouts never injects into a section that authors its own provenance.override.
+
+    Why: override emission is author-controlled (DAKP hand-writes the same EdgeLinkouts
+    template into ``override.sources``); the flag silently adding a second one would
+    duplicate URLs and contradict the section's explicit ``sources`` contract.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    # `publication` and `override` are mutually exclusive; the override owns provenance.
+    del data["provenance"]["publication"]
+    data["provenance"]["override"] = {"sources": [{"resource_id": "infores:my-source", "resource_role": "primary_knowledge_source"}]}
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {
+            **data,
+            "config": fixtures_path / "minimal_section.yaml",
+            "store": Path("/tmp/sectionhash_override_lo.parquet"),
+            "infores": "infores:test-kg",
+            "linkouts": True,
+        }
+    )
+
+    collected: list[tuple[Any, tuple[Any, ...]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    retrieval_op: tuple[Any, tuple[Any, ...]] = next(op for op in collected if op[0].__name__ == "retrieval_sources")
+
+    # The explicit template is passed verbatim (args[4]); the section's own source URLs
+    # ride along for the RIG (args[2]) but the linkout template must NOT be appended.
+    assert retrieval_op[1][4] == [{"resource_id": "infores:my-source", "resource_role": "primary_knowledge_source"}]
+    assert "https://linkouts.skyelanegoetz.com/edges/{edge_id}" not in retrieval_op[1][2]
 
 
 def test_tcode_collect_quick_exit_never_serves_another_mode_cached_parquet(monkeypatch: Any, fixtures_path: Path, tmp_path: Path) -> None:

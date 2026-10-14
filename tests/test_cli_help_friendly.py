@@ -103,6 +103,7 @@ def test_build_kg_help_documents_the_build_mode_flags() -> None:
     assert "five rows" in text  # --head's sample size
     assert "verbose per-section logging" in text
     assert "[qc]" in text
+    assert "linkouts.skyelanegoetz.com" in text  # --linkouts' concrete effect
 
 
 def test_validate_help_documents_the_schema_choice() -> None:

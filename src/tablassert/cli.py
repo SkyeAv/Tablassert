@@ -60,29 +60,31 @@ BABEL_SYNONYM_RE: re.Pattern[str] = re.compile(r'<a href="([^"]+\.gz)"')
 TAXON_ALLOWLIST_PATH: Path = Path(__file__).parent / "data" / "experimental_taxa.yaml"
 
 
-def _section_store_path(h: str, head: bool = False, release: bool = False, qc: bool = False) -> Path:
+def _section_store_path(h: str, head: bool = False, release: bool = False, qc: bool = False, linkouts: bool = False) -> Path:
     """Name a section's cached subgraph parquet so build-mode flags never share a cache file.
 
     The cached parquet's content depends on the build mode: ``--head`` samples
-    rows, ``--release`` applies the release-mode significance filters, and
-    ``--qc`` drops fullmap-audit rejects. ``Tcode.collect`` quick-exits on any
-    existing store file, skipping the whole op chain, so each mode combination
-    must cache under its own suffix or one mode's build is silently reused as
-    another's.
+    rows, ``--release`` applies the release-mode significance filters, ``--qc``
+    drops fullmap-audit rejects, and ``--linkouts`` appends the EdgeLinkouts
+    record URL to the primary ``sources`` entry. ``Tcode.collect`` quick-exits
+    on any existing store file, skipping the whole op chain, so each mode
+    combination must cache under its own suffix or one mode's build is silently
+    reused as another's.
 
     Args:
         h: Section config hash (``mkhash`` of the section dict).
         head: ``--head`` preview build flag.
         release: ``--release`` build flag.
         qc: ``--qc`` build flag.
+        linkouts: ``--linkouts`` build flag.
 
     Returns:
-        Store path like ``<h>.parquet`` with ``.head`` / ``.release`` / ``.qc``
-        inserted before the extension for each set flag.
+        Store path like ``<h>.parquet`` with ``.head`` / ``.release`` / ``.qc`` /
+        ``.linkouts`` inserted before the extension for each set flag.
     """
     from tablassert.utils import STORE
 
-    suffix: str = (".head" if head else "") + (".release" if release else "") + (".qc" if qc else "")
+    suffix: str = (".head" if head else "") + (".release" if release else "") + (".qc" if qc else "") + (".linkouts" if linkouts else "")
     return STORE / f"{h}{suffix}.parquet"
 
 
@@ -272,11 +274,17 @@ def _run_cache_snapshot(cache: RunCache, entry: PlanEntry) -> Callable[[int, pl.
 
 
 def build_pipeline(
-    configuration_file: Path, progress: PipelineProgress, release: bool = False, qc: bool = False, log: bool = False, head: bool = False
+    configuration_file: Path,
+    progress: PipelineProgress,
+    release: bool = False,
+    qc: bool = False,
+    log: bool = False,
+    head: bool = False,
+    linkouts: bool = False,
 ) -> None:
     """Load a graph YAML and build it through the shared in-process core."""
     graph: Graph = _load_graph(configuration_file)
-    build_graph_pipeline(graph, configuration_file, progress, release=release, qc=qc, log=log, head=head)
+    build_graph_pipeline(graph, configuration_file, progress, release=release, qc=qc, log=log, head=head, linkouts=linkouts)
 
 
 def build_graph_pipeline(
@@ -287,6 +295,7 @@ def build_graph_pipeline(
     qc: bool = False,
     log: bool = False,
     head: bool = False,
+    linkouts: bool = False,
     audit_sources: bool = True,
 ) -> None:
     """Build a validated :class:`Graph` without loading another graph YAML.
@@ -304,6 +313,7 @@ def build_graph_pipeline(
         qc: When ``True``, run quality-control audits and final study assertions.
         log: When ``True``, enable per-section verbose logging.
         head: When ``True``, build a random sample of up to five rows per section.
+        linkouts: When ``True``, append the EdgeLinkouts record URL to the graph infores entry in every edge's ``sources`` list.
     """
     from tablassert.fullmap import fullmap_db_path
     from tablassert.lib import Tcode, compile_graph, compile_subgraph
@@ -355,7 +365,7 @@ def build_graph_pipeline(
         start(f"{Path(str(s['config'])).stem} · {h[:8]}")
         # Mode flags change the cached parquet's content, so each combination caches
         # to a distinct file and can never quick-exit another mode's build.
-        store: Path = _section_store_path(h, head=head, release=release, qc=qc)
+        store: Path = _section_store_path(h, head=head, release=release, qc=qc, linkouts=linkouts)
         try:
             tcode.append(
                 Tcode.model_validate(
@@ -366,6 +376,7 @@ def build_graph_pipeline(
                         "qc": qc,
                         "release": release,
                         "head": head,
+                        "linkouts": linkouts,
                         "name": g.name,
                         "infores": g.rig.source_info.infores_id,
                         "qc_similarity_threshold": g.qc_similarity_threshold,
@@ -893,6 +904,7 @@ def build_kg(
     qc: Annotated[bool, cyclopts.Parameter(name=["--qc", "-q"], negative="")] = False,
     log: Annotated[bool, cyclopts.Parameter(name=["--log", "-l"], negative="")] = False,
     head: Annotated[bool, cyclopts.Parameter(name=["--head", "-hd"], negative="")] = False,
+    linkouts: Annotated[bool, cyclopts.Parameter(name=["--linkouts", "-lo"], negative="")] = False,
 ) -> None:
     """Build a knowledge graph from a YAML configuration file.
 
@@ -926,10 +938,17 @@ def build_kg(
             Tablassert produces no logs).
         head: Fast output-shape preview: a random sample of up to five rows per section,
             cached under its own ``.head`` store, so it never reuses or replaces a full build.
+        linkouts: Append the EdgeLinkouts per-edge record URL
+            (``https://linkouts.skyelanegoetz.com/edges/{edge_id}``, resolved to the final
+            edge id after dedup) to the graph infores entry (``rig.source_info.infores_id``)
+            in every emitted edge's ``sources`` list, so linkouts.skyelanegoetz.com can
+            deep-link each edge. Sections declaring ``provenance.override`` are untouched
+            (their ``sources`` emission is author-controlled). Cached under its own
+            ``.linkouts`` store, so it never reuses or replaces a full build.
     """
     if qc:
         extras.require("qc", required_by="--qc")
-    run(7 if qc else 6, build_pipeline, graph_configuration_file, release=release, qc=qc, log=log, head=head)
+    run(7 if qc else 6, build_pipeline, graph_configuration_file, release=release, qc=qc, log=log, head=head, linkouts=linkouts)
 
 
 @APP.command(name="validate")
