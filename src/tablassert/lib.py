@@ -583,6 +583,13 @@ def inline_supporting_study(lf: pl.LazyFrame, study_id: str, study_name: str | N
     return out.drop(drop)
 
 
+#: Per-edge record URL carried by the graph-infores primary ``sources`` entry when
+#: ``build-kg --linkouts`` is set - the EdgeLinkouts app (linkouts.skyelanegoetz.com)
+#: deep-links each edge by its own id. ``{edge_id}`` stays literal through the polars
+#: build and is resolved by the post-dedup sweep (``_resolve_edge_id_placeholders``).
+EDGE_LINKOUT_URL_TEMPLATE: str = "https://linkouts.skyelanegoetz.com/edges/{edge_id}"
+
+
 def retrieval_sources(
     lf: pl.LazyFrame,
     primary: str,
@@ -1242,6 +1249,7 @@ class Tcode(Section):
     head: bool = Field(False)
     name: str | None = Field(None)
     infores: str | None = Field(None)
+    linkouts: bool = Field(False)
     qc_similarity_threshold: float = Field(0.5)
     qc_fuzzy_ratio_threshold: float = Field(70.0)
     qc_fuzzy_partial_threshold: float = Field(80.0)
@@ -1446,6 +1454,13 @@ class Tcode(Section):
         # (rig.source_info.infores_id); there is no implicit derivation from the graph
         # name, so a RIG and its edges can never disagree about the source identity.
         primary_knowledge_source: str | None = self.infores
+        # Per-edge record URLs for the primary entry: the section's declared source URLs,
+        # plus the EdgeLinkouts template when --linkouts is set. A section with ANY
+        # provenance.override is author-controlled (DAKP hand-writes the same template
+        # into override.sources), so the flag injects nothing there.
+        primary_urls: list[str] = [str(u) for u in self.source.url]
+        if self.linkouts and override is None:
+            primary_urls.append(EDGE_LINKOUT_URL_TEMPLATE)
         upstream_ids = override.upstream_resource_ids if override else upstream_resource_ids(self.provenance.repo)
         upstream_urls: dict[str, list[str]] | None = (
             {key: [str(u) for u in urls] for key, urls in override.upstream_source_record_urls.items()}
@@ -1489,7 +1504,7 @@ class Tcode(Section):
             # mapping (override.upstream_source_record_urls) re-homes the record URLs
             # from the primary entry onto the matching supporting entries; an explicit
             # `sources` template (override.sources) replaces the whole derivation.
-            (retrieval_sources, (primary_knowledge_source, upstream_ids, [str(u) for u in self.source.url], upstream_urls, explicit_sources))
+            (retrieval_sources, (primary_knowledge_source, upstream_ids, primary_urls, upstream_urls, explicit_sources))
             if primary_knowledge_source
             else None,
             (publications, (publication_values,)) if publication_values else None,

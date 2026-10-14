@@ -113,6 +113,63 @@ def test_build_pipeline_against_real_redb(tmp_path: Path, monkeypatch: pytest.Mo
     assert "HGNC:6871" in edge_text
 
 
+def test_build_pipeline_with_linkouts_resolves_edge_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
+    """SMOKE: ``build_pipeline(linkouts=True)`` emits the resolved EdgeLinkouts record URL.
+
+    Why: the flag's contract spans three stages - the template rides the op list, the
+    deduper assigns ids AFTER subgraphs are written, and the post-dedup sweep substitutes
+    them - so only a real build proves each edge's graph-infores primary entry deep-links
+    at ``https://linkouts.skyelanegoetz.com/edges/<its own id>`` with no placeholder left.
+    Mirrors smoke (i) except for ``linkouts=True``.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+
+    data: Path = tmp_path / "data.tsv"
+    data.write_text("brca1\tmapk1\nbrca1\tmapk1\n")
+
+    table: Path = tmp_path / "table.yaml"
+    table_config: dict[str, Any] = {
+        "template": {
+            "source": {"kind": "text", "local": str(data), "url": ["https://example.com/data.tsv"], "delimiter": "\t"},
+            "statement": {
+                "subject": {"method": "column", "encoding": "A"},
+                "predicate": "associated_with",
+                "object": {"method": "column", "encoding": "B"},
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        }
+    }
+    to_yaml(table, table_config)
+
+    graph: Path = tmp_path / "graph.yaml"
+    graph_config: dict[str, Any] = {
+        "name": "LINKOUTS_KG",
+        "version": "1.0.0",
+        "tables": [str(table)],
+        "fullmap": str(fullmap),
+        "rig": rig_factory(tmp_path, infores_id="infores:linkouts-kg", source_info={"description": "linkouts smoke graph"}),
+    }
+    to_yaml(graph, graph_config)
+
+    build_pipeline(graph, PipelineProgress(total_stages=6), linkouts=True)
+
+    edges: Path = tmp_path / "LINKOUTS_KG_1.0.0.edges.ndjson"
+    assert edges.is_file()
+    records: list[dict[str, Any]] = [json.loads(line) for line in edges.read_text().splitlines() if line.strip()]
+    assert records
+    for record in records:
+        primary: dict[str, Any] = next(s for s in record["sources"] if s["resource_role"] == "primary_knowledge_source")
+        assert primary["resource_id"] == "infores:linkouts-kg"
+        urls: list[str] = primary["source_record_urls"]
+        # The section's own record URL survives and the linkout resolves to THIS edge's id.
+        assert urls == ["https://example.com/data.tsv", f"https://linkouts.skyelanegoetz.com/edges/{record['id']}"]
+    # No unresolved placeholder may survive anywhere in the emitted file.
+    assert "{edge_id}" not in edges.read_text()
+
+
 def test_build_pipeline_over_parquet_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
     """SMOKE (iii): the same six-stage build reads a ``kind: parquet`` source end to end.
 
