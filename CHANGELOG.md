@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 20.0.0 - 2026-10-14
+
+### Breaking Changes
+- **The experimental agent pipeline, GEPA prompt optimization, and the distillation surfaces are removed.** The `tablassert agent` command (supervisor loop, PMC fetching, config derivation, judge/reflexion improvement, checkpoint state, and the `TABLASSERT_AGENT_*` env vars), the `--optimize` flag family and its `[optimize]` extra (`dspy`), and the `tablassert distill-export` / `tablassert distill-weigh` commands with their `[distill]` extra (`datasets`) are gone, along with the modules behind them (`agent.py`, `distill.py`, `distill_reward.py`, `graph_target.py`), the agent-only error codes `llm-transient` and `reward-config-invalid`, the `extras.require_module` lazy-import helper, `docs/agent.md`, and the `examples/` tree; the `[agent]` extra is removed from the extras registry too. The stable core pipeline (`build-kg`, `validate`, `validate-kgx`, `validate-infores`, `build-fullmap`, `quick-map`) is untouched. ([#215](https://github.com/SkyeAv/Tablassert/pull/215))
+  **Migration:** drop `tablassert[agent]` / `[optimize]` / `[distill]` installs and any `agent`, `--optimize`, or `distill-*` invocations; scripts that still need those surfaces must pin `tablassert<20`.
+- **The QC embedding stage now runs the Babel-fine-tuned SapBERT.** Stage 4's checkpoint swaps from `cambridgeltl/SapBERT-from-PubMedBERT-fulltext` to `RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`, RENCI's fine-tune of the same PubMedBERT base on synonym pairs sampled from NCATS Translator Babel identifier cliques (release 2025-01-23), so the fine-tuning signal matches the stage's audit task (whether two names denote the same concept) on exactly the equivalence data Translator normalizes against. The checkpoint is a drop-in for `sentence-transformers` (same architecture, 768-dim embeddings), and the cache dir moves `.tablassert/sapbert/` -> `.tablassert/sapbert-babel/` so installs holding the base checkpoint re-download instead of silently serving it; stale `.tablassert/sapbert/` directories can be deleted. `qc.SIMILARITY_THRESHOLD` stays at `0.5` un-tuned, so reject rates may shift with the new score distribution. ([#214](https://github.com/SkyeAv/Tablassert/pull/214))
+
+### Added
+- **`build-kg` gains `--linkouts`/`-lo` for EdgeLinkouts edge deep links.** The opt-in flag appends DAKP's EdgeLinkouts record URL template (`https://linkouts.skyelanegoetz.com/edges/{edge_id}`) to the graph's own infores entry in every emitted edge's `sources`, so linkouts.skyelanegoetz.com can deep-link each edge without hand-authoring `provenance.override.sources`; `{edge_id}` rides the op list unresolved and is substituted per-edge by the existing post-dedup sweep, sections declaring a `provenance.override` are never touched, the default-off build is unchanged, and linkouts builds cache under their own `.linkouts` store suffix so a cached plain build can never quick-exit one (or vice versa). ([#216](https://github.com/SkyeAv/Tablassert/pull/216))
+
 ## 19.7.0 - 2026-10-12
 
 ### Changed
