@@ -138,17 +138,17 @@ return similarity >= qc.SIMILARITY_THRESHOLD  # 0.5
 
 ### SapBERT Model
 
-**Model:** `cambridgeltl/SapBERT-from-PubMedBERT-fulltext`
+**Model:** `RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`
 
-**Backend:** [sentence-transformers](https://www.sbert.net/) (PyTorch). Embeddings are compared with scikit-learn's `cosine_similarity`. SapBERT's self-alignment pretraining pulls UMLS synonym pairs together in embedding space, which fits this stage's task, deciding whether two names denote the same entity, better than the NLI/STS-trained BioBERT it replaced. The 0.5 threshold was carried over from that BioBERT gate and has not been re-tuned for SapBERT's score distribution.
+**Backend:** [sentence-transformers](https://www.sbert.net/) (PyTorch). Embeddings are compared with scikit-learn's `cosine_similarity`. SapBERT's self-alignment pretraining pulls synonym pairs together in embedding space; this checkpoint is RENCI's fine-tune of `cambridgeltl/SapBERT-from-PubMedBERT-fulltext` on synonym pairs sampled from NCATS Translator Babel identifier cliques, so its training signal matches this stage's task, deciding whether two names denote the same entity. The 0.5 threshold was carried over from the earlier BioBERT gate and has not been re-tuned for SapBERT's score distribution.
 
 **Lazy-loaded** on the first `fullmap_audit()` call that reaches the embedding stage via `get_sapbert()`, then cached globally for the lifetime of the process.
 
 ### Model Caching
 
-`get_sapbert()` loads the model from the local cache when present; otherwise it downloads `cambridgeltl/SapBERT-from-PubMedBERT-fulltext` and saves it for future runs.
+`get_sapbert()` loads the model from the local cache when present; otherwise it downloads `RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23` and saves it for future runs.
 
-**Cache location:** `.tablassert/sapbert/` on disk (`qc.MODEL`); the loaded model object is also cached in memory for the lifetime of the process.
+**Cache location:** `.tablassert/sapbert-babel/` on disk (`qc.MODEL`); the loaded model object is also cached in memory for the lifetime of the process. Existing `.tablassert/sapbert/` directories hold the previous base checkpoint and are stale; they can be deleted.
 
 ### Example Usage
 
