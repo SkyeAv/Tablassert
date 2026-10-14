@@ -8,10 +8,8 @@ from tablassert.errors import (
     DOCS_URL,
     BabelDownloadError,
     GraphValidationError,
-    LlmTransientError,
     NetworkTransientError,
     QcRuntimeMissingError,
-    RewardConfigError,
     SectionValidationError,
     SourceFileError,
     TablassertValidationError,
@@ -67,11 +65,10 @@ def test_babel_download_error_code_and_docs_url() -> None:
 def test_network_transient_error_code_and_docs_url() -> None:
     """Guard: an exhausted retry budget on a TRANSIENT failure carries a stable slug and a docs link.
 
-    The `network-transient` code is what lets a fleet consumer requeue an article WITHOUT keyword-matching
-    `notes`. A 16-worker run over 42,981 PMC articles recorded 2,194 DNS-shaped failures (2,031 x
-    `[Errno -2] Name or service not known`) as `status=SKIPPED` with notes byte-identical in shape to a
-    legitimate not-open-access skip, so 87.5% of the failures were indistinguishable from the 7,002 real
-    skips. The message must also name the target, the attempt count, and the last error, and state plainly
+    The `network-transient` code is what lets a consumer requeue the operation WITHOUT keyword-matching
+    the message. DNS-shaped failures (`[Errno -2] Name or service not known`) read byte-identical in a
+    plain note string to a legitimate terminal rejection, so the coded class is the only reliable signal.
+    The message must also name the target, the attempt count, and the last error, and state plainly
     that the failure is retryable later.
     """
     last: URLError = URLError(socket.gaierror(-2, "Name or service not known"))
@@ -107,23 +104,11 @@ def test_redact_secrets_preserves_context_and_avoids_false_positive_text() -> No
 
 
 def test_error_code_of_walks_wrapped_coded_errors() -> None:
-    """smolagents-style wrapper exceptions still expose the inner LLM code to the supervisor."""
-    inner: LlmTransientError = LlmTransientError("llm", 4, RuntimeError("503"))
-    outer: RuntimeError = RuntimeError("AgentGenerationError")
+    """A plain wrapper exception still exposes the inner coded error through the cause walk."""
+    inner: NetworkTransientError = NetworkTransientError("https://gateway/x", 4, RuntimeError("503"))
+    outer: RuntimeError = RuntimeError("wrapped")
     outer.__cause__ = inner
-    assert error_code_of(outer) == "llm-transient"
-
-
-def test_llm_transient_error_code_and_docs_url() -> None:
-    """Guard: an exhausted LLM retry budget carries the stable slug and docs URL."""
-    last: RuntimeError = RuntimeError("gateway 503")
-    err: LlmTransientError = LlmTransientError("gateway/model", 4, last)
-    assert err.code == "llm-transient"
-    assert str(err).endswith(DOCS_URL + "llm-transient")
-    assert err.target == "gateway/model"
-    assert err.attempts == 4
-    assert err.last_error is last
-    assert "retryable later" in str(err)
+    assert error_code_of(outer) == "network-transient"
 
 
 def test_source_file_error_carries_config_section_and_path() -> None:
@@ -142,20 +127,6 @@ def test_source_file_error_carries_config_section_and_path() -> None:
     assert "/data/missing.csv" in str(err)
 
 
-def test_reward_config_error_code_and_docs_url() -> None:
-    """Guard: a rejected reward config carries a stable slug and a docs link.
-
-    Why: the reward config decides which examples train the LoRA, so a typo'd knob must surface as
-    the greppable, docs-linked `reward-config-invalid` failure — never as a silently-defaulted
-    weighting policy. The message is built by the loader (it names the file, the key, and the
-    valid set); this class only pins the slug and the URL.
-    """
-    err: RewardConfigError = RewardConfigError("Reward config invalid: reward.yaml — unknown key 'w_covrage' (valid: w_coverage, ...)")
-    assert err.code == "reward-config-invalid"
-    assert str(err).endswith(DOCS_URL + "reward-config-invalid")
-    assert "w_covrage" in str(err)
-
-
 def test_source_file_error_without_build_context() -> None:
     """Guard: the error is still informative when raised without build context.
 
@@ -171,11 +142,10 @@ def test_source_file_error_without_build_context() -> None:
 def test_error_code_of_reads_coded_and_plain_exceptions() -> None:
     """``error_code_of`` exposes the private ``_Coded`` slug publicly, and NEVER raises.
 
-    WHY a helper rather than an ``isinstance`` ladder in the supervisor: a ladder over concrete classes
+    WHY a helper rather than an ``isinstance`` ladder in error handlers: a ladder over concrete classes
     silently stops covering every code added later, while this reads the mixin once -- so a newly coded
-    error becomes machine-readable in ``state.json`` with no further wiring. WHY never-raise: it runs
-    INSIDE the supervisor's catch-all, where a raising helper would turn "one bad pmc" into "the whole
-    16-worker batch aborts".
+    error is machine-readable with no further wiring. WHY never-raise: it is safe to call inside a
+    catch-all handler, where a raising helper would turn one bad record into a whole batch aborting.
     """
     coded: NetworkTransientError = NetworkTransientError("https://pmc/x", 4, URLError(socket.gaierror(-2, "Name or service not known")))
     assert error_code_of(coded) == "network-transient"

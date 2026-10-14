@@ -44,7 +44,7 @@ def is_lock_contention(error: BaseException) -> bool:
     Callers that wrap a lookup in their OWN retry loop (e.g. ``build_and_audit``'s coverage
     retry) must NOT retry on this error: :func:`_call_with_lock_retry` already exhausted its
     backoff budget before the error escaped, so re-running it only multiplies the wait while
-    (in GEPA) holding the process-wide build lock.
+    holding the process-wide build lock.
     """
     msg = str(error).lower()
     return any(token in msg for token in _LOCK_RETRY_TOKENS)

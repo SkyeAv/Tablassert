@@ -14,7 +14,7 @@ repos:
     rev: v0.15.12
     hooks:
       # No `files:` filter: CI runs `ruff check .` over the whole tree, so scoping these to
-      # src/ and tests/ meant examples/agent/qc/*.py could only ever fail in CI. Ruff's own
+      # src/ and tests/ meant new top-level directories could only ever fail in CI. Ruff's own
       # config already decides what is in scope.
       - id: ruff-check
         args: [--fix]

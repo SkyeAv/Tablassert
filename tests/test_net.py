@@ -147,10 +147,9 @@ def _stub_retry_clock(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 def test_net_imports_only_stdlib_and_errors_and_log() -> None:
     """Guard REQ-NET-1: ``net.py`` pulls in nothing but stdlib plus ``errors`` and ``log``.
 
-    WHY: this is the shared seam BOTH ``agent.py`` (behind the ``[agent]`` extra) and ``cli.py`` (base
-    install) must be able to import. A single ``import httpx`` / ``import smolagents`` here would make
-    ``tablassert build`` -- which downloads BABEL through ``cli.download_babel_file`` -- fail on any
-    install without the agent extra, and would add a dependency the work is forbidden from adding.
+    WHY stdlib-only: the whole module must stay importable on the base install, which
+    ``cli.py`` (and its BABEL downloads through ``cli.download_babel_file``) depends on; a single
+    ``import httpx`` here would add a dependency the work is forbidden from adding.
     """
     source: str = Path(net.__file__).read_text(encoding="utf-8")
     modules: set[str] = set()
@@ -344,15 +343,15 @@ def test_is_transient_survives_truthiness_hostile_chain_links() -> None:
 
 
 def test_is_transient_matches_optional_dependency_class_names_without_importing_them() -> None:
-    """``openai`` / ``litellm`` / ``httpx`` error types are recognized by CLASS NAME (REQ-NET-1 + step 4).
+    """Third-party SDK error types are recognized by CLASS NAME, without importing them (REQ-NET-1 + step 4).
 
-    WHY: the fleet's 331 ``Error in generating model output`` notes and its 337 log hits on ``429`` came
-    through ``openai``'s error hierarchy, but ``net.py`` may not import ``openai`` -- it lives in the base
-    install path that ``cli.download_babel_file`` uses, where the ``[agent]`` extra is absent. Matching on
-    ``type(exc).__name__`` keeps the seam stdlib-only while still classifying those errors. Every message
-    here is deliberately token-free so the assertion proves the NAME table fired, not the message
-    fallback. A status-bearing 4xx must still lose to the status rule, or an ``APIStatusError`` for a bad
-    request would be retried four times.
+    WHY: third-party SDK error hierarchies (``openai`` / ``litellm`` / ``httpx``) may wrap transport
+    failures in exceptions this stdlib-only module cannot import -- the base install path that
+    ``cli.download_babel_file`` uses ships none of them. Matching on ``type(exc).__name__`` keeps the
+    seam stdlib-only while still classifying such wrapped errors. Every message here is deliberately
+    token-free so the assertion proves the NAME table fired, not the message fallback. A status-bearing
+    4xx must still lose to the status rule, or an ``APIStatusError`` for a bad request would be retried
+    four times.
     """
 
     class APIConnectionError(Exception):
@@ -394,10 +393,9 @@ def test_is_transient_matches_optional_dependency_class_names_without_importing_
 def test_is_transient_unwraps_cause_chain() -> None:
     """An unrecognized wrapper is classified by its ``__cause__`` / ``__context__``, up to depth 3.
 
-    WHY: ``urlopen`` wraps ``socket.gaierror`` in ``URLError`` and ``smolagents`` re-raises transport
-    failures as its own ``RuntimeError``-shaped wrapper -- the fleet's 331 ``Error in generating model
-    output: ...`` notes are exactly that shape. Classifying only the outermost object would call those
-    permanent. The bound matters just as much: an unbounded walk over a self-referential ``__context__``
+    WHY: ``urlopen`` wraps ``socket.gaierror`` in ``URLError``, and third-party wrappers re-raise
+    transport failures as their own ``RuntimeError``-shaped exceptions. Classifying only the outermost
+    object would call those permanent. The bound matters just as much: an unbounded walk over a self-referential ``__context__``
     would hang a worker, so both the depth limit and the cycle case are pinned here.
     """
     wrapper: RuntimeError = RuntimeError("Error in generating model output")
@@ -926,14 +924,13 @@ def test_retry_transient_logs_every_retry_and_the_exhaustion(monkeypatch: pytest
     assert fields["error"] == str(_dns_error(-2, "Name or service not known"))
 
 
-def test_http_get_text_and_bytes_retry_with_monkeypatched_urlopen(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_http_get_text_retries_with_monkeypatched_urlopen(monkeypatch: pytest.MonkeyPatch) -> None:
     """The real HTTP seam retries a transient failure and preserves the request exactly (REQ-NET-13).
 
-    WHY: ``tests/test_agent_fetch.py`` monkeypatches ``agent._http_get_text`` wholesale, so the retry
-    INSIDE the seam is unreachable from the existing 62 fetch tests by design. This is the only place the
-    real ``urlopen`` call is exercised. The ``User-Agent: tablassert`` header and the ``timeout`` argument
-    are asserted verbatim because PMC's S3 endpoint and the harness both depend on them, and the UTF-8
-    decode is asserted because ``agent._http_get_text`` has always decoded that way.
+    WHY: this is the only place the real ``urlopen`` call is exercised end to end. The
+    ``User-Agent: tablassert`` header and the ``timeout`` argument are asserted verbatim because
+    every caller depends on them, and the UTF-8 decode is asserted because the seam always decoded
+    that way.
     """
     sleeps: list[float] = _stub_retry_clock(monkeypatch)
 
@@ -948,22 +945,12 @@ def test_http_get_text_and_bytes_retry_with_monkeypatched_urlopen(monkeypatch: p
         assert request.get_header("User-agent") == "tablassert", "the User-Agent must be preserved verbatim"
     assert sleeps == [1.0], "one backoff between the two attempts, and none after the success"
 
-    bytes_opener: _RecordingUrlopen = _RecordingUrlopen(
-        [ConnectionResetError(104, "Connection reset by peer"), http.client.RemoteDisconnected("Remote end closed connection"), b"\x1f\x8bpayload"]
-    )
-    monkeypatch.setattr(net, "urlopen", bytes_opener)
-    assert net.http_get_bytes("https://pmc.example/PMC11708054/supp.tar.gz") == b"\x1f\x8bpayload"
-    assert len(bytes_opener.requests) == 3
-    assert bytes_opener.timeouts == [net.DEFAULT_TIMEOUT] * 3, "the 120 s default must apply to every attempt"
-    assert sleeps == [1.0, 1.0, 2.0], "the bytes call added its own two backoffs to the shared log"
-
 
 def test_http_get_text_raises_the_coded_error_when_every_attempt_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """An exhausted fetch surfaces the coded error naming the URL, not a bare ``URLError``.
 
-    WHY: this is the shape that reaches ``run_supervisor``'s catch-all for the 2,031 articles that died on
-    ``[Errno -2]``. Without the code, the record's notes string is the only signal and the fleet cannot
-    tell a requeueable DNS blip from a permanent not-open-access skip.
+    WHY: without the code, the message string is the caller's only signal, and it cannot tell a
+    requeueable DNS blip from a permanent rejection of the request.
     """
     sleeps: list[float] = _stub_retry_clock(monkeypatch)
     opener: _RecordingUrlopen = _RecordingUrlopen([_dns_error(-2, "Name or service not known")])

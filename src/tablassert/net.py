@@ -1,24 +1,23 @@
 """Network resilience: transient-failure classification, bounded jittered backoff, and a retrying HTTP seam.
 
 One stdlib-only seam that answers two questions about ANY exception -- *is this transient?* and *how long
-should we wait?* -- plus the single driver that applies the answer. Both the PMC HTTP path
-(:mod:`tablassert.agent`) and the BABEL downloader (:func:`tablassert.cli.download_babel_file`) consult the
-same table, so a gateway ``503``-wrapping-``429`` and a ``systemd-resolved`` ``EAI_NONAME`` are handled
-identically instead of by two competing heuristics.
+should we wait?* -- plus the single driver that applies the answer. Both the BABEL downloader
+(:func:`tablassert.cli.download_babel_file`) and the infores registry refresh
+(:func:`tablassert.infores_registry.fetch_registry_text`) consult the same table, so a gateway
+``503``-wrapping-``429`` and a ``systemd-resolved`` ``EAI_NONAME`` are handled identically instead of by
+two competing heuristics.
 
 Notes:
-    WHY this module exists: a 16-worker fleet run over 42,981 PMC articles produced 193 successes and
-    2,507 failures, and 2,194 of those failures (87.5%) were DNS-shaped -- 2,031 x ``[Errno -2] Name or
-    service not known``, 154 x ``[Errno -3] Temporary failure in name resolution``, 9 x ``No address
-    associated with hostname``. ``/etc/nsswitch.conf`` reads
+    WHY this module exists: a long download run over tens of thousands of URLs lost most of its work to
+    DNS-shaped failures -- ``[Errno -2] Name or service not known``, ``[Errno -3] Temporary failure in
+    name resolution``, ``No address associated with hostname``. ``/etc/nsswitch.conf`` reads
     ``hosts: mymachines resolve [!UNAVAIL=return] files myhostname dns``, so a NOTFOUND from a saturated
     or roaming-broken ``systemd-resolved`` returns IMMEDIATELY as ``EAI_NONAME``: a transient failure that
-    looks permanent. The HTTP seam that hit it was a single-attempt ``urlopen`` with zero retry, and
-    ``fetch_pmc_article`` makes ~13-18 such calls per article, so any one blip lost the article.
+    looks permanent. A single-attempt ``urlopen`` with zero retry loses the whole file (and, for a
+    multi-part archive, the whole build) to any one blip.
 
     WHY stdlib-only: ``tenacity`` / ``urllib3.util.retry`` / ``requests`` would land in the base install
-    for a problem solvable in ~200 lines, and ``smolagents``' own retryer is not importable without the
-    ``[agent]`` extra -- so it cannot be the shared seam for :mod:`tablassert.cli`.
+    for a problem solvable in ~200 lines.
 """
 
 from __future__ import annotations
@@ -67,7 +66,7 @@ DEFAULT_RETRY_AFTER_CAP: float = 60.0
 """Upper bound on an honored server ``Retry-After`` / ``(reset after ...)`` hint."""
 
 DEFAULT_TIMEOUT: int = 120
-"""Per-request socket timeout in seconds for :func:`http_get_text` / :func:`http_get_bytes`."""
+"""Per-request socket timeout in seconds for :func:`http_get_text`."""
 
 DEFAULT_FETCH_CONCURRENCY: int = 8
 """Worker-pool size for one article's file downloads.
@@ -117,8 +116,9 @@ TRANSIENT_EXCEPTION_TYPES: tuple[type[BaseException], ...] = (
     ssl.SSLError,  # "TLS/SSL connection has been closed (EOF)", handshake timeouts
 )
 
-#: ``type(exc).__name__`` values from OPTIONAL dependencies (``openai`` / ``litellm`` / ``httpx``) that
-#: must be recognized WITHOUT importing them, so this module stays stdlib-only.
+#: ``type(exc).__name__`` values from third-party HTTP/SDK client libraries (``openai`` /
+#: ``litellm`` / ``httpx``) that must be recognized WITHOUT importing them, so this module stays
+#: stdlib-only.
 TRANSIENT_EXCEPTION_NAMES: frozenset[str] = frozenset(
     {
         "APIConnectionError",
@@ -167,9 +167,9 @@ TRANSIENT_ERRNOS: frozenset[int] = frozenset(
     }
 )
 
-#: Last-resort message patterns, applied ONLY when the type, status, and errno tables say nothing.
-#: Mirrors (and widens) ``smolagents.models.is_rate_limit_error`` so a gateway ``503``-wrapping-``429``
-#: is retried even when the raising class is a plain ``RuntimeError``.
+#: Last-resort message patterns, applied ONLY when the type, status, and errno tables say nothing,
+#: so a gateway ``503``-wrapping-``429`` is retried even when the raising class is a plain
+#: ``RuntimeError``.
 #:
 #: WHY compiled, word-bounded regexes and not bare substrings: every numeric-looking token in a fleet
 #: message is a candidate false positive. A bare ``"429"`` also matches ``row count 4290``; a bare
@@ -666,28 +666,5 @@ def http_get_text(url: str, *, timeout: int = DEFAULT_TIMEOUT, attempts: int = D
         with urlopen(Request(url, headers={"User-Agent": USER_AGENT}), timeout=timeout) as response:
             body: bytes = response.read()
         return body.decode("utf-8")
-
-    return retry_transient(fetch, target=url, attempts=attempts)
-
-
-def http_get_bytes(url: str, *, timeout: int = DEFAULT_TIMEOUT, attempts: int = DEFAULT_ATTEMPTS) -> bytes:
-    """GET ``url`` with bounded retry and return the raw body bytes.
-
-    Args:
-        url: Absolute URL to fetch.
-        timeout: Per-request socket timeout in seconds.
-        attempts: Maximum number of ``urlopen`` calls.
-
-    Returns:
-        The response body as bytes.
-
-    Raises:
-        NetworkTransientError: If every attempt failed with a transient error.
-        Exception: Any permanent failure, re-raised unwrapped on the attempt that produced it.
-    """
-
-    def fetch() -> bytes:
-        with urlopen(Request(url, headers={"User-Agent": USER_AGENT}), timeout=timeout) as response:
-            return response.read()
 
     return retry_transient(fetch, target=url, attempts=attempts)
