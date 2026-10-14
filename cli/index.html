@@ -1673,6 +1673,13 @@ YAML configuration file.</p>
 <td><code>False</code></td>
 <td>Fast output-shape preview: &lt;=5 random rows/section, cached to <code>.head.parquet</code>, never clobbers a full build</td>
 </tr>
+<tr>
+<td><code>--linkouts</code>, <code>-lo</code></td>
+<td>Flag</td>
+<td>No</td>
+<td><code>False</code></td>
+<td>Append the EdgeLinkouts per-edge record URL (<code>https://linkouts.skyelanegoetz.com/edges/{edge_id}</code>, resolved to the final edge id after dedup) to the graph infores entry (<code>rig.source_info.infores_id</code>) in every emitted edge's <code>sources</code> list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring <code>provenance.override</code> are untouched; cached to <code>.linkouts.parquet</code>, never clobbers a full build</td>
+</tr>
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
