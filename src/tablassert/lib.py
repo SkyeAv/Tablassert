@@ -629,7 +629,9 @@ def retrieval_sources(
         lf: Source LazyFrame.
         primary: Infores CURIE of the primary knowledge source.
         upstream: Infores CURIEs of upstream/supporting data sources.
-        urls: Source record URLs for the primary entry (ignored when ``upstream_urls`` is set).
+        urls: URLs for the primary entry (when ``upstream_urls`` is set these must not be
+            source records -- e.g. the per-edge EdgeLinkouts template -- since record URLs
+            ride the supporting entries in that mode).
         upstream_urls: Optional per-upstream source record URLs keyed by infores CURIE.
         explicit: Optional explicit entry templates emitted verbatim, in order.
 
@@ -1502,9 +1504,7 @@ class Tcode(Section):
         # `inline_supporting_study` skips the struct unless it has content to carry.
         identified: bool = bool(publication_values)
         study_id: str = publication_values[0] if publication_values else self.config.stem
-        study_name: str | None = f"{self.config.name} SECTION {self.section_index}"
-        if study_name == study_id:
-            study_name = None
+        study_name: str = f"{self.config.name} SECTION {self.section_index}"
         # `use_enum_values` stores the override's enum keys/values as plain strings.
         category_override: dict[str, str] | None = (
             {obj: f"biolink:{pinned}" for obj, pinned in self.statement.category_override.items()} if self.statement.category_override else None

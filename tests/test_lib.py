@@ -995,6 +995,44 @@ def test_tcode_collect_rehomes_pmc_record_urls_onto_pubmed_central(fixtures_path
     assert pmc["source_record_urls"] == ["https://pmc-oa-opendata.s3.amazonaws.com/PMC10010437.1/Table3.xlsx"]
 
 
+def test_tcode_collect_rehomes_pmid_record_urls_onto_pubmed(fixtures_path: Path) -> None:
+    """A PMID-backed section emits record URLs on the infores:pubmed supporting entry.
+
+    Why: the re-homing keys off ``upstream_resource_ids(repo)``, so the PMID branch must
+    pin the same placement contract as the PMC branch (infores:pubmed-central).
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    data["provenance"] = {"repo": "PMID", "publication": "12345678"}
+    store: Path = Path("/tmp/sectionhash_pmid.parquet")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store, "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    source_args: tuple[Any, ...] = next(op[1] for op in collected if op[0] is retrieval_sources)
+
+    assert source_args[3] == {"infores:pubmed": ["https://example.com/test.tsv"]}
+
+
+def test_tcode_collect_names_override_study_after_config_section(fixtures_path: Path) -> None:
+    """Override sections get the same "<config> SECTION <n>" Study name as derived sections.
+
+    Why: the rename in ``_provenance_ops`` is override-agnostic and the docs state the
+    naming generally; this pins it so an override carve-out cannot silently change it.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    data["provenance"] = {"override": {"upstream_resource_ids": ["infores:upstream-source"]}}
+    store: Path = Path("/tmp/sectionhash_override_name.parquet")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store, "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    study_op: tuple[Any, tuple[Any, ...]] = next(op for op in collected if op[0].__name__ == "inline_supporting_study")
+
+    assert study_op[1][1] == "minimal_section.yaml SECTION 1"
+
+
 def test_tcode_collect_upstream_source_record_urls_rehome_urls(fixtures_path: Path) -> None:
     """``override.upstream_source_record_urls`` leaves the primary bare and attaches URLs to supporting entries.
 
