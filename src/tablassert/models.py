@@ -138,7 +138,7 @@ class BaseSource(TablaBase):
     url: list[HttpUrl] = Field(
         ...,
         min_length=1,
-        description="One or more remote source URL(s) recorded as provenance; emitted in the edge `sources` list under the primary entry's `source_record_urls` list and in the RIG. When `provenance.override.upstream_source_record_urls` is set, these URLs serve the RIG only and the per-upstream mapping determines edge placement instead. Format-validated only; not fetched.",
+        description="One or more remote source URL(s) recorded as provenance. Derived sections emit them in the edge `sources` list under the upstream repository supporting entry's `source_record_urls` list (infores:pubmed-central for PMC sections) and in the RIG. When `provenance.override.upstream_source_record_urls` is set, these URLs serve the RIG only and the per-upstream mapping determines edge placement instead; any other provenance.override keeps the primary-entry emission. Format-validated only; not fetched.",
     )
 
     rows: list[NonNegativeInt] | None = Field(None, description="Zero-based row indices kept after any row_slice crop.", examples=[[0, 2, 5]])
