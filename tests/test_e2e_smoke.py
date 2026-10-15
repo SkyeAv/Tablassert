@@ -403,7 +403,7 @@ def test_build_pipeline_coerces_statistical_annotations(tmp_path: Path, monkeypa
     assert "sample_size" not in edge_text
     study: dict[str, Any] = edge["has_supporting_studies"]["PMCID:PMC0000000"]
     assert study["id"] == "PMCID:PMC0000000"
-    assert study["name"] == "data.tsv"
+    assert study["name"] == "table.yaml SECTION 1"
     assert study["study_size"] == 450
     assert study["has_study_results"] == [{"id": "row:1"}]
 

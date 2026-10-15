@@ -471,8 +471,8 @@ def inline_supporting_study(lf: pl.LazyFrame, study_id: str, study_name: str | N
     The struct is shaped by the current Biolink Model (4.4.4+):
 
     * ``Study.id`` is a real identifier -- the section's publication CURIE -- and
-      ``Study.name`` a DISJOINT human label (worksheet or source filename); the two
-      are never composed into one string.
+      ``Study.name`` a DISJOINT human label (the table config file plus the section's
+      1-based index); the two are never composed into one string.
     * Study-level metadata declared as annotations (``study_size``, ``study_cohort``,
       ``study_context``, ``study_date_range``, ``study_method_description``,
       ``study_method_types`` -- see :data:`biolink.STUDY_METADATA_FIELDS`) lands as
@@ -504,8 +504,8 @@ def inline_supporting_study(lf: pl.LazyFrame, study_id: str, study_name: str | N
         lf: Edges LazyFrame after annotation and provenance ops.
         study_id: Stable study identifier (publication CURIE, or the config stem when
             unidentified).
-        study_name: Human-readable study label (worksheet or source filename), or
-            ``None`` to omit it.
+        study_name: Human-readable study label (table config file plus 1-based section
+            index), or ``None`` to omit it.
         identified: Whether ``study_id`` names a real publication rather than falling
             back to the config stem. ``False`` lets a contentless study be skipped.
 
@@ -1253,6 +1253,10 @@ class Tcode(Section):
     name: str | None = Field(None)
     infores: str | None = Field(None)
     linkouts: bool = Field(False)
+    section_index: int = Field(
+        1,
+        description="1-based position of this section within its table config file (document order); stamped by ingests.to_sections and used to name the inlined Study.",
+    )
     qc_similarity_threshold: float = Field(0.5)
     qc_fuzzy_ratio_threshold: float = Field(70.0)
     qc_fuzzy_partial_threshold: float = Field(80.0)
@@ -1488,17 +1492,17 @@ class Tcode(Section):
         knowledge_level = override.knowledge_level if override else self.provenance.knowledge_level
         agent_type = override.agent_type if override else self.provenance.agent_type
         publication_values = override.publications if override else [publication_curie(self.provenance.repo, self.provenance.publication or "")]
-        # The study is the table itself: one publication, one worksheet/table. The
-        # publication CURIE is the study's IDENTIFIER; the worksheet or source filename
-        # is its human-readable NAME. The two stay disjoint fields and are never composed
+        # The study is the table section itself: one publication, one config section.
+        # The publication CURIE is the study's IDENTIFIER; the originating table config
+        # file plus the section's 1-based index is its human-readable NAME (e.g.
+        # "KANG12.yaml SECTION 2"). The two stay disjoint fields and are never composed
         # into one string, so neither ever duplicates the other.
-        sheet: str | None = self.source.sheet if self.source.kind == Files.EXCEL else None  # pyright: ignore
         # No publication means no study to name: the fallback id is the config stem (the
         # YAML filename without its extension), not an identifier, so
         # `inline_supporting_study` skips the struct unless it has content to carry.
         identified: bool = bool(publication_values)
         study_id: str = publication_values[0] if publication_values else self.config.stem
-        study_name: str | None = sheet if sheet is not None else Path(self.source.local).name
+        study_name: str | None = f"{self.config.name} SECTION {self.section_index}"
         if study_name == study_id:
             study_name = None
         # `use_enum_values` stores the override's enum keys/values as plain strings.

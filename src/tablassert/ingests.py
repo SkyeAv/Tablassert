@@ -82,12 +82,14 @@ def to_yaml(p: Path, data: object) -> None:
         yaml.dump(data, f, Dumper=_IndentedSafeDumper, sort_keys=False, default_flow_style=False, allow_unicode=True, width=120)
 
 
-def to_sections(instructions: dict[str, Any], table: Path) -> list[list[dict[str, Any]]]:
+def to_sections(instructions: dict[str, Any], table: Path) -> list[dict[str, Any]]:
     """Expand a table config dict into a list of section dicts.
 
     Each section is the deep merge of the table-level ``template`` over a
     per-section entry. The originating ``table`` path is stamped into each
-    section as ``config``.
+    section as ``config``, and the section's 1-based position in the file
+    (document order) as ``section_index`` so provenance can name the inlined
+    Study after its origin ("<table config> SECTION <n>").
 
     Args:
         instructions: Parsed YAML config with optional ``template`` and
@@ -100,4 +102,7 @@ def to_sections(instructions: dict[str, Any], table: Path) -> list[list[dict[str
     template: dict[str, Any] = instructions.get("template", {})
     template["config"] = table
     sections: list[dict[str, Any]] = instructions.get("sections", [{}])
-    return [fastmerge(deepcopy(template), x) for x in sections]
+    merged: list[dict[str, Any]] = [fastmerge(deepcopy(template), x) for x in sections]
+    for index, section in enumerate(merged, start=1):
+        section["section_index"] = index
+    return merged
