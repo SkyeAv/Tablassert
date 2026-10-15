@@ -127,8 +127,8 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 - **Declarative YAML configuration**: define data transformations without writing code
 - **Built-in entity resolution**: map free text to genes, diseases, and chemicals with standard
   CURIEs, taxonomic filtering, and provenance, backed by an embedded redb database
-- **Optional quality control**: a four-stage audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) flags
-  low-confidence mappings
+- **Optional quality control**: a four-stage audit (exact match, fuzzy match, abbreviation
+  expansion, then SapBERT embeddings) flags low-confidence mappings
 - **KGX compliance**: emits NCATS Translator-compatible node/edge NDJSON with Biolink categories
   and predicates
 - **Performance & reproducibility**: lazy Polars pipelines and a deterministic UV-based
@@ -148,7 +148,7 @@ provides the `tablassert` command. Other extras are opt-in:
 | `cli` | `tablassert` command and rich terminal progress | `pip install "tablassert[cli]"` |
 | `rt` | CPU-compatible Polars runtime | `pip install "tablassert[rt]"` |
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
-| `qc` | four-stage QC audit (exact -> fuzzy -> abbreviation -> SapBERT embeddings) | `pip install "tablassert[qc]"` |
+| `qc` | four-stage QC audit (exact match, fuzzy match, abbreviation expansion, and SapBERT embeddings) | `pip install "tablassert[qc]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
 
 Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
