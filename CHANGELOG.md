@@ -2,12 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 21.0.0 - 2026-10-15
 
 ### Breaking Changes
 - **Derived-path source record URLs now ride the upstream repository's supporting `sources` entry, not the primary.** Sections without a `provenance.override` emit their `source.url` values as `source_record_urls` on the supporting entry matching the publication repository (`infores:pubmed-central` for PMC sections, `infores:pubmed` for PMID sections), because the primary knowledge source is the transforming resource, not the downloadable record; the primary entry keeps `upstream_resource_ids` and, with `build-kg --linkouts`, the per-edge linkout template (`{edge_id}` still resolves in the post-dedup sweep). Override sections are byte-identical: `override.upstream_source_record_urls` re-homes exactly as specified, other overrides keep the legacy primary-entry emission, and `--linkouts` still never injects into override sections. Downstream consumers keying off the primary entry's `source_record_urls` must read the supporting entry instead. ([#220](https://github.com/SkyeAv/Tablassert/pull/220))
   **Migration:** read record URLs from the `supporting_data_source` entry whose `resource_id` matches the publication repository; no config change is required.
 - **The inlined supporting Study is named after the table config file and section index.** `Study.name` reads `<table-config.yaml> SECTION <n>` (1-based position within that file, stamped by `ingests.to_sections`) instead of the worksheet name or source data filename, so edge provenance points back to the exact configuration; `Study.id` is unchanged (publication CURIE, or the config stem when unidentified). Section cache parquets content-address the new stamp, so pre-upgrade caches miss once and rebuild. ([#220](https://github.com/SkyeAv/Tablassert/pull/220))
+- **`validate-infores` is folded into `validate-kgx`.** `tablassert validate-kgx` now also validates knowledge-source identity: every emitted `infores:` CURIE (edge `sources`, `primary_knowledge_source`, node `provided_by`, and optionally the RIG) is classified against the Translator information-resource registry in the same run that checks Biolink structure, and the separate `validate-infores` command is gone. The structural half keeps its strict exit code; the identity half keeps its advisory-by-default contract (warnings, exit 0) behind `--strict` as the CI gate, with repeatable `--allow-infores` for locally minted CURIEs and `--registry snapshot|refresh|off` (off reproduces the old structure-only behavior in output and exit code); under `--prune` the identity half classifies the pruned edges file, so the verdict describes the artifact that ships. ([#218](https://github.com/SkyeAv/Tablassert/pull/218))
+  **Migration:** `tablassert validate-infores ...` becomes `tablassert validate-kgx ...` with the same flags; scripts invoking the old command name must switch.
+
+### Added
+- **`NodeEncoding` gains `no_map: true` to pass subject/object CURIEs through verbatim.** The opt-in skips fullmap entity resolution for statement subjects and objects, so tables that already carry their own CURIEs emit them as node ids as-is; the default stays resolving exactly as before. `no_map` combined with any resolution-only knob (`prioritize`, `avoid`, `exclude_prefixes`, `exclude_regex`, a non-default `taxon`) raises `no-map-dead-config` at config time, a `method: value` literal must be CURIE-shaped after `prefix`/`suffix` (`no-map-bad-curie`), `method: column` cells are audited per row at build time by the new `lib.curie_audit` op, and an all-verbatim section never opens the fullmap redb at all. ([#219](https://github.com/SkyeAv/Tablassert/pull/219))
+
+### Changed
+- **Documentation prose is normalized to plain ASCII.** Arrow notation and decorative unicode in the docs and docstrings are replaced with plain prose for readability. ([#217](https://github.com/SkyeAv/Tablassert/pull/217))
 
 ## 20.0.0 - 2026-10-14
 
