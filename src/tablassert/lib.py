@@ -48,7 +48,7 @@ from tablassert.enums import EncodingMethods, Files, Functions, InformationResou
 from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
-from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section, is_curie
+from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section
 from tablassert.nlp import level_one, level_two
 from tablassert.qc import fullmap_audit
 from tablassert.rig import (
@@ -1220,65 +1220,6 @@ def qualifier_vocabulary_audit(lf: pl.LazyFrame, col: str, vocabulary: Iterable[
     )
 
 
-def curie_audit(lf: pl.LazyFrame, col: str, section: str, config_file: str) -> pl.LazyFrame:
-    """Finalize a ``no_map`` node column: blank rows drop, non-CURIE values fail, category is synthesized.
-
-    Columns configured with ``no_map: true`` bypass entity resolution, so nothing else
-    (a) drops rows whose cell is blank (a missing node id can never form an edge, exactly
-    like an unresolved subject/object), (b) rejects cells that are not CURIE-shaped -- the
-    encoded value becomes the KGX node id verbatim, so garbage would ship as an identifier --
-    or (c) produces the ``<col>_category`` column downstream stages require: without a
-    fullmap lookup there is no role to derive, so the column is pinned to
-    ``biolink:NamedThing`` and edge derivation degrades to ``biolink:Association`` exactly
-    like the documented no-role-lookup fallback in :func:`edge_category`.
-
-    Args:
-        lf: Source LazyFrame.
-        col: The no_map node column (``subject``/``object`` or a CURIE-ranged qualifier key).
-        section: Short section hash (for log context).
-        config_file: Originating config file (for log context).
-
-    Returns:
-        LazyFrame with blank/null-like rows dropped and ``<col>_category`` added.
-
-    Notes:
-        A non-blank value that is not CURIE-shaped raises a coded error naming the
-        offending values (mirroring ``qualifier_vocabulary_audit``); blank and null-like
-        cells (``""``, ``"NA"``, ...) are dropped with a loud per-column count instead,
-        mirroring how an unresolvable subject/object row is dropped, never emitted.
-    """
-    values: pl.Series = lf.select(pl.col(col)).collect().get_column(col)
-    if values.dtype.base_type() in (pl.List, pl.Array):
-        values = values.explode()
-    blank_mask: pl.Series = values.is_null() | values.str.strip_chars().str.to_lowercase().is_in(list(_NULL_LIKE_TEXT))
-    # Judge CURIE shape on the distinct non-blank values only: the audit runs once per
-    # section, and map_elements is a per-element Python call that must not scale with
-    # row count when one bad cell repeats a million times.
-    distinct: pl.Series = values.filter(~blank_mask).unique()
-    offending: pl.Series = distinct.filter(~distinct.str.strip_chars().map_elements(is_curie, return_dtype=pl.Boolean)).sort()
-    if offending.len() > 0:
-        shown: list[str] = offending.head(10).to_list()
-        more: str = "..." if offending.len() > len(shown) else ""
-        raise TablassertError(
-            f"{col} is configured with `no_map: true` so its values are used verbatim as node CURIEs, but "
-            f"{offending.len()} non-blank value(s) in the built column are not CURIE-shaped: "
-            f"{', '.join(repr(x) for x in shown)}{more}. Fix the source table or the encoding "
-            "(prefix/suffix can form a CURIE from raw cells).",
-            code="no-map-curie-violation",
-        )
-    dropped: int = int(blank_mask.sum())
-    if dropped:
-        logger.info(
-            "no_map column {col} in {config} ({hash}) dropped {n} blank row(s): a missing CURIE cannot form a node",
-            col=col,
-            config=config_file,
-            hash=section,
-            n=dropped,
-        )
-    present: pl.Expr = pl.col(col).is_not_null() & ~pl.col(col).str.strip_chars().str.to_lowercase().is_in(list(_NULL_LIKE_TEXT))
-    return lf.filter(present).with_columns(pl.lit("biolink:NamedThing").alias(f"{col}_category"))
-
-
 def to_store(lf: pl.LazyFrame, p: Path, config_name: str) -> Path:
     """Collect and write a section LazyFrame to a parquet file.
 
@@ -1437,25 +1378,16 @@ class Tcode(Section):
             enabled.
         """
         # Subject/object/qualifiers share one resolve_batch call instead of one per column.
-        # Two kinds of columns never reach it: enum-ranged qualifiers, whose range is a
-        # closed Biolink vocabulary (sending them through the fullmap would turn the
-        # required token `increased` into the CURIE `UMLS:C0205217`, which the slot
-        # rejects), and no_map nodes, whose values are already CURIEs used verbatim.
+        # Enum-ranged qualifiers are excluded from resolution: their range is a closed
+        # Biolink vocabulary, so sending them through the fullmap would turn the required
+        # token `increased` into the CURIE `UMLS:C0205217`, which the slot rejects.
         qualifiers: list[Qualifier] = self.statement.qualifiers or []
-        subj_obj: list[tuple[NodeEncoding, str]] = [(self.statement.subject, "subject"), (self.statement.object, "object")]
         node_columns: list[tuple[NodeEncoding, str]] = [
-            *[(x, col) for x, col in subj_obj if not x.no_map],
+            (self.statement.subject, "subject"),
+            (self.statement.object, "object"),
             *[(x, x.qualifier) for x in qualifiers if x.resolved],
         ]
-        # no_map subject/object plus CURIE-ranged qualifiers that opted out (a no_map
-        # enum-ranged qualifier is rejected at config time). Their encoded values become
-        # node ids verbatim: encode only, then curie_audit drops blank rows, fails on
-        # non-CURIE cells, and synthesizes the category column edge derivation needs.
-        verbatim: list[tuple[NodeEncoding, str]] = [
-            *[(x, col) for x, col in subj_obj if x.no_map],
-            *[(x, x.qualifier) for x in qualifiers if not x.resolved and x.no_map],
-        ]
-        literals: list[Qualifier] = [x for x in qualifiers if not x.resolved and not x.no_map]
+        literals: list[Qualifier] = [x for x in qualifiers if not x.resolved]
         # A nullable qualifier keeps its edge when the cell is blank or unresolvable (the
         # column stays null and the null-stripper omits the key); subject/object and
         # strict qualifiers drop the row as before.
@@ -1478,18 +1410,6 @@ class Tcode(Section):
             # ranged column ends with a vocabulary audit: nothing else validates its cell
             # values against the closed Biolink range before KGX emission.
             [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
-            # no_map columns are encoded exactly like enum-ranged literals (no NLP
-            # normalization -- it exists only to feed entity resolution these columns
-            # never undergo), then finalized by curie_audit: blank rows dropped,
-            # non-CURIE cells failed loudly, and the pinned `biolink:NamedThing`
-            # category added for downstream edge derivation. The `<col>_pre_resolution`
-            # snapshot rides along because `_collect_subframes` discovers node columns
-            # through it at graph-compile time; without it a verbatim subject/object
-            # would never be split out of the edges into nodes.
-            [
-                [*self.encoding(x, col), (column, (f"{col}_pre_resolution", col)), (curie_audit, (col, self.store.stem, self.config.name))]
-                for x, col in verbatim
-            ],
             # Raw ``column_<n>`` columns are dead weight once the encodings above have
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.
@@ -1654,7 +1574,6 @@ PHASE_OF: dict[Callable, str] = {
     fullmap_audit: "qc",
     column: "encode",
     qualifier_vocabulary_audit: "encode",
-    curie_audit: "encode",
     edge_category: "edge",
     publications: "provenance",
     retrieval_sources: "provenance",
