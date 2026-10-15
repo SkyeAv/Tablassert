@@ -269,7 +269,7 @@ annotations:
   - annotation: has_evidence
     method: column
     encoding: D        # cells like "EFO:0001,EFO:0002"
-    split_by: ","      # -> ["EFO:0001", "EFO:0002"], per row
+    split_by: ","      # yields ["EFO:0001", "EFO:0002"], per row
 ```
 
 The separator is a property of the data, not of the slot. Inspect the table's cells and set `split_by` to the separator the cells actually use: `","` for comma-joined ids like `"EFO:0001,EFO:0002"` above, `";"` for `"EFO:0001;EFO:0002"`, `"|"` only if the cells happen to be pipe-joined.
@@ -378,7 +378,7 @@ Each entry is applied as a regex replace-with-empty-string on the cell text in p
 ```yaml
 object:
   encoding: identifier
-  prefix: "CUSTOM:"  # "123" -> "CUSTOM:123"
+  prefix: "CUSTOM:"  # "123" becomes "CUSTOM:123"
 ```
 
 **Output columns: `original_<col>` vs `<col>_pre_resolution`** - For every subject/object/qualifier node, the pipeline snapshots the cell value into two columns at different stages:
@@ -424,7 +424,7 @@ annotations:
 object:
   method: column
   encoding: B
-  explode_by: ";"  # "P1;P2;P3" -> 3 separate edges
+  explode_by: ";"  # "P1;P2;P3" becomes 3 separate edges
 ```
 
 #### Mathematical Transformations
@@ -480,7 +480,7 @@ Required metadata about data source.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `repo` | String | No | Repository. Defaults to `"PMC"`; allowed values are `"PMC"`, `"PMID"`. |
-| `publication` | String | Yes, unless `override` is set | Repository-local identifier emitted as a CURIE. For `repo: PMC` the value **must** start with `PMC` followed by digits (e.g., `"PMC11708054"`, `"PMC123"`) and is emitted under the `PMCID:` namespace as `PMCID:PMC...`; for `repo: PMID` it is emitted as `PMID:<publication>` (e.g., `"11708054"` -> `PMID:11708054`). |
+| `publication` | String | Yes, unless `override` is set | Repository-local identifier emitted as a CURIE. For `repo: PMC` the value **must** start with `PMC` followed by digits (e.g., `"PMC11708054"`, `"PMC123"`) and is emitted under the `PMCID:` namespace as `PMCID:PMC...`; for `repo: PMID` it is emitted as `PMID:<publication>` (e.g., `"11708054"` becomes `PMID:11708054`). |
 | `knowledge_level` | String | No | Biolink KL/AT knowledge level of produced edges. Defaults to `"statistical_association"`; allowed values are the `KnowledgeLevels` enum (e.g., `knowledge_assertion`, `logical_entailment`, `prediction`, `statistical_association`, `text_co_occurrence`, `observation`, `not_provided`). |
 | `agent_type` | String | No | Biolink KL/AT agent type responsible for produced edges. Defaults to `"data_analysis_pipeline"`; allowed values are the `AgentTypes` enum (e.g., `manual_agent`, `automated_agent`, `data_analysis_pipeline`, `computational_model`, `text_mining_agent`, `image_processing_agent`, `manual_validation_of_automated_agent`, `not_provided`). |
 | `override` | Object | No | Manual provenance for non-PMC/PMID sources. When set, it replaces repo/publication-derived provenance and `publication` must be omitted. |
@@ -575,10 +575,10 @@ Multivalued Biolink slots such as `has_evidence` or `regulatory_approvals`, whos
 ```yaml
 annotations:
   - {annotation: p_value, method: column, encoding: C}                 # Read from column C
-  - {annotation: adjusted_p_value, method: column, encoding: D}        # A real Association slot -> emitted on the edge
-  - {annotation: study_size, method: value, encoding: 450}            # Study metadata -> inlined supporting Study (see below)
+  - {annotation: adjusted_p_value, method: column, encoding: D}        # A real Association slot, emitted on the edge
+  - {annotation: study_size, method: value, encoding: 450}            # Study metadata, inlined as a supporting Study (see below)
   - {annotation: multiple_testing_correction_method, method: value, encoding: "Benjamini Hochberg"}
-  - {annotation: has_evidence, method: column, encoding: E, split_by: ","}       # cells like "EFO:0001,EFO:0002" -> a per-row JSON array
+  - {annotation: has_evidence, method: column, encoding: E, split_by: ","}       # cells like "EFO:0001,EFO:0002" become a per-row JSON array
 
   # Descriptive name of your choice: folded into `supporting_text` on output.
   - annotation: log2fc_relative_to_vehicle_control
@@ -638,7 +638,7 @@ Before the allow-list sweep runs, tablassert renames statistical columns to thei
 | Effect type | `effect_type` | `effect type`, `effect metric`, `statistic type`, `metric` |
 
 - **Negative-log p-value columns are un-logged, not shipped verbatim.** A header carrying an explicit negation marker (`negative`, `negated`, `neg`, or a leading `-`) before a `log` / `log10` p-or-q token reports a `-log10` score rather than a probability, so the value is converted back to its original scale (`p = 10 ** -x`) as the column is renamed onto `p_value` / `adjusted_p_value`, and again when the significance band is derived. Left alone, a `-log10(p)` of 8 would emit `p_value` 8.0 and band as `not_significant`, the exact inverse of the truth. The trailing token has to be a *complete* p/q-value token (or a bare delimited `P`), so a word that merely starts with p or q (`negative log protein`) is not matched. A plain `log10 p value` with no negation marker is deliberately left verbatim, because the sign convention is ambiguous there. When a raw p/q column and a `-log10` alias of the same statistic both appear, the raw column always wins selection and the alias is dropped, so a short raw name (`P`, `FDR`) cannot lose to a long alias it would then be un-logged over; the edge never carries `p_value` 0.03 beside a `"negative log10 p value: 8.0"` supporting-text entry, which reads as a contradiction rather than a duplicate. Scores extreme enough to underflow Float64 are floored at `0.0`, which is indistinguishable from `p ~ 0` in practice and lands in the same band; nulls stay null.
-- **`effect_type` values are also coerced.** Each cell is matched case/separator-insensitively against an alias table (e.g. `"OR"` -> `odds_ratio`, `"Cohen's d"` -> `cohens_d`, `"Spearman"` -> `spearmans_rho`), then by `rapidfuzz` fallback against the 25 permissible `EffectTypes` values; anything matching nothing is dropped to `null` rather than carried through (the Biolink range is the enum).
+- **`effect_type` values are also coerced.** Each cell is matched case/separator-insensitively against an alias table (e.g. `"OR"` maps to `odds_ratio`, `"Cohen's d"` to `cohens_d`, `"Spearman"` to `spearmans_rho`), then by `rapidfuzz` fallback against the 25 permissible `EffectTypes` values; anything matching nothing is dropped to `null` rather than carried through (the Biolink range is the enum).
 - **`statistical_significance_qualifier` is auto-derived** from the p-value column into five bands: `very_strongly_significant` (p <= 0.001), `strongly_significant` (<= 0.01), `significant` (<= 0.05), `suggestive` (<= 0.10), and `not_significant` (> 0.10). The values are bare `StatisticalSignificanceQualifierEnum` tokens. Biolink-model 4.4.4 attaches the slot to `Association` with the enum as its range, so the band rides the edge as a real field with no `biolink:` prefix. The same rigorous selection picks the source column: a raw `p_value` column is preferred, `adjusted_p_value` is the fallback, and the qualifier is omitted entirely when no p-value column is present.
 - **`effect_size` and `effect_type` travel as a pair.** A section declaring one without the other does not fail validation: the unpaired annotation is **dropped** from the section with an `UnpairedEffectAnnotationWarning` naming what was dropped and from where, and the section's edges are kept; neither half carries evidence alone. A bare effect size is uninterpretable (0.85 of *what*, an odds ratio or a Spearman rho?), and Biolink PR #1774 only populates `effect_type` alongside a numeric `effect_size`, so the build nulls an unpaired type anyway. Declare both together to retain the full evidence. Alias spellings count: `odds ratio` and the legacy `relationship_strength` coerce to `effect_size`, so both still need a sibling `effect_type`. Use `method: value` when every row shares one statistic and `method: column` when the table provides it; in a `template` + `sections` config the two lists are concatenated, so a constant `effect_type` declared once on the template pairs with each section's own `effect_size` column.
 - **Biolink class rules are enforced.** `effect_type` is nulled on every row where `effect_size` is null (and nulled entirely when no `effect_size` column exists); `statistical_significance_qualifier` is only set when `p_value`/`adjusted_p_value` is populated, and null p-values yield a null qualifier.

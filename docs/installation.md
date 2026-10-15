@@ -36,7 +36,7 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 | `cli` | `tablassert` command and rich terminal progress | `cyclopts`, `rich` |
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
-| `qc` | QC runtime (exact -> fuzzy -> abbreviation -> SapBERT audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
+| `qc` | QC runtime (exact match, fuzzy match, abbreviation expansion, then a SapBERT embedding audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
 
 Install any extra the same way: `uv tool install "tablassert[<extra>]"` or

@@ -70,8 +70,9 @@ Every one of those invocations produces a database filtered by the checked-in
 By default `build-fullmap` looks for a prebuilt `fullmap.tar.zst` at
 `https://stars.renci.org/var/babel_outputs/<babel-version>/fullmap/<tablassert-version>/` (the version
 directory is the **installed Tablassert package version**, never hardcoded), verifies it against the
-published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming zstd ->
-tar with the GIL released (the decompressed tar never touches disk), then validating the extracted
+published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming the
+archive through zstd decompression and untarring it with the GIL released (the decompressed tar never
+touches disk), then validating the extracted
 primary + shards against the force-build contract (exact `v6` schema, a recorded `build_id`, the exact
 shard set, per-shard `build_id` equality, and a `META.taxon_allowlist` identity matching the built-in
 allowlist) before atomically renaming them into place. If no prebuilt exists for this version (or the
@@ -103,8 +104,8 @@ See [Fullmap](fullmap.md) for the data pipeline, output schema, and graph-config
 
 Use this to see what fullmap entity resolution will do with one or more terms (the rows a
 `build-kg` run would emit for a cell holding that term under the filters shown. Each term runs
-through the exact build path (level-one/level-two normalization -> probe-key extraction -> redb
-fetch -> filter, rank, dedup), one `rich` table per term in input order, with the term's normalized
+through the exact build path (level-one/level-two normalization, probe-key extraction, one redb
+fetch, then filter, rank, and dedup), one `rich` table per term in input order, with the term's normalized
 probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
 never one per term. A term with no matches prints a `no matches` line and still exits 0: a miss is
 a finding, not a failure; only usage errors and an unreadable fullmap exit 2.
@@ -165,7 +166,7 @@ The positional `GRAPH-CONFIGURATION-FILE` (also `--configuration-file`, `-f`) is
 | --- | --- | --- | --- | --- |
 | `GRAPH-CONFIGURATION-FILE` (`--configuration-file`, `-f`) | Path | Yes | n/a | Graph YAML |
 | `--release`, `-r` | Flag | No | `False` | Emit a slim, significant-only graph (drops `not_significant` edges before resolution) |
-| `--qc`, `-q` | Flag | No | `False` | Audit resolved mappings (exact -> fuzzy -> abbreviation -> SapBERT) so low-confidence edges are flagged; requires the `[qc]` extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty `id` and `name`, every edge has a non-empty `subject`, `predicate`, and `object`, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim `original_*` fields excepted from the whitespace check, since they are faithful source copies), and, when any section declares a `category_override`, no edge demoted to bare `biolink:Association` (a row escaped its pin and shipped without the class-specific slots `prune_to_class` nulled into `has_supporting_studies`; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation |
+| `--qc`, `-q` | Flag | No | `False` | Audit resolved mappings (exact match, fuzzy match, abbreviation expansion, then SapBERT) so low-confidence edges are flagged; requires the `[qc]` extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty `id` and `name`, every edge has a non-empty `subject`, `predicate`, and `object`, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim `original_*` fields excepted from the whitespace check, since they are faithful source copies), and, when any section declares a `category_override`, no edge demoted to bare `biolink:Association` (a row escaped its pin and shipped without the class-specific slots `prune_to_class` nulled into `has_supporting_studies`; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation |
 | `--log`, `-l` | Flag | No | `False` | Enable verbose per-section logging; requires the `[log]` extra, and without it Tablassert produces no logs |
 | `--head`, `-hd` | Flag | No | `False` | Fast output-shape preview: <=5 random rows/section, cached to `.head.parquet`, never clobbers a full build |
 | `--linkouts`, `-lo` | Flag | No | `False` | Append the EdgeLinkouts per-edge record URL (`https://linkouts.skyelanegoetz.com/edges/{edge_id}`, resolved to the final edge id after dedup) to the graph infores entry (`rig.source_info.infores_id`) in every emitted edge's `sources` list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring `provenance.override` are untouched; cached to `.linkouts.parquet`, never clobbers a full build |
@@ -189,8 +190,8 @@ incomplete RIG fails the build with `[rig-validation-failed]` and nothing is emi
 [Graph Configuration](configuration/graph.md).
 
 ??? info "Build progress & stages"
-    The build runs six parallel stages (Loading Tables -> Extracting Sections -> Building TCode ->
-    Collecting Instructions -> Building Subgraphs -> Compiling Graph) plus a seventh, Studying Graph,
+    The build runs six parallel stages (Loading Tables, Extracting Sections, Building TCode,
+    Collecting Instructions, Building Subgraphs, Compiling Graph) plus a seventh, Studying Graph,
     only when `--qc` is passed. They run under a three-row live progress block (stage header;
     section bar with count/elapsed/ETA; in-flight item detail). Each completed
     stage prints a green `✓ Stage N · NAME · elapsed` line above the live block. During Building
