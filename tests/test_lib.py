@@ -36,6 +36,7 @@ from tablassert.lib import (
     coerce_pvalue_columns,
     coerce_study_size_columns,
     coerced_target,
+    curie_audit,
     drop_low_number_of_cases,
     drop_not_significant,
     drop_zero_effect_size,
@@ -619,6 +620,123 @@ def test_tcode_collect_audits_enum_ranged_qualifier_vocabulary(fixtures_path: Pa
     idx, args = vocab_ops[0]
     assert args == ("object_direction_qualifier", sorted(ENUM_RANGED_QUALIFIERS["object_direction_qualifier"]))
     assert idx < trim_idx
+
+
+def test_curie_audit_adds_named_thing_category_and_keeps_curies() -> None:
+    """curie_audit passes CURIE cells through verbatim and synthesizes the category column.
+
+    Without the synthesized `<col>_category`, edge_category would crash on a missing
+    column for every no_map node; `biolink:NamedThing` is the valid KGX category that
+    degrades edge derivation to `biolink:Association` like the documented no-role fallback.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"subject": ["CHEBI:1234", "HGNC:1100"]})
+
+    result: pl.DataFrame = curie_audit(lf, "subject", "sectionhash", "config.yaml").collect()
+
+    assert result.get_column("subject").to_list() == ["CHEBI:1234", "HGNC:1100"]
+    assert result.get_column("subject_category").to_list() == ["biolink:NamedThing", "biolink:NamedThing"]
+
+
+def test_curie_audit_drops_blank_and_null_like_rows() -> None:
+    """Blank/null-like cells in a no_map column drop the row, like an unresolved subject/object.
+
+    A missing CURIE can never form a node, so the edge is dropped -- never emitted with a
+    garbage id. Null-like text ("NA", "none") is treated as blank, matching strip_nulls.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"subject": ["CHEBI:1234", None, "", "NA"], "row": [1, 2, 3, 4]})
+
+    result: pl.DataFrame = curie_audit(lf, "subject", "sectionhash", "config.yaml").collect()
+
+    assert result.get_column("row").to_list() == [1]
+    assert result.get_column("subject").to_list() == ["CHEBI:1234"]
+
+
+def test_curie_audit_rejects_non_curie_values() -> None:
+    """Non-blank cells that are not CURIE-shaped fail the build with a coded error.
+
+    The encoded value becomes the KGX node id verbatim; shipping free text as an
+    identifier would fail validation far from the cause, so curie_audit raises where
+    the qualifier vocabulary audit does.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"subject": ["CHEBI:1234", "BRCA1"]})
+
+    with pytest.raises(TablassertError) as exc_info:
+        curie_audit(lf, "subject", "sectionhash", "config.yaml")
+    assert "no-map-curie-violation" in str(exc_info.value)
+    assert "BRCA1" in str(exc_info.value)
+
+
+def test_tcode_collect_routes_no_map_nodes_around_resolve_batch(fixtures_path: Path) -> None:
+    """no_map subject is excluded from resolve_batch specs and finalized by curie_audit instead.
+
+    The fullmap is never queried for the no_map column (it is absent from the batch
+    specs), while the mapped object keeps its ResolveSpec.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_no_map.parquet")
+    data["statement"]["subject"] = {"method": "column", "encoding": "A", "no_map": True}
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    specs: list[ResolveSpec] = next(op[1][0] for op in collected if op[0].__name__ == "resolve_batch")
+    spec_cols: list[str] = [spec.col for spec in specs]
+    audits: list[tuple[Any, ...]] = [op[1] for op in collected if op[0].__name__ == "curie_audit"]
+
+    assert "subject" not in spec_cols
+    assert "object" in spec_cols
+    assert audits == [("subject", "sectionhash_no_map", "minimal_section.yaml")]
+
+
+def test_tcode_collect_no_map_on_both_nodes_empties_resolve_batch(fixtures_path: Path) -> None:
+    """With subject and object both no_map, resolve_batch receives zero specs and early-returns.
+
+    This is the proof that the fullmap redb is never touched for an all-verbatim
+    section: resolve_batch returns the frame untouched before any redb access when
+    `not specs`.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_all_no_map.parquet")
+    data["statement"]["subject"] = {"method": "column", "encoding": "A", "no_map": True}
+    data["statement"]["object"] = {"method": "column", "encoding": "B", "no_map": True}
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/does-not-exist.redb"))  # pyright: ignore
+    specs: list[ResolveSpec] = next(op[1][0] for op in collected if op[0].__name__ == "resolve_batch")
+    audits: list[tuple[Any, ...]] = [op[1] for op in collected if op[0].__name__ == "curie_audit"]
+
+    assert specs == []
+    assert [args[0] for args in audits] == ["subject", "object"]
+
+
+def test_tcode_collect_no_map_curie_ranged_qualifier_is_verbatim(fixtures_path: Path) -> None:
+    """A CURIE-ranged qualifier with no_map skips resolution like an enum-ranged literal does.
+
+    It must land on curie_audit (not qualifier_vocabulary_audit, which would reject every
+    CURIE against the empty vocabulary, and not resolve_batch).
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_no_map_qual.parquet")
+    data["statement"]["object"] = {"method": "column", "encoding": "B", "no_map": True}
+    data["statement"]["qualifiers"] = [{"qualifier": "anatomical_context_qualifier", "method": "column", "encoding": "C", "no_map": True}]
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    names: list[str] = [op[0].__name__ for op in collected]
+    specs: list[ResolveSpec] = next(op[1][0] for op in collected if op[0].__name__ == "resolve_batch")
+    audits: list[tuple[Any, ...]] = [op[1] for op in collected if op[0].__name__ == "curie_audit"]
+
+    assert "anatomical_context_qualifier" not in [spec.col for spec in specs]
+    assert "qualifier_vocabulary_audit" not in names
+    assert [args[0] for args in audits] == ["object", "anatomical_context_qualifier"]
 
 
 def test_tcode_collect_edge_ops_follow_resolve_batch(fixtures_path: Path) -> None:
