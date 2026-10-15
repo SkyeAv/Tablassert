@@ -95,7 +95,7 @@ def test_to_sections_expands_template(fixtures_path: Path) -> None:
     """to_sections expands template with sections."""
     data: Any = from_yaml(fixtures_path / "minimal_section_with_sections.yaml")
     table: Path = Path("test_config.yaml")
-    sections: list[list[dict[str, Any]]] = to_sections(data, table)
+    sections: list[dict[str, Any]] = to_sections(data, table)
     assert len(sections) == 2
 
 
@@ -103,7 +103,7 @@ def test_to_sections_merges_template(fixtures_path: Path) -> None:
     """to_sections merges template into each section."""
     data: Any = from_yaml(fixtures_path / "minimal_section_with_sections.yaml")
     table: Path = Path("test_config.yaml")
-    sections: list[list[dict[str, Any]]] = to_sections(data, table)
+    sections: list[dict[str, Any]] = to_sections(data, table)
     # each section should inherit provenance from template
     for section in sections:
         assert "provenance" in section
@@ -113,7 +113,7 @@ def test_to_sections_adds_config(fixtures_path: Path) -> None:
     """to_sections adds config path."""
     data: Any = from_yaml(fixtures_path / "minimal_section_with_sections.yaml")
     table: Path = Path("test_config.yaml")
-    sections: list[list[dict[str, Any]]] = to_sections(data, table)
+    sections: list[dict[str, Any]] = to_sections(data, table)
     for section in sections:
         assert section["config"] == table  # pyright: ignore
 
@@ -122,7 +122,7 @@ def test_to_sections_unique_objects(fixtures_path: Path) -> None:
     """to_sections each section has unique object."""
     data: Any = from_yaml(fixtures_path / "minimal_section_with_sections.yaml")
     table: Path = Path("test_config.yaml")
-    sections: list[list[dict[str, Any]]] = to_sections(data, table)
+    sections: list[dict[str, Any]] = to_sections(data, table)
     # sections override object encoding from the sections list
     obj_encodings: list[str] = []
     for section in sections:
