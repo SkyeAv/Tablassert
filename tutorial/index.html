@@ -1409,7 +1409,7 @@ config lives elsewhere. The <code>rig:</code> section is required; see the
    - Reads the source file from disk
    - Applies row slicing
    - Resolves entities (genes and diseases)
-   - Validates with the QC pipeline when <code>--qc</code> is passed (exact -&gt; fuzzy -&gt; abbreviation -&gt; SapBERT)
+   - Validates with the QC pipeline when <code>--qc</code> is passed (exact match, fuzzy match, abbreviation expansion, then SapBERT)
    - Creates subgraph parquet file
 3. Aggregates all subgraphs
 4. Exports NDJSON files and the RIG</p>
@@ -1436,7 +1436,7 @@ inlined supporting study, anchored to the source row by the <code>row:&lt;N&gt;<
 </code></pre></div>
 <p>The Resource Ingest Guide records the graph's source metadata and terms of use (<code>rig.source_info</code>), ingest utility and scope (<code>rig.ingest_info</code>), provenance (<code>rig.provenance_info</code>), the generated artifact locations, and a summary of the emitted node and edge types, all validated in memory before the file is written, for NCATS Translator registration.</p>
 <h2 id="understanding-the-transformation">Understanding the Transformation<a class="headerlink" href="#understanding-the-transformation" title="Permanent link">&para;</a></h2>
-<p>Entity resolution maps text to CURIEs ("TP53" -&gt; <code>HGNC:11998</code> Gene, "lung cancer" -&gt; <code>MONDO:0008903</code> Disease); when <code>--qc</code> is passed, the QC pipeline validates each mapping across four stages (exact -&gt; fuzzy -&gt; abbreviation -&gt; SapBERT). The output is KGX-compliant nodes and edges with standardized CURIEs, Biolink categories and predicates, provenance, and edge annotations.</p>
+<p>Entity resolution maps text to CURIEs ("TP53" becomes the Gene <code>HGNC:11998</code>, "lung cancer" becomes the Disease <code>MONDO:0008903</code>); when <code>--qc</code> is passed, the QC pipeline validates each mapping across four stages (exact match, fuzzy match, abbreviation expansion, then SapBERT). The output is KGX-compliant nodes and edges with standardized CURIEs, Biolink categories and predicates, provenance, and edge annotations.</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong><a href="../configuration/table/">Configuration Reference</a></strong> - Learn all configuration options</li>
