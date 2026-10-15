@@ -1097,7 +1097,7 @@ def test_provenance_pmc_repo_with_non_pmc_publication_rejected() -> None:
 
 
 def test_no_deprecation_warnings_for_current_fixtures(fixtures_path: Path, recwarn: pytest.WarningsRecorder) -> None:
-    """US-M4: an EMPTY DEPRECATED_KEYS registry makes the before-hook a silent no-op.
+    """US-M4: a registry that names only removed keys makes the before-hook silent for shipped configs.
 
     Every shipped fixture and docs example must load and validate with ZERO UserWarnings,
     proving the deprecation scaffold never regresses today's corpus. Scoped to UserWarning so
@@ -1162,13 +1162,32 @@ def test_deprecated_key_in_registry_warns_but_still_validates(monkeypatch: pytes
 
     Monkeypatching a REAL current field name (`delimiter`) into DEPRECATED_KEYS makes the
     before-hook emit a UserWarning while `extra="forbid"` still accepts the key and the value
-    round-trips intact -- isolating "warn, don't fail". monkeypatch restores the empty registry
-    so no other test observes the temporary entry.
+    round-trips intact -- isolating "warn, don't fail". monkeypatch restores the registry, so no
+    other test observes the temporary entry.
     """
     monkeypatch.setitem(models.DEPRECATED_KEYS, "delimiter", "delimiter is deprecated; use 'sep' instead")
     with pytest.warns(UserWarning, match="sep"):
         source: Text = Text(local=Path("./t.tsv"), url=["https://example.com/t.tsv"], kind="text", delimiter="\t")  # pyright: ignore
     assert source.delimiter == "\t"
+
+
+def test_removed_no_map_key_warns_then_still_fails() -> None:
+    """A 21.0.0-era config that still sets `no_map` is told why it fails, then still fails.
+
+    The mode is registered in `DEPRECATED_KEYS` so the before-hook names the removal and the
+    migration, while `extra="forbid"` keeps rejecting the key. Both halves are pinned because each
+    fails differently: dropping the registry entry regresses the message to a bare "Extra inputs are
+    not permitted", and popping the key instead would silently accept a config whose output the
+    removal exists to prevent. Both values are covered because the hook keys on presence
+    (`for key in data`), so a config that was merely opting out with `no_map: false` breaks too.
+    """
+    for value in (True, False):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(ValidationError, match="no_map"):
+                NodeEncoding.model_validate({"method": "value", "encoding": "BRCA1", "no_map": value})
+        notes: list[str] = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert any("`no_map` is removed" in note for note in notes), f"expected the removal note for {value}, saw {notes}"
 
 
 def test_deprecated_hook_is_noop_for_non_dict_input(recwarn: pytest.WarningsRecorder) -> None:

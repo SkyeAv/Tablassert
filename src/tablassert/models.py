@@ -47,11 +47,20 @@ else:
     pl = LazyModule("polars")
 
 
-# Deprecated config keys -> guidance. EMPTY today: the before-hook below is a silent no-op until a
-# future rename registers a key here to WARN on it. The hook only warns and returns the data
-# unchanged — a renamed key that is no longer a valid field is STILL rejected by extra="forbid"
-# unless the future hook also pops/translates it; registering a key here supplies the warning half only.
-DEPRECATED_KEYS: dict[str, str] = {}
+# Deprecated config keys -> guidance. The before-hook below only warns and returns the data
+# unchanged: a key that is no longer a valid field is STILL rejected by extra="forbid" unless the
+# hook also pops/translates it, so registering a key here supplies the warning half only. That is
+# the right half for a removed feature: the config still fails, but it says why and what to do.
+DEPRECATED_KEYS: dict[str, str] = {
+    "no_map": (
+        "`no_map` is removed: subject, object, and CURIE-ranged qualifier values resolve against the fullmap again. "
+        "The mode emitted node ids verbatim and pinned each one to `biolink:NamedThing`, which flattened every derived "
+        "edge to `biolink:Association`. Tables that already carry CURIEs need nothing else, because the fullmap indexes "
+        "CURIEs and their equivalent identifiers as terms, so a CURIE cell resolves back to its own CURIE. The usual "
+        "resolution rules still apply: `taxon`, `prioritize`/`avoid`, `exclude_prefixes`/`exclude_regex`, and a blank "
+        "cell still drops the row."
+    )
+}
 
 
 def _shown(name: str, target: str) -> str:
@@ -94,10 +103,11 @@ class TablaBase(BaseModel):
         """Soft-warn when a raw input key is registered in ``DEPRECATED_KEYS``.
 
         Pure observation: returns ``data`` unchanged and never rejects (``extra="forbid"``
-        still governs truly-unknown keys). The registry is EMPTY today, so this is a silent
-        no-op; a future field rename registers its old key here to warn instead of hard-fail.
+        still governs keys that name no live field, so a removed feature's key warns and then
+        still fails; that pairing is the point, since silently dropping the key would build the
+        output the removal exists to prevent). ``no_map`` is the registered entry today.
         Note: with ``validate_assignment=True`` pydantic also re-runs this on attribute set,
-        so a registered key warns on assignment too — inert while the registry is empty.
+        so a registered key warns on assignment too.
         """
         if isinstance(data, dict):
             for key in data:
