@@ -10,7 +10,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
 - [Documentation Site Home](docs/index.md): docs landing page and navigation context.
 - [Installation Guide](docs/installation.md): three install paths (PyPI, GitHub main, development from source), platform and Rust-toolchain notes, and the missing-extra behavior. Optional extras: `cli`, `rt`, `aria2`, `qc`, and `log`.
-- [CLI Reference](docs/cli.md): the six commands (`build-fullmap`, `build-kg`, `quick-map`, `validate`, `validate-infores`, and `validate-kgx`) plus the app-level `--version` flag.
+- [CLI Reference](docs/cli.md): the five commands (`build-fullmap`, `build-kg`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
 ## YAML Authoring
