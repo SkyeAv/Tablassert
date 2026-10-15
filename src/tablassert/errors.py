@@ -65,6 +65,7 @@ TablassertErrorCodes = Literal[
     "encoding-list-method-removed",
     "no-map-dead-config",
     "no-map-bad-curie",
+    "no-map-curie-violation",
     "annotation-split-by-requires-column",
     "annotation-split-by-empty",
     "field-disabled",
