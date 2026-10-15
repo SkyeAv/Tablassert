@@ -1337,7 +1337,7 @@ transformations as a chain of simple substitutions, or capture leftover context 
 top-level edge fields (<code>p_value</code> in controlled scientific-notation string form, <code>effect_size</code> as a real
 JSON number since biolink-model 4.4.4). Study metadata (<code>study_size</code>, here declared as a constant)
 lands on the edge's inlined supporting <code>Study</code>; the <code>Study.id</code> is the publication CURIE, <code>Study.name</code>
-the worksheet, and the single <code>StudyResult</code> anchors the source row as its <code>row:&lt;N&gt;</code> id. Any
+the table config file and 1-based section index (e.g. <code>KANG12.yaml SECTION 2</code>), and the single <code>StudyResult</code> anchors the source row as its <code>row:&lt;N&gt;</code> id. Any
 non-Biolink-slot name such as <code>assertion_method</code>, <code>multiple_testing_correction_method</code>, and
 <code>miscellaneous_notes</code> folds into the edge's <code>supporting_text</code> list as <code>"name: value"</code> entries
 (sorted alphabetically):</p>
