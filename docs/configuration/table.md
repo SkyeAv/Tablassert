@@ -227,6 +227,7 @@ Defines how to extract and resolve entities.
 |-------|------|----------|-------------|
 | `method` | String | No | `"value"` (literal) or `"column"` (source column letters). Defaults to `"value"`. |
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
+| `no_map` | Bool | No | Skip fullmap entity resolution: the encoded value is used verbatim as the node CURIE, for data that already carries its own CURIEs. No NLP normalization, taxon constraint, or category lookup is applied; cells that are blank or not CURIE-shaped are dropped like unresolved nodes. Combines with nothing resolution-only (`prioritize`, `avoid`, `exclude_prefixes`, `exclude_regex`, non-default `taxon` are rejected as dead config). See [No-map mode](#no-map-mode). |
 | `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human) |
 | `prioritize` | List[String] | No | Preferred Biolink categories (must be valid `Categories` enum values such as `Gene`, `Protein`) |
 | `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
@@ -257,6 +258,29 @@ subject:
   method: column
   encoding: A  # Read from column A
 ```
+
+#### No-map mode
+
+**`no_map: true`** - Use the data's own CURIEs as-is
+
+Most sources name entities in plain text and need entity resolution against the fullmap to turn a
+mention like `BRCA1` into a CURIE. When the table already carries CURIEs (your own identifiers or
+an upstream resource's), `no_map: true` skips that lookup entirely: the encoded value becomes the
+node id verbatim, no NLP normalization or taxon/category filtering is applied, and the node is
+emitted with the generic `biolink:NamedThing` category (so its edges derive `biolink:Association`).
+
+```yaml
+subject:
+  method: column
+  encoding: A
+  no_map: true  # Column A already holds CURIEs like "CHEBI:41774"
+```
+
+Blank cells are dropped like unresolved nodes (an edge needs a node id), and a non-blank cell that
+is not CURIE-shaped fails the build with `no-map-curie-violation`. `prefix`/`suffix` still apply,
+so raw identifiers without a namespace can form CURIEs (`prefix: "CHEBI:"`). Resolution filters
+(`taxon`, `prioritize`, `avoid`, `exclude_prefixes`, `exclude_regex`) are rejected alongside
+`no_map` as dead config: with no lookup, nothing reads them.
 
 At runtime those letters are converted internally to Polars column names such as `column_1`, but those internal names are not valid configuration values.
 
