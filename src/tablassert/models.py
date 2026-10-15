@@ -327,7 +327,7 @@ class NodeEncoding(Encoding):
         description=(
             "When True, skip fullmap entity resolution: the encoded value is used verbatim as the node CURIE, "
             "for data that already carries its own CURIEs. No NLP normalization, taxon constraint, or category "
-            "lookup is applied, and cells that are blank or not CURIE-shaped are dropped like unresolved nodes."
+            "lookup is applied; blank cells are dropped like unresolved nodes and non-CURIE cells fail the build."
         ),
         examples=[True],
     )

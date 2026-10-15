@@ -1246,7 +1246,11 @@ def curie_audit(lf: pl.LazyFrame, col: str, section: str, config_file: str) -> p
     if values.dtype.base_type() in (pl.List, pl.Array):
         values = values.explode()
     blank_mask: pl.Series = values.is_null() | values.str.strip_chars().str.to_lowercase().is_in(list(_NULL_LIKE_TEXT))
-    offending: pl.Series = values.filter(~blank_mask & ~values.str.strip_chars().map_elements(is_curie, return_dtype=pl.Boolean)).unique().sort()
+    # Judge CURIE shape on the distinct non-blank values only: the audit runs once per
+    # section, and map_elements is a per-element Python call that must not scale with
+    # row count when one bad cell repeats a million times.
+    distinct: pl.Series = values.filter(~blank_mask).unique()
+    offending: pl.Series = distinct.filter(~distinct.str.strip_chars().map_elements(is_curie, return_dtype=pl.Boolean)).sort()
     if offending.len() > 0:
         shown: list[str] = offending.head(10).to_list()
         more: str = "..." if offending.len() > len(shown) else ""
