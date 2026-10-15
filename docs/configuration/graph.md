@@ -171,7 +171,7 @@ tell your consumers.
 
 ### The `rig:` section
 
-The `rig:` section carries every human-authored RIG fact. Its shape mirrors the released [RIG schema](https://github.com/biolink/resource-ingest-guide-schema), so the generated `.RIG.yaml` is always schema-shaped. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and **validates the complete document before writing anything**, so a build never leaves behind an invalid or incomplete RIG.
+The `rig:` section carries every human-authored RIG fact. Its shape follows the released [RIG schema](https://github.com/biolink/resource-ingest-guide-schema), with two deliberate differences: the `artifact_base_url` and `artifact_base_path` keys below are Tablassert-only config consumed by the generator (never written to the `.RIG.yaml`), and a few fields differ in requiredness from the upstream schema and template, which disagree with each other on `source_status`; Tablassert requires `provenance_info`, `source_status`, and `ingest_info.scope`, and treats `ingest_info.relevant_files` as optional because the generator pre-fills the generated-artifact entries. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and **validates the complete document before writing anything**, so a build never leaves behind an invalid or incomplete RIG.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -183,8 +183,8 @@ The `rig:` section carries every human-authored RIG fact. Its shape mirrors the 
 | `rig.source_files` | List[String] | No | Upstream source file names/URLs, sorted and deduplicated, written as `source_files` on every generated `edge_type_info` entry; never scraped from edge `source_record_urls` |
 | `rig.provenance_info` | Object | Yes | Contributor statements and provenance artifacts |
 | `rig.supporting_data_source_info` | List[Object] | No | Upstream data sources for data-derived graphs (each needs `infores_id`, `terms_of_use_info`, and `relevant_files`) |
-| `rig.artifact_base_url` | String | Yes | Public URL prefix for the generated KGX artifacts; each `.nodes.ndjson`/`.edges.ndjson` name is appended to build RIG `relevant_files` locations |
-| `rig.artifact_base_path` | Path | Yes | Output directory the generated artifacts (and the RIG) are written into; created when missing |
+| `rig.artifact_base_url` | String | Yes | Public URL prefix for the generated KGX artifacts; each `.nodes.ndjson`/`.edges.ndjson` name is appended to build RIG `relevant_files` locations. Tablassert-only config key, not a RIG schema slot, and never written to the `.RIG.yaml` |
+| `rig.artifact_base_path` | Path | Yes | Output directory the generated artifacts (and the RIG) are written into; created when missing. Tablassert-only config key, not a RIG schema slot, and never written to the `.RIG.yaml` |
 
 #### `rig.source_info`
 
@@ -201,6 +201,8 @@ The `rig:` section carries every human-authored RIG fact. Its shape mirrors the 
 | `data_versioning_and_releases` | String | No | How the source versions/releases its data |
 | `source_status` | Enum | Yes | `maintained_regular_updates`, `maintained_as_needed_updates`, `not_maintained`, `unknown` |
 | `additional_notes` | List[String] | No | Anything not captured by dedicated fields |
+
+`source_status` is required here because Tablassert follows the translator-ingests template, which marks it required; the released LinkML schema leaves it optional.
 
 #### `rig.ingest_info`
 

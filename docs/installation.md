@@ -44,7 +44,7 @@ Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
 Linux and macOS; elsewhere pip builds from the sdist, which needs a Rust toolchain.
 
 !!! note "`[aria2]` platform and license notes"
-    The `[aria2]` extra depends on the PyPI `aria2` package, which imports as `aria2c` and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, so a normal macOS install resolves to Tablassert's Python downloader.
+    The `[aria2]` extra depends on the PyPI `aria2` package, which imports as `aria2c` and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, and the sdist's build hook fails on macOS, so do not install `[aria2]` there: `build-fullmap` falls back to Tablassert's Python downloader.
 
     The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.
 

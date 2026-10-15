@@ -92,8 +92,8 @@ Defines the data file location and format.
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `sheet` | String | No | Sheet name. Defaults to `"Sheet1"`. |
-| `row_slice` | List[PositiveInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a positive integer or `"auto"`. Mutually exclusive with `rows`. |
-| `rows` | List[PositiveInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
 | `reindex` | List[Reindex] | No | Conditional row filtering |
 
 **Example:**
@@ -117,8 +117,8 @@ source:
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `delimiter` | String | No | Field delimiter. Defaults to `","`. |
-| `row_slice` | List[PositiveInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a positive integer or `"auto"`. Mutually exclusive with `rows`. |
-| `rows` | List[PositiveInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
 | `reindex` | List[Reindex] | No | Conditional filtering |
 
 **Example:**
@@ -147,8 +147,8 @@ as-is.
 | `kind` | String | No | Source kind. Model default is `"parquet"`, but specify it explicitly in configs. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
-| `row_slice` | List[PositiveInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a positive integer or `"auto"`. Mutually exclusive with `rows`. |
-| `rows` | List[PositiveInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
 | `reindex` | List[Reindex] | No | Conditional row filtering |
 
 **Example:**
@@ -187,7 +187,7 @@ Defines subject-predicate-object relationships.
 | `predicate` | String | No | Biolink predicate. Defaults to `"related_to"`. Three DAKP prevention predicates are deliberate local extensions ahead of Biolink support (see `biolink.PREDICATE_OVERRIDES`): `prevents`, `applied_to_prevent`, `contraindicated_in_the_prevention_of`. |
 | `object` | NodeEncoding | Yes | Object entity configuration |
 | `qualifiers` | List[Qualifier] | No | Edge qualifiers (context) |
-| `category_override` | Map[Categories, EdgeCategories] | No | Pin the association class per resolved object category (bare names, no `biolink:` prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose `predicate` slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. `Disease` and `PhenotypicFeature` both derive to `ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`, but only `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` declare slots like `regulatory_approvals` and `number_of_cases`. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: `population_context_qualifier` and `temporal_context_qualifier` on both classes, plus `sex_qualifier` on the disease side. Deliberately ungranted: `species_context_qualifier` (disabled, never emittable) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable: attached to no class, so a grant could never validate). |
+| `category_override` | Map[Categories, EdgeCategories] | No | Pin the association class per resolved object category (bare names, no `biolink:` prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose `predicate` slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. `Disease` and `PhenotypicFeature` both derive to `ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`, but only `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` declare slots like `regulatory_approvals` and `number_of_cases`. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on the disease side (`population_context_qualifier` needed a grant only until biolink-model 4.4.6 declared it natively on both pinned classes). Deliberately ungranted: `species_context_qualifier` (disabled, never emittable) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable: attached to no class, so a grant could never validate). |
 
 **Example:**
 ```yaml
@@ -228,7 +228,7 @@ Defines how to extract and resolve entities.
 | `method` | String | No | `"value"` (literal) or `"column"` (source column letters). Defaults to `"value"`. |
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
 | `no_map` | Bool | No | Skip fullmap entity resolution: the encoded value is used verbatim as the node CURIE, for data that already carries its own CURIEs. No NLP normalization, taxon constraint, or category lookup is applied; blank cells are dropped like unresolved nodes and a non-blank non-CURIE cell fails the build. Combines with nothing resolution-only (`prioritize`, `avoid`, `exclude_prefixes`, `exclude_regex`, non-default `taxon` are rejected as dead config). See [No-map mode](#no-map-mode). |
-| `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human) |
+| `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human); defaults to `9606` (Homo sapiens), set null to disable |
 | `prioritize` | List[String] | No | Preferred Biolink categories (must be valid `Categories` enum values such as `Gene`, `Protein`) |
 | `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
 | `exclude_prefixes` | List[String] | No | CURIE namespace prefixes excluded during entity resolution: the prefix is the text before the first `:` of a resolved CURIE, and every candidate whose prefix is listed is dropped. Matching is exact and case-sensitive (`OMIM` drops `OMIM:100100` but not `OMIMPS:100` or `omim:100100`). Optional; defaults to null (no prefix filtering). See [Resolution Filters](#resolution-filters). |
@@ -629,7 +629,7 @@ Any other annotation name is treated as **supporting context**. At the end of `c
 
 This means nothing in your source data is silently dropped: context that doesn't map to a structured Biolink slot travels along inside `supporting_text` instead.
 
-In addition to user-declared annotations, every edge automatically carries `extracted_from_row_number`, a 1-based index into the original source table (matching Excel-style row numbering). It is not declared as an annotation. Tablassert emits it internally so each edge always carries its source-row provenance, and the inlined supporting study consumes it: the `StudyResult` that anchors the study's row is identified by the scoped CURIE `row:<N>`. The row and sheet columns are never folded into `supporting_text`.
+In addition to user-declared annotations, Tablassert tracks each edge's source row internally as `extracted_from_row_number`, a 1-based index into the original source table (matching Excel-style row numbering). It is never emitted as an edge field: the inlined supporting study consumes it to anchor each `StudyResult` by the scoped CURIE `row:<N>`, and the column is then dropped, along with `sheet_name`, rather than folded into `supporting_text`.
 
 The supporting study's identity is disjoint by construction: `Study.id` is the section's publication CURIE (`PMID:123`, `PMCID:PMC11708054`); `Study.name` is a human label naming the originating table config file and the section's 1-based position within it (e.g. `KANG12.yaml SECTION 2`). It is never a composition of the two. A section declaring **no `publications`** falls back to the config stem (the YAML filename without its extension) as the id, and the struct is then emitted **only when it carries something to preserve**, such as study metadata, routed unsatisfiable values, or class-pruned values. Biolink defines `has supporting studies` as "studies that produced information used as evidence", so a contentless unpublished section emits no `has_supporting_studies` at all; a section with a real publication always keeps the wrapper:
 
