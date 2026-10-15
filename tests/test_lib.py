@@ -26,7 +26,7 @@ from tablassert.coerce import (
 from tablassert.enums import Repositories
 from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec
-from tablassert.ingests import from_yaml
+from tablassert.ingests import from_yaml, to_sections
 from tablassert.lib import (
     HEAD_ROWS,
     Tcode,
@@ -364,12 +364,13 @@ def test_section_store_path_suffixes_every_build_mode() -> None:
 
 
 def test_tcode_collect_appends_edge_linkout_when_linkouts(fixtures_path: Path) -> None:
-    """--linkouts appends the EdgeLinkouts template to the primary entry's record URLs.
+    """--linkouts keeps the EdgeLinkouts template on the primary entry while record URLs move upstream.
 
     Why: the flag's whole contract is that the graph-infores primary ``sources`` entry
-    gains ``https://linkouts.skyelanegoetz.com/edges/{edge_id}`` AFTER the section's own
-    source URLs; the template must reach ``retrieval_sources`` unresolved so the
-    post-dedup sweep can substitute each edge's own id.
+    gains ``https://linkouts.skyelanegoetz.com/edges/{edge_id}``; the section's own
+    record URLs belong on the upstream repository's supporting entry. The template
+    must reach ``retrieval_sources`` unresolved so the post-dedup sweep can substitute
+    each edge's own id.
     """
     data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
     tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
@@ -387,14 +388,16 @@ def test_tcode_collect_appends_edge_linkout_when_linkouts(fixtures_path: Path) -
 
     assert len(linkout_ops) == 1
     urls: list[str] = linkout_ops[0][1][2]
-    assert urls == ["https://example.com/test.tsv", "https://linkouts.skyelanegoetz.com/edges/{edge_id}"]
+    assert urls == ["https://linkouts.skyelanegoetz.com/edges/{edge_id}"]
+    # The section's own record URLs ride on the PMC upstream supporting entry (arg 4).
+    assert linkout_ops[0][1][3] == {"infores:pubmed-central": ["https://example.com/test.tsv"]}
 
 
 def test_tcode_collect_omits_edge_linkout_by_default(fixtures_path: Path) -> None:
-    """Without --linkouts the primary entry's record URLs are exactly the section's source URLs.
+    """Without --linkouts the primary entry carries no record URLs and no linkout template.
 
-    Why: the flag is opt-in; default-off emission must be byte-identical to a build
-    without the flag, so the op list must carry no linkout template whatsoever.
+    Why: the flag is opt-in; default-off emission must carry no linkout template
+    whatsoever, and the section's record URLs ride on the upstream supporting entry.
     """
     data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
     tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
@@ -402,9 +405,30 @@ def test_tcode_collect_omits_edge_linkout_by_default(fixtures_path: Path) -> Non
     )
 
     collected: list[tuple[Any, tuple[Any, ...]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
-    urls: list[str] = next(op for op in collected if op[0].__name__ == "retrieval_sources")[1][2]
+    retrieval_op: tuple[Any, tuple[Any, ...]] = next(op for op in collected if op[0].__name__ == "retrieval_sources")
 
-    assert urls == ["https://example.com/test.tsv"]
+    assert retrieval_op[1][2] == []
+    assert retrieval_op[1][3] == {"infores:pubmed-central": ["https://example.com/test.tsv"]}
+
+
+def test_tcode_collect_names_study_after_config_file_and_section_index(fixtures_path: Path) -> None:
+    """The inlined Study name identifies the table config file and the 1-based section index.
+
+    Why: a source data filename like data.parquet says nothing about which configuration
+    produced the edge; "KANG12.yaml SECTION 2" pinpoints exactly the section, which is
+    what a reader of has_supporting_studies needs to find the configuration back.
+    """
+    raw: Any = from_yaml(fixtures_path / "minimal_section_with_sections.yaml")
+    sections: list[dict[str, Any]] = to_sections(raw, fixtures_path / "KANG12.yaml")  # pyright: ignore
+    assert len(sections) == 2
+    second: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**sections[1], "store": Path("/tmp/sectionhash_kang12.parquet"), "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = second.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    study_op: tuple[Any, tuple[Any, ...]] = next(op for op in collected if op[0].__name__ == "inline_supporting_study")
+
+    assert study_op[1][1] == "KANG12.yaml SECTION 2"
 
 
 def test_tcode_collect_omits_edge_linkout_when_override(fixtures_path: Path) -> None:
@@ -1038,7 +1062,7 @@ def test_tcode_collect_uses_graph_infores_when_no_section_override(fixtures_path
 
 
 def test_tcode_collect_nests_source_record_urls_in_sources(fixtures_path: Path) -> None:
-    """Source record URLs hang off the primary ``RetrievalSource``, not the edge."""
+    """Source record URLs hang off the upstream ``RetrievalSource``, not the edge or the primary."""
     data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
     store: Path = Path("/tmp/sectionhash.parquet")
     tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
@@ -1053,9 +1077,78 @@ def test_tcode_collect_nests_source_record_urls_in_sources(fixtures_path: Path) 
     assert len(source_ops) == 1
     assert url_ops == []
     assert "source_record_urls" not in result.columns
-    primary: dict[str, Any] = next(s for s in result["sources"].to_list()[0] if s["resource_role"] == "primary_knowledge_source")
-    assert primary["source_record_urls"] == ["https://example.com/test.tsv"]
+    sources: list[dict[str, Any]] = result["sources"].to_list()[0]
+    primary: dict[str, Any] = next(s for s in sources if s["resource_role"] == "primary_knowledge_source")
+    assert primary["source_record_urls"] is None
     assert "id" not in primary
+    supporting: dict[str, Any] = next(s for s in sources if s["resource_role"] == "supporting_data_source")
+    assert supporting["resource_id"] == "infores:pubmed-central"
+    assert supporting["source_record_urls"] == ["https://example.com/test.tsv"]
+
+
+def test_tcode_collect_rehomes_pmc_record_urls_onto_pubmed_central(fixtures_path: Path) -> None:
+    """A PMC-hosted table URL lands on the infores:pubmed-central entry, not the graph-infores primary.
+
+    Why: the primary knowledge source is the transforming resource (e.g.
+    infores:multiomics-kp); the downloadable record lives at the upstream publication
+    repository, so that supporting entry is where ``source_record_urls`` belongs.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    data["source"]["url"] = ["https://pmc-oa-opendata.s3.amazonaws.com/PMC10010437.1/Table3.xlsx"]
+    store: Path = Path("/tmp/sectionhash_pmc.parquet")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store, "name": "MULTIOMICS_KG", "infores": "infores:multiomics-kp"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    source_ops: list[tuple[Any, tuple[Any]]] = [op for op in collected if op[0] is retrieval_sources]
+    result: pl.DataFrame = source_ops[0][0](pl.LazyFrame({"subject": ["A"]}), *source_ops[0][1]).collect()
+
+    sources: list[dict[str, Any]] = result["sources"].to_list()[0]
+    primary: dict[str, Any] = next(s for s in sources if s["resource_role"] == "primary_knowledge_source")
+    assert primary["resource_id"] == "infores:multiomics-kp"
+    assert primary["source_record_urls"] is None
+    assert primary["upstream_resource_ids"] == ["infores:pubmed-central"]
+    pmc: dict[str, Any] = next(s for s in sources if s["resource_id"] == "infores:pubmed-central")
+    assert pmc["source_record_urls"] == ["https://pmc-oa-opendata.s3.amazonaws.com/PMC10010437.1/Table3.xlsx"]
+
+
+def test_tcode_collect_rehomes_pmid_record_urls_onto_pubmed(fixtures_path: Path) -> None:
+    """A PMID-backed section emits record URLs on the infores:pubmed supporting entry.
+
+    Why: the re-homing keys off ``upstream_resource_ids(repo)``, so the PMID branch must
+    pin the same placement contract as the PMC branch (infores:pubmed-central).
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    data["provenance"] = {"repo": "PMID", "publication": "12345678"}
+    store: Path = Path("/tmp/sectionhash_pmid.parquet")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store, "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    source_args: tuple[Any, ...] = next(op[1] for op in collected if op[0] is retrieval_sources)
+
+    assert source_args[3] == {"infores:pubmed": ["https://example.com/test.tsv"]}
+
+
+def test_tcode_collect_names_override_study_after_config_section(fixtures_path: Path) -> None:
+    """Override sections get the same "<config> SECTION <n>" Study name as derived sections.
+
+    Why: the rename in ``_provenance_ops`` is override-agnostic and the docs state the
+    naming generally; this pins it so an override carve-out cannot silently change it.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    data["provenance"] = {"override": {"upstream_resource_ids": ["infores:upstream-source"]}}
+    store: Path = Path("/tmp/sectionhash_override_name.parquet")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store, "infores": "infores:test-kg"}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    study_op: tuple[Any, tuple[Any, ...]] = next(op for op in collected if op[0].__name__ == "inline_supporting_study")
+
+    assert study_op[1][1] == "minimal_section.yaml SECTION 1"
 
 
 def test_tcode_collect_upstream_source_record_urls_rehome_urls(fixtures_path: Path) -> None:
@@ -3505,7 +3598,7 @@ def test_compile_subgraph_e2e_column_cleanup_and_numeric_annotations(monkeypatch
         "tp53": [fake_fullmap_row("tp53", "HGNC:11998", "TP53", "Gene", 9606)],
     }
     install_fake_fullmap(monkeypatch, rows)
-    table_path, source_path = write_text_section(
+    table_path, _ = write_text_section(
         tmp_path,
         "column_cleanup",
         {
@@ -3541,7 +3634,7 @@ def test_compile_subgraph_e2e_column_cleanup_and_numeric_annotations(monkeypatch
     # field on the inlined Study; the StudyResult only anchors the source row.
     study: dict[str, Any] = result["has_supporting_studies"]["PMID:12345"]
     assert study["id"] == "PMID:12345"
-    assert study["name"] == source_path.name
+    assert study["name"] == f"{table_path.name} SECTION 1"
     assert study["study_size"] == 1200
     # The result only anchors the row; the parquet-level null description is stripped
     # by the NDJSON writer before emission.
@@ -3562,7 +3655,7 @@ def test_compile_subgraph_e2e_release_drops_rows_before_fullmap_lookup(monkeypat
         "droppeddiseas": [fake_fullmap_row("droppeddiseas", "MONDO:2", "Dropped disease", "Disease", 0)],
     }
     calls: list[list[str]] = install_fake_fullmap(monkeypatch, rows)
-    table_path, source_path = write_text_section(
+    table_path, _ = write_text_section(
         tmp_path,
         "release_drop",
         {
@@ -3588,7 +3681,7 @@ def test_compile_subgraph_e2e_release_drops_rows_before_fullmap_lookup(monkeypat
     # Published wrapper with no study metadata remains, but an empty rescue column
     # cannot justify a row-only StudyResult.
     study: dict[str, Any] = result["has_supporting_studies"].to_list()[0]["PMCID:PMC0000000"]
-    assert study["name"] == source_path.name
+    assert study["name"] == f"{table_path.name} SECTION 1"
     assert not study.get("has_study_results")
     assert "droppedgen" not in looked_up
     assert "droppeddiseas" not in looked_up

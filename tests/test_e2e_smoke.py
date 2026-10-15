@@ -268,8 +268,12 @@ def test_build_pipeline_with_linkouts_resolves_edge_ids(tmp_path: Path, monkeypa
         primary: dict[str, Any] = next(s for s in record["sources"] if s["resource_role"] == "primary_knowledge_source")
         assert primary["resource_id"] == "infores:linkouts-kg"
         urls: list[str] = primary["source_record_urls"]
-        # The section's own record URL survives and the linkout resolves to THIS edge's id.
-        assert urls == ["https://example.com/data.tsv", f"https://linkouts.skyelanegoetz.com/edges/{record['id']}"]
+        # The linkout resolves to THIS edge's id and stays on the primary entry; the
+        # section's own record URL moved to the PMC upstream supporting entry.
+        assert urls == [f"https://linkouts.skyelanegoetz.com/edges/{record['id']}"]
+        supporting: dict[str, Any] = next(s for s in record["sources"] if s["resource_role"] == "supporting_data_source")
+        assert supporting["resource_id"] == "infores:pubmed-central"
+        assert supporting["source_record_urls"] == ["https://example.com/data.tsv"]
     # No unresolved placeholder may survive anywhere in the emitted file.
     assert "{edge_id}" not in edges.read_text()
 
@@ -503,7 +507,7 @@ def test_build_pipeline_coerces_statistical_annotations(tmp_path: Path, monkeypa
     assert "sample_size" not in edge_text
     study: dict[str, Any] = edge["has_supporting_studies"]["PMCID:PMC0000000"]
     assert study["id"] == "PMCID:PMC0000000"
-    assert study["name"] == "data.tsv"
+    assert study["name"] == "table.yaml SECTION 1"
     assert study["study_size"] == 450
     assert study["has_study_results"] == [{"id": "row:1"}]
 

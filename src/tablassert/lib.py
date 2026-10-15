@@ -471,8 +471,8 @@ def inline_supporting_study(lf: pl.LazyFrame, study_id: str, study_name: str | N
     The struct is shaped by the current Biolink Model (4.4.4+):
 
     * ``Study.id`` is a real identifier -- the section's publication CURIE -- and
-      ``Study.name`` a DISJOINT human label (worksheet or source filename); the two
-      are never composed into one string.
+      ``Study.name`` a DISJOINT human label (the table config file plus the section's
+      1-based index); the two are never composed into one string.
     * Study-level metadata declared as annotations (``study_size``, ``study_cohort``,
       ``study_context``, ``study_date_range``, ``study_method_description``,
       ``study_method_types`` -- see :data:`biolink.STUDY_METADATA_FIELDS`) lands as
@@ -504,8 +504,8 @@ def inline_supporting_study(lf: pl.LazyFrame, study_id: str, study_name: str | N
         lf: Edges LazyFrame after annotation and provenance ops.
         study_id: Stable study identifier (publication CURIE, or the config stem when
             unidentified).
-        study_name: Human-readable study label (worksheet or source filename), or
-            ``None`` to omit it.
+        study_name: Human-readable study label (table config file plus 1-based section
+            index), or ``None`` to omit it.
         identified: Whether ``study_id`` names a real publication rather than falling
             back to the config stem. ``False`` lets a contentless study be skipped.
 
@@ -608,11 +608,14 @@ def retrieval_sources(
     Mirrors ``build_association_knowledge_sources()`` from
     ``translator-ingests/util/biolink.py``: the primary knowledge source lists the
     upstream resources, and each upstream resource additionally appears as its own
-    ``supporting_data_source`` entry. By default the primary entry carries the
-    section's source record URLs; when ``upstream_urls`` is given, URL placement is
-    fully determined by that mapping instead -- each listed upstream entry carries
-    its own ``source_record_urls`` and the primary entry emits none (the primary is
-    the transforming resource, not a downloadable record).
+    ``supporting_data_source`` entry. URL placement is determined by ``upstream_urls``
+    whenever it is given (the derived build path passes it unconditionally): each
+    listed upstream entry carries its own ``source_record_urls``, because the section's
+    record URLs describe the upstream repository's downloadable record, not the
+    transforming primary. The primary entry still emits ``urls`` that are not source
+    records -- the per-edge EdgeLinkouts template when ``--linkouts`` is set. Without
+    ``upstream_urls`` (override sections that set no explicit mapping), the primary
+    entry carries ``urls`` verbatim and the supporting entries stay bare.
 
     When ``explicit`` is given, exactly those entries are emitted, in order, and
     ``primary``/``upstream``/``urls``/``upstream_urls`` are ignored. Each entry
@@ -626,7 +629,9 @@ def retrieval_sources(
         lf: Source LazyFrame.
         primary: Infores CURIE of the primary knowledge source.
         upstream: Infores CURIEs of upstream/supporting data sources.
-        urls: Source record URLs for the primary entry (ignored when ``upstream_urls`` is set).
+        urls: URLs for the primary entry (when ``upstream_urls`` is set these must not be
+            source records -- e.g. the per-edge EdgeLinkouts template -- since record URLs
+            ride the supporting entries in that mode).
         upstream_urls: Optional per-upstream source record URLs keyed by infores CURIE.
         explicit: Optional explicit entry templates emitted verbatim, in order.
 
@@ -639,7 +644,7 @@ def retrieval_sources(
             for entry in explicit
         ]
     elif upstream_urls is not None:
-        entries = [_retrieval_source(primary, "primary_knowledge_source", upstream)]
+        entries = [_retrieval_source(primary, "primary_knowledge_source", upstream, urls)]
         entries.extend(_retrieval_source(x, "supporting_data_source", urls=upstream_urls.get(x)) for x in upstream)
     else:
         entries = [_retrieval_source(primary, "primary_knowledge_source", upstream, urls)]
@@ -1309,6 +1314,10 @@ class Tcode(Section):
     name: str | None = Field(None)
     infores: str | None = Field(None)
     linkouts: bool = Field(False)
+    section_index: int = Field(
+        1,
+        description="1-based position of this section within its table config file (document order); stamped by ingests.to_sections and used to name the inlined Study.",
+    )
     qc_similarity_threshold: float = Field(0.5)
     qc_fuzzy_ratio_threshold: float = Field(70.0)
     qc_fuzzy_partial_threshold: float = Field(80.0)
@@ -1534,19 +1543,28 @@ class Tcode(Section):
         # (rig.source_info.infores_id); there is no implicit derivation from the graph
         # name, so a RIG and its edges can never disagree about the source identity.
         primary_knowledge_source: str | None = self.infores
-        # Per-edge record URLs for the primary entry: the section's declared source URLs,
-        # plus the EdgeLinkouts template when --linkouts is set. A section with ANY
-        # provenance.override is author-controlled (DAKP hand-writes the same template
-        # into override.sources), so the flag injects nothing there.
-        primary_urls: list[str] = [str(u) for u in self.source.url]
-        if self.linkouts and override is None:
-            primary_urls.append(EDGE_LINKOUT_URL_TEMPLATE)
+        # Record URLs: the section's declared source URLs. On the derived path they
+        # describe the UPSTREAM record the data was extracted from, so they are emitted
+        # on the supporting entry of the publication repository (infores:pubmed-central
+        # for PMC sections) and the primary entry -- the transforming resource --
+        # carries only the EdgeLinkouts template when --linkouts is set. A section with
+        # ANY provenance.override is author-controlled (DAKP hand-writes the same
+        # template into override.sources): an upstream_source_record_urls mapping
+        # re-homes URLs exactly as specified (primary gets nothing), any other override
+        # keeps the legacy primary-entry emission, and the flag injects nothing there.
+        record_urls: list[str] = [str(u) for u in self.source.url]
         upstream_ids = override.upstream_resource_ids if override else upstream_resource_ids(self.provenance.repo)
-        upstream_urls: dict[str, list[str]] | None = (
-            {key: [str(u) for u in urls] for key, urls in override.upstream_source_record_urls.items()}
-            if override and override.upstream_source_record_urls is not None
-            else None
-        )
+        primary_urls: list[str]
+        upstream_urls: dict[str, list[str]] | None
+        if override is None:
+            upstream_urls = {upstream_ids[0]: record_urls}
+            primary_urls = [EDGE_LINKOUT_URL_TEMPLATE] if self.linkouts else []
+        elif override.upstream_source_record_urls is not None:
+            upstream_urls = {key: [str(u) for u in urls] for key, urls in override.upstream_source_record_urls.items()}
+            primary_urls = []
+        else:
+            upstream_urls = None
+            primary_urls = record_urls
         # An explicit `sources` template replaces the derived primary/upstream
         # emission entirely; the model already forbids combining it with
         # `upstream_resource_ids`/`upstream_source_record_urls`.
@@ -1556,19 +1574,17 @@ class Tcode(Section):
         knowledge_level = override.knowledge_level if override else self.provenance.knowledge_level
         agent_type = override.agent_type if override else self.provenance.agent_type
         publication_values = override.publications if override else [publication_curie(self.provenance.repo, self.provenance.publication or "")]
-        # The study is the table itself: one publication, one worksheet/table. The
-        # publication CURIE is the study's IDENTIFIER; the worksheet or source filename
-        # is its human-readable NAME. The two stay disjoint fields and are never composed
+        # The study is the table section itself: one publication, one config section.
+        # The publication CURIE is the study's IDENTIFIER; the originating table config
+        # file plus the section's 1-based index is its human-readable NAME (e.g.
+        # "KANG12.yaml SECTION 2"). The two stay disjoint fields and are never composed
         # into one string, so neither ever duplicates the other.
-        sheet: str | None = self.source.sheet if self.source.kind == Files.EXCEL else None  # pyright: ignore
         # No publication means no study to name: the fallback id is the config stem (the
         # YAML filename without its extension), not an identifier, so
         # `inline_supporting_study` skips the struct unless it has content to carry.
         identified: bool = bool(publication_values)
         study_id: str = publication_values[0] if publication_values else self.config.stem
-        study_name: str | None = sheet if sheet is not None else Path(self.source.local).name
-        if study_name == study_id:
-            study_name = None
+        study_name: str = f"{self.config.name} SECTION {self.section_index}"
         # `use_enum_values` stores the override's enum keys/values as plain strings.
         category_override: dict[str, str] | None = (
             {obj: f"biolink:{pinned}" for obj, pinned in self.statement.category_override.items()} if self.statement.category_override else None
@@ -1580,10 +1596,10 @@ class Tcode(Section):
             (value, ("agent_type", agent_type)),
             # Retrieval provenance lives only in the nested `sources` list (Biolink
             # RetrievalSource); current translator-ingests emits no flat
-            # `primary_knowledge_source` scalar, so neither do we. A per-upstream URL
-            # mapping (override.upstream_source_record_urls) re-homes the record URLs
-            # from the primary entry onto the matching supporting entries; an explicit
-            # `sources` template (override.sources) replaces the whole derivation.
+            # `primary_knowledge_source` scalar, so neither do we. The derived path maps
+            # the section's record URLs onto the upstream repository's supporting entry
+            # (see above); an explicit `sources` template (override.sources) replaces
+            # the whole derivation.
             (retrieval_sources, (primary_knowledge_source, upstream_ids, primary_urls, upstream_urls, explicit_sources))
             if primary_knowledge_source
             else None,

@@ -420,12 +420,12 @@ def build_graph_pipeline(
                 advance()
         with RunCache() as cache:
             for planned in plan.execution_order:
-                section_index, x, op = pending[planned]
+                flat_index, x, op = pending[planned]
                 entry: PlanEntry = plan.entries[planned]
                 start(format_section_compact(x))
                 # on_phase drives the per-op sub-step indicator (cache → resolve → write ...);
                 # resume/snapshot are the producer/consumer seams the plan assigned this section.
-                results[section_index] = compile_subgraph(
+                results[flat_index] = compile_subgraph(
                     op, on_phase=sub_step, resume=_run_cache_resume(cache, entry), snapshot=_run_cache_snapshot(cache, entry)
                 )
                 advance()

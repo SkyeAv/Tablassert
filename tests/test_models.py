@@ -325,6 +325,7 @@ def test_merged_section_drops_a_template_level_unpaired_effect_type(fixtures_pat
     sections: list[dict[str, Any]] = to_sections(raw, fixtures_path / "minimal_section_with_sections.yaml")  # pyright: ignore
     for merged in sections:
         merged.pop("config", None)
+        merged.pop("section_index", None)
         with pytest.warns(UnpairedEffectAnnotationWarning, match="Dropped unpaired `effect_type`"):
             section: Section = Section.model_validate(merged)
         # The merged list was [effect_type (template), p_value (section)]; only the unpaired
@@ -1194,13 +1195,15 @@ def test_no_deprecation_warnings_for_current_fixtures(fixtures_path: Path, recwa
     # Single-section fixture validates directly.
     Section.model_validate(from_yaml(fixtures_path / "minimal_section.yaml"))
 
-    # Template/sections configs expand via to_sections; the stamped `config` path is a
-    # Tcode-only key, so drop it before validating the pure Section schema.
+    # Template/sections configs expand via to_sections; the stamped `config` path and
+    # `section_index` position are Tcode-only keys, so drop them before validating the
+    # pure Section schema.
     for path in (fixtures_path / "minimal_section_with_sections.yaml", EXAMPLES / "tutorial-table.yaml"):
         raw: Any = from_yaml(path)
         sections: list[dict[str, Any]] = to_sections(raw, path)  # pyright: ignore
         for section in sections:
             section.pop("config", None)
+            section.pop("section_index", None)
             Section.model_validate(section)
 
     # Graph example validates directly.

@@ -103,7 +103,7 @@ whole table or `method: column` to pull per-row notes from the source (see
 top-level edge fields (`p_value` in controlled scientific-notation string form, `effect_size` as a real
 JSON number since biolink-model 4.4.4). Study metadata (`study_size`, here declared as a constant)
 lands on the edge's inlined supporting `Study`; the `Study.id` is the publication CURIE, `Study.name`
-the worksheet, and the single `StudyResult` anchors the source row as its `row:<N>` id. Any
+the table config file and 1-based section index (e.g. `KANG12.yaml SECTION 2`), and the single `StudyResult` anchors the source row as its `row:<N>` id. Any
 non-Biolink-slot name such as `assertion_method`, `multiple_testing_correction_method`, and
 `miscellaneous_notes` folds into the edge's `supporting_text` list as `"name: value"` entries
 (sorted alphabetically):
