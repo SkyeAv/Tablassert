@@ -728,6 +728,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#checking-knowledge-source-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking knowledge-source identity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#repairing-a-graph-with-prune" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -740,17 +751,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#validate-infores" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        validate-infores
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1301,6 +1301,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#checking-knowledge-source-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking knowledge-source identity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#repairing-a-graph-with-prune" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1313,17 +1324,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#validate-infores" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        validate-infores
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1372,8 +1372,8 @@
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
 <p>Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The <code>tablassert</code> app
 requires the <code>[cli]</code> extra (<code>pip install "tablassert[cli]"</code> or <code>uv tool install "tablassert[cli]"</code>) and
-exposes <strong>six subcommands</strong>: <code>build-fullmap</code>, <code>build-kg</code>, <code>quick-map</code>, <code>validate</code>,
-<code>validate-infores</code>, and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
+exposes <strong>five subcommands</strong>: <code>build-fullmap</code>, <code>build-kg</code>, <code>quick-map</code>, <code>validate</code>,
+and <code>validate-kgx</code>, plus an app-level <code>--version</code> flag. Run <code>tablassert --help</code> (or <code>&lt;command&gt; --help</code>)
 for the live surface.</p>
 <h2 id="command-index">Command index<a class="headerlink" href="#command-index" title="Permanent link">&para;</a></h2>
 <table>
@@ -1401,12 +1401,8 @@ for the live surface.</p>
 <td>Validate a graph or table configuration without executing it</td>
 </tr>
 <tr>
-<td><a href="#validate-infores"><code>validate-infores</code></a></td>
-<td>Validate emitted infores CURIEs against the Translator registry</td>
-</tr>
-<tr>
 <td><a href="#validate-kgx"><code>validate-kgx</code></a></td>
-<td>Validate built KGX NDJSON against the Biolink Model</td>
+<td>Validate built KGX NDJSON against the Biolink Model and the Translator registry</td>
 </tr>
 </tbody>
 </table>
@@ -1759,11 +1755,13 @@ no longer sniffed from the YAML).</p>
 </code></pre></div>
 <hr />
 <h2 id="validate-kgx">validate-kgx<a class="headerlink" href="#validate-kgx" title="Permanent link">&para;</a></h2>
-<p>Use this to check that a completed build is actually Biolink-compliant. Where
+<p>Use this to check that a completed build is actually Biolink-compliant and that the knowledge-source
+identifiers it emits are real. Where
 <a href="#validate"><code>validate</code></a> checks your <em>configuration</em>, <code>validate-kgx</code> checks the <em>output</em>: every node
 and edge is constructed as the Biolink Pydantic class named by its own <code>category</code>, the same classes
 <a href="https://github.com/NCATSTranslator/translator-ingests"><code>NCATSTranslator/translator-ingests</code></a> builds
-when it ingests your files.</p>
+when it ingests your files, and every emitted <code>infores:</code> CURIE is classified against the NCATS
+Translator registry (see <a href="#checking-knowledge-source-identity">Checking knowledge-source identity</a>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson
 </code></pre></div>
 <table>
@@ -1796,7 +1794,7 @@ when it ingests your files.</p>
 <td>int</td>
 <td>No</td>
 <td><code>20</code></td>
-<td>Maximum example failures to retain per file</td>
+<td>Maximum example failures to retain per file (structural and identity examples alike)</td>
 </tr>
 <tr>
 <td><code>--prune</code>, <code>-p</code></td>
@@ -1804,6 +1802,34 @@ when it ingests your files.</p>
 <td>No</td>
 <td><code>False</code></td>
 <td>Rewrite the edges file in place, keeping only edges that validate strictly (pending carryovers are dropped too); nodes are never touched, and a clean file is not rewritten</td>
+</tr>
+<tr>
+<td><code>--rig</code></td>
+<td>Path</td>
+<td>No</td>
+<td>n/a</td>
+<td>RIG yaml to include in the identity scan (its <code>source_info.infores_id</code> and target <code>primary_knowledge_sources</code> are checked)</td>
+</tr>
+<tr>
+<td><code>--allow-infores</code></td>
+<td>list[str]</td>
+<td>No</td>
+<td>n/a</td>
+<td>Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals</td>
+</tr>
+<tr>
+<td><code>--registry</code></td>
+<td>snapshot\</td>
+<td>refresh\</td>
+<td>off</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>--strict</code></td>
+<td>Flag</td>
+<td>No</td>
+<td><code>False</code></td>
+<td>Exit non-zero while any unregistered CURIE remains; without it the identity half is advisory</td>
 </tr>
 </tbody>
 </table>
@@ -1827,6 +1853,24 @@ it, as <code>effect_size</code> / <code>effect_type</code> did when 4.4.4 shippe
 </code></pre></div>
 <p>The strict count is what <code>ok</code> and the exit code use; the pending count is reported separately, so a
 deliberate gap never reads as a modelling error.</p>
+<h3 id="checking-knowledge-source-identity">Checking knowledge-source identity<a class="headerlink" href="#checking-knowledge-source-identity" title="Permanent link">&para;</a></h3>
+<p>Alongside structure, <code>validate-kgx</code> checks <em>identity</em>: every <code>infores:</code> CURIE on your edges
+(<code>primary_knowledge_source</code>, <code>sources[].resource_id</code>, <code>sources[].upstream_resource_ids</code>), nodes
+(<code>provided_by</code>), and, with <code>--rig</code>, the RIG document, is classified against the NCATS Translator
+registry (<a href="https://github.com/biolink/information-resource-registry"><code>biolink/information-resource-registry</code></a>'s
+<code>infores_catalog.yaml</code>). The registry ships as a bundled snapshot (the check is offline by default);
+<code>--registry refresh</code> fetches the live catalog instead, and <code>--registry off</code> skips the identity half
+entirely. Values without the <code>infores:</code> prefix are reported as malformed, not unregistered.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>registry: .../infores_catalog.yaml (508 entries)
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>infores warnings present; pass --strict to fail on them.
+</code></pre></div>
+<p>The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
+graph's own <code>infores:</code> id from the <code>rig:</code> section's name) that will never sit in the registry. Allow
+those with repeatable <code>--allow-infores</code>, and pass <code>--strict</code> in CI to exit non-zero while any
+unregistered CURIE remains. A missing or misspelled path is reported as <code>file not found</code> and exits
+non-zero in every mode: a file that was never read must never count as a pass.</p>
 <h3 id="repairing-a-graph-with-prune">Repairing a graph with <code>--prune</code><a class="headerlink" href="#repairing-a-graph-with-prune" title="Permanent link">&para;</a></h3>
 <p><code>--prune</code> (<code>-p</code>) repairs an already-emitted graph instead of just scoring it: the edges file is
 rewritten in place and every edge that does not validate strictly is removed. That includes real
@@ -1836,18 +1880,19 @@ are not JSON at all (counted separately as malformed). On a real graph the carry
 the edges -- a DAKP-style build prunes roughly 800085 of 2000085 -- so <code>--prune</code> trades them for a
 strictly-compliant graph. Nodes are validated and reported, never pruned: dropping one would
 strand its references.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>-n<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>-e<span class="w"> </span>MY_KG_1.0.0.edges.ndjson<span class="w"> </span>--prune
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>tablassert<span class="w"> </span>validate-kgx<span class="w"> </span>-n<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>-e<span class="w"> </span>MY_KG_1.0.0.edges.ndjson<span class="w"> </span>--prune
 </code></pre></div>
 <p>The rewrite is atomic (written to a sibling temp file, then swapped in) and kept lines stay
 byte-identical, so a pruned graph differs from the original only by the removed records. A clean
 file is not rewritten at all, and a missing edges file is reported without ever being pruned.
 After pruning, every kept edge is strictly valid, so the exit code goes green as soon as the
-nodes are clean too:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>edges: pruned 12/424159 non-compliant records
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>  9  p_value: float_parsing
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>  e.g. DISEASE_EDGE_000017: p_value: float_parsing
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>edges: 424147/424159 valid (0 failures)
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>KGX output is Biolink-compliant.
+nodes are clean too. The identity half runs after the rewrite and classifies the pruned file:
+only what ships is judged.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>edges: pruned 12/424159 non-compliant records
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>  9  p_value: float_parsing
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  e.g. DISEASE_EDGE_000017: p_value: float_parsing
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>edges: 424147/424159 valid (0 failures)
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>KGX output is Biolink-compliant.
 </code></pre></div>
 <p>Retrieval-source entries are the mirror case. Tablassert emits <code>resource_id</code> as each <code>sources</code> entry's
 sole identifier, while the pinned model still requires the inherited <code>Entity.id</code> on <code>RetrievalSource</code>.
@@ -1855,90 +1900,6 @@ The validator supplies that <code>id</code> to its own in-memory copy of the rec
 requires it, so compliant output validates without the duplicate identifier ever being written to disk.
 The decoded record and the built NDJSON are untouched, and the alias stops being applied on its own
 once a model release drops the requirement.</p>
-<hr />
-<h2 id="validate-infores">validate-infores<a class="headerlink" href="#validate-infores" title="Permanent link">&para;</a></h2>
-<p>Use this to prove the knowledge-source identifiers a build emits are real. <code>validate-kgx</code> checks
-<em>structure</em> against the Biolink Model; <code>validate-infores</code> checks <em>identity</em>: every <code>infores:</code> CURIE
-on your edges (<code>primary_knowledge_source</code>, <code>sources[].resource_id</code>, <code>sources[].upstream_resource_ids</code>),
-nodes (<code>provided_by</code>), and, with <code>--rig</code>, the RIG document, is classified against the NCATS
-Translator registry (<a href="https://github.com/biolink/information-resource-registry"><code>biolink/information-resource-registry</code></a>'s
-<code>infores_catalog.yaml</code>). The registry ships as a bundled snapshot (<code>validate-infores</code> is offline by
-default); <code>--registry refresh</code> fetches the live catalog instead. Values without the <code>infores:</code>
-prefix are reported as malformed, not unregistered.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>tablassert<span class="w"> </span>validate-infores<span class="w"> </span>--nodes<span class="w"> </span>MY_KG_1.0.0.nodes.ndjson<span class="w"> </span>--edges<span class="w"> </span>MY_KG_1.0.0.edges.ndjson<span class="w"> </span>--rig<span class="w"> </span>MY_KG_1.0.0.RIG.yaml
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>registry: .../infores_catalog.yaml (508 entries)
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>infores warnings present; pass --strict to fail on them.
-</code></pre></div>
-<p>The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
-graph's own <code>infores:</code> id from the <code>rig:</code> section's name) that will never sit in the registry. Allow
-those with repeatable <code>--allow-infores</code>, and pass <code>--strict</code> in CI to exit non-zero while any
-unregistered CURIE remains. A missing or misspelled path is reported as <code>file not found</code> and exits
-non-zero in every mode: a file that was never read must never count as a pass.</p>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Type</th>
-<th>Required</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--nodes</code>, <code>-n</code></td>
-<td>Path</td>
-<td>Yes</td>
-<td>n/a</td>
-<td>Built <code>*.nodes.ndjson</code> file to validate</td>
-</tr>
-<tr>
-<td><code>--edges</code>, <code>-e</code></td>
-<td>Path</td>
-<td>Yes</td>
-<td>n/a</td>
-<td>Built <code>*.edges.ndjson</code> file to validate</td>
-</tr>
-<tr>
-<td><code>--rig</code></td>
-<td>Path</td>
-<td>No</td>
-<td>n/a</td>
-<td>RIG yaml to include in the scan (its <code>source_info.infores_id</code> and target <code>primary_knowledge_sources</code> are checked)</td>
-</tr>
-<tr>
-<td><code>--allow-infores</code></td>
-<td>list[str]</td>
-<td>No</td>
-<td>n/a</td>
-<td>Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals</td>
-</tr>
-<tr>
-<td><code>--registry</code></td>
-<td>snapshot\</td>
-<td>refresh\</td>
-<td>off</td>
-<td>No</td>
-</tr>
-<tr>
-<td><code>--strict</code></td>
-<td>Flag</td>
-<td>No</td>
-<td><code>False</code></td>
-<td>Exit non-zero while any unregistered CURIE remains; without it the run is advisory</td>
-</tr>
-<tr>
-<td><code>--limit</code></td>
-<td>int</td>
-<td>No</td>
-<td><code>20</code></td>
-<td>Maximum example unregistered/malformed CURIEs retained for the <code>e.g.</code> report lines</td>
-</tr>
-</tbody>
-</table>
 <hr />
 <h2 id="typical-workflow">Typical workflow<a class="headerlink" href="#typical-workflow" title="Permanent link">&para;</a></h2>
 <ol>
@@ -1948,7 +1909,8 @@ non-zero in every mode: a file that was never read must never count as a pass.</
 <li><code>tablassert quick-map TERM... -f &lt;fullmap&gt;</code>: spot-check how a term resolves under a column's
    exact filters when a mapping needs debugging.</li>
 <li><code>tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson</code>: confirm the
-   output validates against the Biolink Model before shipping it downstream.</li>
+   output validates against the Biolink Model and its knowledge-source CURIEs against the
+   Translator registry before shipping it downstream.</li>
 </ol>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
