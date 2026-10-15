@@ -608,11 +608,14 @@ def retrieval_sources(
     Mirrors ``build_association_knowledge_sources()`` from
     ``translator-ingests/util/biolink.py``: the primary knowledge source lists the
     upstream resources, and each upstream resource additionally appears as its own
-    ``supporting_data_source`` entry. By default the primary entry carries the
-    section's source record URLs; when ``upstream_urls`` is given, URL placement is
-    fully determined by that mapping instead -- each listed upstream entry carries
-    its own ``source_record_urls`` and the primary entry emits none (the primary is
-    the transforming resource, not a downloadable record).
+    ``supporting_data_source`` entry. URL placement is determined by ``upstream_urls``
+    whenever it is given (the derived build path passes it unconditionally): each
+    listed upstream entry carries its own ``source_record_urls``, because the section's
+    record URLs describe the upstream repository's downloadable record, not the
+    transforming primary. The primary entry still emits ``urls`` that are not source
+    records -- the per-edge EdgeLinkouts template when ``--linkouts`` is set. Without
+    ``upstream_urls`` (override sections that set no explicit mapping), the primary
+    entry carries ``urls`` verbatim and the supporting entries stay bare.
 
     When ``explicit`` is given, exactly those entries are emitted, in order, and
     ``primary``/``upstream``/``urls``/``upstream_urls`` are ignored. Each entry
@@ -639,7 +642,7 @@ def retrieval_sources(
             for entry in explicit
         ]
     elif upstream_urls is not None:
-        entries = [_retrieval_source(primary, "primary_knowledge_source", upstream)]
+        entries = [_retrieval_source(primary, "primary_knowledge_source", upstream, urls)]
         entries.extend(_retrieval_source(x, "supporting_data_source", urls=upstream_urls.get(x)) for x in upstream)
     else:
         entries = [_retrieval_source(primary, "primary_knowledge_source", upstream, urls)]
@@ -1454,19 +1457,28 @@ class Tcode(Section):
         # (rig.source_info.infores_id); there is no implicit derivation from the graph
         # name, so a RIG and its edges can never disagree about the source identity.
         primary_knowledge_source: str | None = self.infores
-        # Per-edge record URLs for the primary entry: the section's declared source URLs,
-        # plus the EdgeLinkouts template when --linkouts is set. A section with ANY
-        # provenance.override is author-controlled (DAKP hand-writes the same template
-        # into override.sources), so the flag injects nothing there.
-        primary_urls: list[str] = [str(u) for u in self.source.url]
-        if self.linkouts and override is None:
-            primary_urls.append(EDGE_LINKOUT_URL_TEMPLATE)
+        # Record URLs: the section's declared source URLs. On the derived path they
+        # describe the UPSTREAM record the data was extracted from, so they are emitted
+        # on the supporting entry of the publication repository (infores:pubmed-central
+        # for PMC sections) and the primary entry -- the transforming resource --
+        # carries only the EdgeLinkouts template when --linkouts is set. A section with
+        # ANY provenance.override is author-controlled (DAKP hand-writes the same
+        # template into override.sources): an upstream_source_record_urls mapping
+        # re-homes URLs exactly as specified (primary gets nothing), any other override
+        # keeps the legacy primary-entry emission, and the flag injects nothing there.
+        record_urls: list[str] = [str(u) for u in self.source.url]
         upstream_ids = override.upstream_resource_ids if override else upstream_resource_ids(self.provenance.repo)
-        upstream_urls: dict[str, list[str]] | None = (
-            {key: [str(u) for u in urls] for key, urls in override.upstream_source_record_urls.items()}
-            if override and override.upstream_source_record_urls is not None
-            else None
-        )
+        primary_urls: list[str]
+        upstream_urls: dict[str, list[str]] | None
+        if override is None:
+            upstream_urls = {upstream_ids[0]: record_urls}
+            primary_urls = [EDGE_LINKOUT_URL_TEMPLATE] if self.linkouts else []
+        elif override.upstream_source_record_urls is not None:
+            upstream_urls = {key: [str(u) for u in urls] for key, urls in override.upstream_source_record_urls.items()}
+            primary_urls = []
+        else:
+            upstream_urls = None
+            primary_urls = record_urls
         # An explicit `sources` template replaces the derived primary/upstream
         # emission entirely; the model already forbids combining it with
         # `upstream_resource_ids`/`upstream_source_record_urls`.
@@ -1500,10 +1512,10 @@ class Tcode(Section):
             (value, ("agent_type", agent_type)),
             # Retrieval provenance lives only in the nested `sources` list (Biolink
             # RetrievalSource); current translator-ingests emits no flat
-            # `primary_knowledge_source` scalar, so neither do we. A per-upstream URL
-            # mapping (override.upstream_source_record_urls) re-homes the record URLs
-            # from the primary entry onto the matching supporting entries; an explicit
-            # `sources` template (override.sources) replaces the whole derivation.
+            # `primary_knowledge_source` scalar, so neither do we. The derived path maps
+            # the section's record URLs onto the upstream repository's supporting entry
+            # (see above); an explicit `sources` template (override.sources) replaces
+            # the whole derivation.
             (retrieval_sources, (primary_knowledge_source, upstream_ids, primary_urls, upstream_urls, explicit_sources))
             if primary_knowledge_source
             else None,
