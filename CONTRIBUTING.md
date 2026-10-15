@@ -130,7 +130,7 @@ On every **push**, the whole-repo gates:
 
 The ruff hooks cover the **whole tree**, matching CI's `ruff check .`. They used to be scoped to `src/` and `tests/`, which meant `examples/` could only ever fail in CI.
 
-The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI already runs them on every pull request -- the Python suite as a single job, deliberately not sharded across a matrix. Use `make check` when you want everything locally.
+The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI already runs them on every pull request (the Python suite as a single job, deliberately not sharded across a matrix). Use `make check` when you want everything locally.
 
 ## Running subsets
 
