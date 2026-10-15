@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Breaking Changes
+- **Derived-path source record URLs now ride the upstream repository's supporting `sources` entry, not the primary.** Sections without a `provenance.override` emit their `source.url` values as `source_record_urls` on the supporting entry matching the publication repository (`infores:pubmed-central` for PMC sections, `infores:pubmed` for PMID sections), because the primary knowledge source is the transforming resource, not the downloadable record; the primary entry keeps `upstream_resource_ids` and, with `build-kg --linkouts`, the per-edge linkout template (`{edge_id}` still resolves in the post-dedup sweep). Override sections are byte-identical: `override.upstream_source_record_urls` re-homes exactly as specified, other overrides keep the legacy primary-entry emission, and `--linkouts` still never injects into override sections. Downstream consumers keying off the primary entry's `source_record_urls` must read the supporting entry instead. ([#220](https://github.com/SkyeAv/Tablassert/pull/220))
+  **Migration:** read record URLs from the `supporting_data_source` entry whose `resource_id` matches the publication repository; no config change is required.
+- **The inlined supporting Study is named after the table config file and section index.** `Study.name` reads `<table-config.yaml> SECTION <n>` (1-based position within that file, stamped by `ingests.to_sections`) instead of the worksheet name or source data filename, so edge provenance points back to the exact configuration; `Study.id` is unchanged (publication CURIE, or the config stem when unidentified). Section cache parquets content-address the new stamp, so pre-upgrade caches miss once and rebuild. ([#220](https://github.com/SkyeAv/Tablassert/pull/220))
+
 ## 20.0.0 - 2026-10-14
 
 ### Breaking Changes
