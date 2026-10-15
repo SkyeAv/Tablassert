@@ -3,8 +3,8 @@
 Tablassert turns biomedical tables (Excel, CSV, TSV) into NCATS Translator-compliant KGX knowledge
 graphs, declaratively, with entity resolution built in and optional quality control.
 
-**Installing?** See [Installation](installation.md). **First build?** Follow the
-[Tutorial](tutorial.md). **Automating?** Use the [CLI](cli.md).
+New to Tablassert? Start with [Installation](installation.md), work through the
+[Tutorial](tutorial.md), or go straight to the [CLI](cli.md) reference.
 
 ## Who this is for
 

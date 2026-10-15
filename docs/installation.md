@@ -23,7 +23,7 @@ pip install uv
 
 ### Method 1: Install from PyPI
 
-Recommended for most users. The base install exposes Tablassert's Python API; add `[cli]` to install the `tablassert` command. QC and other extras are opt-in.
+Recommended for most users. Install into your project's environment to use the Python API (`pip install "tablassert"` or `uv add tablassert`), or install the standalone command-line tool with `uv tool install "tablassert[cli]"`. QC and other extras are opt-in.
 
 ```bash
 uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
@@ -49,17 +49,17 @@ Linux and macOS; elsewhere pip builds from the sdist, which needs a Rust toolcha
     The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.
 
 Excel (`.xlsx`) input is read through Polars' `calamine` engine, which ships with the base install
-(`fastexcel`). A handful of workbooks calamine rejects are readable by the pure-Python fallback
-engine: `pip install openpyxl`.
+(`fastexcel`). Workbooks that calamine cannot parse are rejected with its error; there is no fallback
+engine.
 
 #### When an extra is missing
 
 Reaching a feature whose extra was never installed is a normal, recoverable mistake, so Tablassert
-never lets it surface as a bare `ModuleNotFoundError`. Every one of these paths reports the absent
-distribution **and** the command that fixes it:
+never lets it surface as a bare `ModuleNotFoundError`. Every one of these paths names the absent
+distribution **and** the command that fixes it, in this shape (the first sentence lists the missing
+distributions; the second is the install command):
 
 ```text
-Missing optional dependencies 'scikit-learn', 'sentence-transformers', required by the QC audit.
 Install the [qc] extra: pip install "tablassert[qc]" (uv: uv tool install "tablassert[qc]")
 ```
 
