@@ -2,8 +2,8 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **six subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
-`validate-infores`, and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
+exposes **five subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
+and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
 ## Command index
@@ -14,8 +14,7 @@ for the live surface.
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
-| [`validate-infores`](#validate-infores) | Validate emitted infores CURIEs against the Translator registry |
-| [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model |
+| [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model and the Translator registry |
 
 ## App flags
 
@@ -241,11 +240,13 @@ tablassert validate graph.yaml --schema graph
 
 ## validate-kgx
 
-Use this to check that a completed build is actually Biolink-compliant. Where
+Use this to check that a completed build is actually Biolink-compliant and that the knowledge-source
+identifiers it emits are real. Where
 [`validate`](#validate) checks your *configuration*, `validate-kgx` checks the *output*: every node
 and edge is constructed as the Biolink Pydantic class named by its own `category`, the same classes
 [`NCATSTranslator/translator-ingests`](https://github.com/NCATSTranslator/translator-ingests) builds
-when it ingests your files.
+when it ingests your files, and every emitted `infores:` CURIE is classified against the NCATS
+Translator registry (see [Checking knowledge-source identity](#checking-knowledge-source-identity)).
 
 ```bash
 tablassert validate-kgx --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edges.ndjson
@@ -255,8 +256,12 @@ tablassert validate-kgx --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edg
 | --- | --- | --- | --- | --- |
 | `--nodes`, `-n` | Path | Yes | n/a | Built `*.nodes.ndjson` file to validate |
 | `--edges`, `-e` | Path | Yes | n/a | Built `*.edges.ndjson` file to validate |
-| `--limit` | int | No | `20` | Maximum example failures to retain per file |
+| `--limit` | int | No | `20` | Maximum example failures to retain per file (structural and identity examples alike) |
 | `--prune`, `-p` | Flag | No | `False` | Rewrite the edges file in place, keeping only edges that validate strictly (pending carryovers are dropped too); nodes are never touched, and a clean file is not rewritten |
+| `--rig` | Path | No | n/a | RIG yaml to include in the identity scan (its `source_info.infores_id` and target `primary_knowledge_sources` are checked) |
+| `--allow-infores` | list[str] | No | n/a | Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals |
+| `--registry` | snapshot\\|refresh\\|off | No | `snapshot` | `snapshot` validates offline against the bundled copy; `refresh` fetches the live upstream catalog (network) and caches it under the user cache dir; `off` skips the identity half entirely |
+| `--strict` | Flag | No | `False` | Exit non-zero while any unregistered CURIE remains; without it the identity half is advisory |
 
 Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
 rather than a million:
@@ -286,6 +291,29 @@ edges: 1200000/2000085 valid (800085 failures; 800085 pending biolink-model supp
 The strict count is what `ok` and the exit code use; the pending count is reported separately, so a
 deliberate gap never reads as a modelling error.
 
+### Checking knowledge-source identity
+
+Alongside structure, `validate-kgx` checks *identity*: every `infores:` CURIE on your edges
+(`primary_knowledge_source`, `sources[].resource_id`, `sources[].upstream_resource_ids`), nodes
+(`provided_by`), and, with `--rig`, the RIG document, is classified against the NCATS Translator
+registry ([`biolink/information-resource-registry`](https://github.com/biolink/information-resource-registry)'s
+`infores_catalog.yaml`). The registry ships as a bundled snapshot (the check is offline by default);
+`--registry refresh` fetches the live catalog instead, and `--registry off` skips the identity half
+entirely. Values without the `infores:` prefix are reported as malformed, not unregistered.
+
+```text
+registry: .../infores_catalog.yaml (508 entries)
+curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
+  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
+infores warnings present; pass --strict to fail on them.
+```
+
+The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
+graph's own `infores:` id from the `rig:` section's name) that will never sit in the registry. Allow
+those with repeatable `--allow-infores`, and pass `--strict` in CI to exit non-zero while any
+unregistered CURIE remains. A missing or misspelled path is reported as `file not found` and exits
+non-zero in every mode: a file that was never read must never count as a pass.
+
 ### Repairing a graph with `--prune`
 
 `--prune` (`-p`) repairs an already-emitted graph instead of just scoring it: the edges file is
@@ -305,7 +333,8 @@ The rewrite is atomic (written to a sibling temp file, then swapped in) and kept
 byte-identical, so a pruned graph differs from the original only by the removed records. A clean
 file is not rewritten at all, and a missing edges file is reported without ever being pruned.
 After pruning, every kept edge is strictly valid, so the exit code goes green as soon as the
-nodes are clean too:
+nodes are clean too. The identity half runs after the rewrite and classifies the pruned file:
+only what ships is judged.
 
 ```text
 edges: pruned 12/424159 non-compliant records
@@ -324,46 +353,6 @@ once a model release drops the requirement.
 
 ---
 
-## validate-infores
-
-Use this to prove the knowledge-source identifiers a build emits are real. `validate-kgx` checks
-*structure* against the Biolink Model; `validate-infores` checks *identity*: every `infores:` CURIE
-on your edges (`primary_knowledge_source`, `sources[].resource_id`, `sources[].upstream_resource_ids`),
-nodes (`provided_by`), and, with `--rig`, the RIG document, is classified against the NCATS
-Translator registry ([`biolink/information-resource-registry`](https://github.com/biolink/information-resource-registry)'s
-`infores_catalog.yaml`). The registry ships as a bundled snapshot (`validate-infores` is offline by
-default); `--registry refresh` fetches the live catalog instead. Values without the `infores:`
-prefix are reported as malformed, not unregistered.
-
-```bash
-tablassert validate-infores --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edges.ndjson --rig MY_KG_1.0.0.RIG.yaml
-```
-
-```text
-registry: .../infores_catalog.yaml (508 entries)
-curies: 3 registered, 1 allowed, 1 unregistered, 0 malformed
-  e.g. infores:totally-made-up (edges.primary_knowledge_source): unregistered
-infores warnings present; pass --strict to fail on them.
-```
-
-The default posture is advisory and exits 0: Tablassert legitimately mints graph-local CURIEs (the
-graph's own `infores:` id from the `rig:` section's name) that will never sit in the registry. Allow
-those with repeatable `--allow-infores`, and pass `--strict` in CI to exit non-zero while any
-unregistered CURIE remains. A missing or misspelled path is reported as `file not found` and exits
-non-zero in every mode: a file that was never read must never count as a pass.
-
-| Option | Type | Required | Default | Description |
-| --- | --- | --- | --- | --- |
-| `--nodes`, `-n` | Path | Yes | n/a | Built `*.nodes.ndjson` file to validate |
-| `--edges`, `-e` | Path | Yes | n/a | Built `*.edges.ndjson` file to validate |
-| `--rig` | Path | No | n/a | RIG yaml to include in the scan (its `source_info.infores_id` and target `primary_knowledge_sources` are checked) |
-| `--allow-infores` | list[str] | No | n/a | Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals |
-| `--registry` | snapshot\\|refresh\\|off | No | `snapshot` | `snapshot` validates offline against the bundled copy; `refresh` fetches the live upstream catalog (network) and caches it under the user cache dir; `off` skips membership classification and reports structure only |
-| `--strict` | Flag | No | `False` | Exit non-zero while any unregistered CURIE remains; without it the run is advisory |
-| `--limit` | int | No | `20` | Maximum example unregistered/malformed CURIEs retained for the `e.g.` report lines |
-
----
-
 ## Typical workflow
 
 1. Author a table config, then a graph config that references it.
@@ -372,7 +361,8 @@ non-zero in every mode: a file that was never read must never count as a pass.
 4. `tablassert quick-map TERM... -f <fullmap>`: spot-check how a term resolves under a column's
    exact filters when a mapping needs debugging.
 5. `tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson`: confirm the
-   output validates against the Biolink Model before shipping it downstream.
+   output validates against the Biolink Model and its knowledge-source CURIEs against the
+   Translator registry before shipping it downstream.
 
 ## Next Steps
 

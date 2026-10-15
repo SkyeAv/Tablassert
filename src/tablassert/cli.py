@@ -984,19 +984,52 @@ def _print_kgx_section(label: str, section: dict[str, Any], path: Path) -> None:
     logger.info(f"validate-kgx {label}: {section['valid']}/{section['total']} valid")
 
 
+def _print_infores_report(report: dict[str, Any], paths: dict[str, Path | None]) -> None:
+    """Print one identity-half report: absent inputs, registry provenance, counts, examples."""
+    for label, absent in report["missing"].items():
+        if absent:
+            print(f"{label}: file not found ({paths.get(label)})", file=sys.stderr)
+    print(f"registry: {report['registry']['source']} ({report['registry']['entries']} entries)", file=sys.stderr)
+    counts: str = (
+        f"curies: {report['registered']} registered, {report['allowed']} allowed, "
+        f"{report['unregistered']} unregistered, {report['malformed']} malformed"
+    )
+    print(counts, file=sys.stderr)
+    logger.info(f"validate-kgx infores: {counts}")
+    for example in report["examples"][:3]:
+        print(f"  e.g. {example['curie']} ({example['where']}.{example['field']}): {example['problem']}", file=sys.stderr)
+
+
 @APP.command(name="validate-kgx")
 def validate_kgx_command(
     nodes: Annotated[Path, cyclopts.Parameter(name=["--nodes", "-n"])],
     edges: Annotated[Path, cyclopts.Parameter(name=["--edges", "-e"])],
     limit: Annotated[int, cyclopts.Parameter(name=["--limit"])] = 20,
     prune: Annotated[bool, cyclopts.Parameter(name=["--prune", "-p"])] = False,
+    rig: Annotated[Path | None, cyclopts.Parameter(name=["--rig"])] = None,
+    allow_infores: Annotated[list[str] | None, cyclopts.Parameter(name=["--allow-infores"], negative="", allow_leading_hyphen=False)] = None,
+    registry: Annotated[Literal["snapshot", "refresh", "off"], cyclopts.Parameter(name=["--registry"])] = "snapshot",
+    strict: Annotated[bool, cyclopts.Parameter(name=["--strict"])] = False,
 ) -> None:
-    """Validate built KGX NDJSON against the Biolink Model.
+    """Validate built KGX NDJSON against the Biolink Model and the Translator registry.
 
-    Constructs every node and edge as the Biolink Pydantic class named by its own
-    ``category`` -- the same classes ``NCATSTranslator/translator-ingests`` builds --
-    and reports failures grouped by field and error type. Exits non-zero when any
-    record fails, so a build can be gated in CI.
+    The structural half constructs every node and edge as the Biolink Pydantic class
+    named by its own ``category`` -- the same classes ``NCATSTranslator/translator-
+    ingests`` builds -- and reports failures grouped by field and error type. The
+    identity half classifies every emitted knowledge-source identifier (edge
+    ``primary_knowledge_source``, ``sources[].resource_id`` and
+    ``sources[].upstream_resource_ids``, node ``provided_by``, and, with ``--rig``, the
+    RIG document's infores values) against ``biolink/information-resource-registry``'s
+    ``infores_catalog.yaml`` (vendored as the bundled snapshot, so the default path is
+    offline). Values without the ``infores:`` prefix are malformed, not unregistered.
+
+    The structural half exits non-zero when any record fails, so a build can be gated
+    in CI. The identity half is advisory by default -- unregistered CURIEs are reported
+    and the command exits 0, because Tablassert legitimately mints graph-local CURIEs
+    that will never sit in the registry -- and ``--strict`` (CI gates) exits 1 while any
+    unregistered CURIE remains; allowlist legitimate local ids with repeatable
+    ``--allow-infores``. Missing input files fail in every mode: a typo'd path must
+    never read as a clean bill of health.
 
     ``--prune`` rewrites the EDGES file in place, keeping only edges that validate
     strictly. Real defects (non-coercible values, extras the model will never declare,
@@ -1007,135 +1040,99 @@ def validate_kgx_command(
     stay byte-identical; a clean file is not rewritten at all, and a missing edges file
     is reported without ever being pruned. Nodes are validated and reported, never
     pruned. The exit code stays strict over the post-prune state: after a prune, every
-    kept edge is strictly valid, so the run is compliant exactly when the nodes are.
+    kept edge is strictly valid, so the run is compliant exactly when the nodes are,
+    and the identity half classifies the PRUNED file -- what ships is what is checked.
 
     Args:
         nodes: Path to the built nodes NDJSON file (``<name>_<version>.nodes.ndjson``).
         edges: Path to the built edges NDJSON file (``<name>_<version>.edges.ndjson``).
-        limit: Maximum example failures retained per file for the ``e.g.`` report lines;
-            every record is still validated regardless of this cap. A missing file is
-            reported and fails the run rather than reading as a pass.
+        limit: Maximum example failures retained per file for the ``e.g.`` report lines
+            (structural and identity examples alike); every record is still validated
+            regardless of this cap. A missing file is reported and fails the run rather
+            than reading as a pass.
         prune: Rewrite the edges file in place, removing every edge record that is not
             strictly KGX/Biolink-compliant, including the deliberate pending carryovers.
             The nodes file is never modified; a clean edges file is left untouched.
-    """
-    from tablassert.biolink import _validate_file, prune_kgx_edges, validate_kgx
-
-    if not prune:
-        report: dict[str, Any] = validate_kgx(nodes, edges, limit=limit)
-        print(f"biolink-model {report['biolink_version']}", file=sys.stderr)
-        _print_kgx_section("nodes", report["nodes"], nodes)
-        _print_kgx_section("edges", report["edges"], edges)
-        if not report["ok"]:
-            print("KGX output is not Biolink-compliant.", file=sys.stderr)
-            raise SystemExit(1)
-        print("KGX output is Biolink-compliant.", file=sys.stderr)
-        return
-
-    # The prune path validates nodes-only itself and drives prune_kgx_edges' own single
-    # pass for both edges sections, so the edges file is never read and written twice.
-    nodes_section: dict[str, Any] = _validate_file(nodes, edge=False, limit=limit)
-    pruned_report: dict[str, Any] = prune_kgx_edges(edges, limit=limit)
-    print(f"biolink-model {pruned_report['biolink_version']}", file=sys.stderr)
-    _print_kgx_section("nodes", nodes_section, nodes)
-    _print_kgx_section("edges", pruned_report["before"], edges)
-    if pruned_report["before"]["missing"]:
-        print("KGX output is not Biolink-compliant.", file=sys.stderr)
-        raise SystemExit(1)
-    malformed_note: str = f" ({pruned_report['malformed']} malformed lines)" if pruned_report["malformed"] else ""
-    print(f"edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} non-compliant records{malformed_note}", file=sys.stderr)
-    logger.info(f"validate-kgx edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} (rewritten={pruned_report['rewritten']})")
-    for problem, count in pruned_report["dropped"]["problems"].items():
-        print(f"  {count:>9}  {problem}", file=sys.stderr)
-    for example in pruned_report["dropped"]["examples"][:3]:
-        print(f"  e.g. {example['id']}: {', '.join(example['errors'])}", file=sys.stderr)
-    _print_kgx_section("edges", pruned_report["after"], edges)
-    nodes_ok: bool = not nodes_section["missing"] and nodes_section["total"] == nodes_section["valid"]
-    if not (nodes_ok and pruned_report["ok"]):
-        print("KGX output is not Biolink-compliant.", file=sys.stderr)
-        raise SystemExit(1)
-    print("KGX output is Biolink-compliant.", file=sys.stderr)
-
-
-@APP.command(name="validate-infores")
-def validate_infores_command(
-    nodes: Annotated[Path, cyclopts.Parameter(name=["--nodes", "-n"])],
-    edges: Annotated[Path, cyclopts.Parameter(name=["--edges", "-e"])],
-    rig: Annotated[Path | None, cyclopts.Parameter(name=["--rig"])] = None,
-    allow_infores: Annotated[list[str] | None, cyclopts.Parameter(name=["--allow-infores"], negative="", allow_leading_hyphen=False)] = None,
-    registry: Annotated[Literal["snapshot", "refresh", "off"], cyclopts.Parameter(name=["--registry"])] = "snapshot",
-    strict: Annotated[bool, cyclopts.Parameter(name=["--strict"])] = False,
-    limit: Annotated[int, cyclopts.Parameter(name=["--limit"])] = 20,
-) -> None:
-    """Validate emitted infores CURIEs against the NCATS Translator registry.
-
-    Every knowledge-source identifier the build emits -- edge ``primary_knowledge_source``,
-    ``sources[].resource_id`` and ``sources[].upstream_resource_ids``, node ``provided_by``,
-    and, with ``--rig``, the RIG document's infores values -- is classified against
-    ``biolink/information-resource-registry``'s ``infores_catalog.yaml`` (vendored as the
-    bundled snapshot, so the default path is offline). Values without the ``infores:``
-    prefix are malformed, not unregistered.
-
-    The default posture is advisory: unregistered CURIEs are reported and the command
-    exits 0, because Tablassert legitimately mints graph-local CURIEs that will never sit
-    in the registry. ``--strict`` (CI gates) exits 1 when any unregistered CURIE remains;
-    allowlist legitimate local ids with repeatable ``--allow-infores``. Missing input
-    files fail in every mode: a typo'd path must never read as a clean bill of health.
-
-    Args:
-        nodes: Path to the built nodes NDJSON file (``<name>_<version>.nodes.ndjson``).
-        edges: Path to the built edges NDJSON file (``<name>_<version>.edges.ndjson``).
         rig: Optional RIG yaml (``<name>_<version>.RIG.yaml``); its infores values are
             classified too.
         allow-infores: Registry-exempt CURIE, repeatable; use for the locally-minted
             graph identifier (``rig.infores()``) and other deliberate locals.
         registry: Registry source. ``snapshot`` (default) validates offline against the
             bundled copy; ``refresh`` fetches the live upstream catalog (network) and
-            caches it under the user cache dir; ``off`` skips membership classification
-            and reports structure only.
-        strict: Exit non-zero when any unregistered CURIE remains. Without it the run
-            is advisory and always exits 0 once inputs exist.
-        limit: Maximum number of example unregistered/malformed CURIEs retained for the
-            ``e.g.`` report lines; every observation is still classified regardless.
+            caches it under the user cache dir; ``off`` skips the identity half
+            entirely (structure-only validation).
+        strict: Exit non-zero when any unregistered CURIE remains. Without it the
+            identity half is advisory and never fails a run once inputs exist.
     """
+    from tablassert.biolink import _validate_file, prune_kgx_edges, validate_kgx
     from tablassert.infores_registry import REGISTRY_RAW_URL, refresh_registry, validate_infores
 
-    ids: frozenset[str] | None = None
-    if registry == "refresh":
-        ids = refresh_registry()
-    report: dict[str, Any] = validate_infores(
-        nodes, edges, rig_path=rig, allow=tuple(allow_infores or ()), registry=ids, check_registry=registry != "off", limit=limit
-    )
-    if ids is not None:
-        report["registry"]["source"] = f"{REGISTRY_RAW_URL} (refreshed)"
-    for label, absent in report["missing"].items():
-        if absent:
-            path_label = {"nodes": nodes, "edges": edges, "rig": rig}.get(label)
-            print(f"{label}: file not found ({path_label})", file=sys.stderr)
-    if any(report["missing"].values()):
-        print("infores validation failed: missing input files.", file=sys.stderr)
+    ids: frozenset[str] | None = refresh_registry() if registry == "refresh" else None
+
+    if not prune:
+        report: dict[str, Any] = validate_kgx(nodes, edges, limit=limit)
+        print(f"biolink-model {report['biolink_version']}", file=sys.stderr)
+        _print_kgx_section("nodes", report["nodes"], nodes)
+        _print_kgx_section("edges", report["edges"], edges)
+        structural_ok: bool = report["ok"]
+        structural_missing: bool = report["nodes"]["missing"] or report["edges"]["missing"]
+    else:
+        # The prune path validates nodes-only itself and drives prune_kgx_edges' own single
+        # pass for both edges sections, so the edges file is never read and written twice.
+        nodes_section: dict[str, Any] = _validate_file(nodes, edge=False, limit=limit)
+        pruned_report: dict[str, Any] = prune_kgx_edges(edges, limit=limit)
+        print(f"biolink-model {pruned_report['biolink_version']}", file=sys.stderr)
+        _print_kgx_section("nodes", nodes_section, nodes)
+        _print_kgx_section("edges", pruned_report["before"], edges)
+        if pruned_report["before"]["missing"]:
+            print("KGX output is not Biolink-compliant.", file=sys.stderr)
+            raise SystemExit(1)
+        malformed_note: str = f" ({pruned_report['malformed']} malformed lines)" if pruned_report["malformed"] else ""
+        print(f"edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} non-compliant records{malformed_note}", file=sys.stderr)
+        logger.info(
+            f"validate-kgx edges: pruned {pruned_report['pruned']}/{pruned_report['before']['total']} (rewritten={pruned_report['rewritten']})"
+        )
+        for problem, count in pruned_report["dropped"]["problems"].items():
+            print(f"  {count:>9}  {problem}", file=sys.stderr)
+        for example in pruned_report["dropped"]["examples"][:3]:
+            print(f"  e.g. {example['id']}: {', '.join(example['errors'])}", file=sys.stderr)
+        _print_kgx_section("edges", pruned_report["after"], edges)
+        nodes_ok: bool = not nodes_section["missing"] and nodes_section["total"] == nodes_section["valid"]
+        structural_ok = nodes_ok and pruned_report["ok"]
+        structural_missing = nodes_section["missing"]
+
+    # The identity half classifies what ships: in prune mode the edges file has already
+    # been rewritten, so the scan reads the post-prune state. When the structural half
+    # already failed on absent inputs and no RIG was given, a second scan would only
+    # echo the same file-not-found lines.
+    infores_ok: bool = True
+    if registry != "off" and (rig is not None or not structural_missing):
+        infores_report: dict[str, Any] = validate_infores(nodes, edges, rig_path=rig, allow=tuple(allow_infores or ()), registry=ids, limit=limit)
+        if ids is not None:
+            infores_report["registry"]["source"] = f"{REGISTRY_RAW_URL} (refreshed)"
+        _print_infores_report(infores_report, {"nodes": nodes, "edges": edges, "rig": rig})
+        if any(infores_report["missing"].values()):
+            print("infores validation failed: missing input files.", file=sys.stderr)
+            infores_ok = False
+        else:
+            clean: bool = not infores_report["unregistered"] and not infores_report["malformed"]
+            if strict:
+                if infores_report["ok_strict"]:
+                    print("All emitted infores CURIEs are registered." if clean else "infores validation passed (strict).", file=sys.stderr)
+                else:
+                    print("infores validation failed (strict): unregistered CURIEs remain.", file=sys.stderr)
+                    infores_ok = False
+            elif not clean:
+                print("infores warnings present; pass --strict to fail on them.", file=sys.stderr)
+            else:
+                print("All emitted infores CURIEs are registered.", file=sys.stderr)
+
+    if not structural_ok:
+        print("KGX output is not Biolink-compliant.", file=sys.stderr)
         raise SystemExit(1)
-    print(f"registry: {report['registry']['source']} ({report['registry']['entries']} entries)", file=sys.stderr)
-    counts: str = (
-        f"curies: {report['registered']} registered, {report['allowed']} allowed, "
-        f"{report['unregistered']} unregistered, {report['malformed']} malformed"
-    )
-    print(counts, file=sys.stderr)
-    logger.info(f"validate-infores: {counts}")
-    for example in report["examples"][:3]:
-        print(f"  e.g. {example['curie']} ({example['where']}.{example['field']}): {example['problem']}", file=sys.stderr)
-    clean: bool = not report["unregistered"] and not report["malformed"]
-    passed: str = "infores membership check skipped (--registry off)." if registry == "off" else "All emitted infores CURIEs are registered."
-    if strict:
-        if report["ok_strict"]:
-            print(passed if clean else "infores validation passed (strict).", file=sys.stderr)
-            return
-        print("infores validation failed (strict): unregistered CURIEs remain.", file=sys.stderr)
+    if not infores_ok:
         raise SystemExit(1)
-    if not clean:
-        print("infores warnings present; pass --strict to fail on them.", file=sys.stderr)
-        return
-    print(passed, file=sys.stderr)
+    print("KGX output is Biolink-compliant.", file=sys.stderr)
 
 
 @APP.command(name="quick-map")
