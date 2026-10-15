@@ -1465,12 +1465,18 @@ class Tcode(Section):
             # ranged column ends with a vocabulary audit: nothing else validates its cell
             # values against the closed Biolink range before KGX emission.
             [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
-            # no_map columns are encoded exactly like enum-ranged literals (no
-            # pre-resolution snapshot, no NLP normalization -- both exist only to feed
-            # entity resolution these columns never undergo), then finalized by
-            # curie_audit: blank rows dropped, non-CURIE cells failed loudly, and the
-            # pinned `biolink:NamedThing` category added for downstream edge derivation.
-            [[*self.encoding(x, col), (curie_audit, (col, self.store.stem, self.config.name))] for x, col in verbatim],
+            # no_map columns are encoded exactly like enum-ranged literals (no NLP
+            # normalization -- it exists only to feed entity resolution these columns
+            # never undergo), then finalized by curie_audit: blank rows dropped,
+            # non-CURIE cells failed loudly, and the pinned `biolink:NamedThing`
+            # category added for downstream edge derivation. The `<col>_pre_resolution`
+            # snapshot rides along because `_collect_subframes` discovers node columns
+            # through it at graph-compile time; without it a verbatim subject/object
+            # would never be split out of the edges into nodes.
+            [
+                [*self.encoding(x, col), (column, (f"{col}_pre_resolution", col)), (curie_audit, (col, self.store.stem, self.config.name))]
+                for x, col in verbatim
+            ],
             # Raw ``column_<n>`` columns are dead weight once the encodings above have
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.
