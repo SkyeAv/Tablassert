@@ -63,6 +63,8 @@ TablassertErrorCodes = Literal[
     "provenance-missing-publication",
     "provenance-publication-and-override",
     "encoding-list-method-removed",
+    "no-map-dead-config",
+    "no-map-bad-curie",
     "annotation-split-by-requires-column",
     "annotation-split-by-empty",
     "field-disabled",
