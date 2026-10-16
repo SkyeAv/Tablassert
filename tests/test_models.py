@@ -352,92 +352,6 @@ def test_node_encoding_explicit_null_disables_taxon() -> None:
     assert node.taxon is None
 
 
-def test_node_encoding_no_map_defaults_false() -> None:
-    """no_map defaults to False so every existing config resolves exactly as before."""
-    node: NodeEncoding = NodeEncoding(method="value", encoding="BRCA1")  # pyright: ignore
-    assert node.no_map is False
-
-
-def test_node_encoding_no_map_literal_must_be_curie() -> None:
-    """A no_map literal becomes the node id verbatim, so a non-CURIE literal is rejected at config time.
-
-    Without this check every row would build-drop at the CURIE audit, turning one
-    config typo into a silently empty node file.
-    """
-    with pytest.raises(ValidationError) as exc_info:
-        NodeEncoding(method="value", encoding="BRCA1", no_map=True)  # pyright: ignore
-    assert "no-map-bad-curie" in str(exc_info.value)
-
-
-def test_node_encoding_no_map_literal_curie_accepted() -> None:
-    """A CURIE-shaped no_map literal passes config validation."""
-    node: NodeEncoding = NodeEncoding(method="value", encoding="HGNC:1100", no_map=True)  # pyright: ignore
-    assert node.no_map is True
-
-
-def test_node_encoding_no_map_literal_prefix_suffix_form_curie() -> None:
-    """prefix/suffix participate in the literal CURIE check, matching the build's encoding()."""
-    node: NodeEncoding = NodeEncoding(method="value", encoding="1100", prefix="HGNC:", no_map=True)  # pyright: ignore
-    assert node.no_map is True
-    with pytest.raises(ValidationError) as exc_info:
-        NodeEncoding(method="value", encoding="1100", prefix="HGNC", no_map=True)  # pyright: ignore
-    assert "no-map-bad-curie" in str(exc_info.value)
-
-
-def test_node_encoding_no_map_column_needs_no_literal_curie() -> None:
-    """method: column no_map nodes skip literal validation; cells are audited per row at build time."""
-    node: NodeEncoding = NodeEncoding(method="column", encoding="A", no_map=True)  # pyright: ignore
-    assert node.no_map is True
-
-
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"prioritize": [Categories.GENE]},
-        {"avoid": [Categories.DISEASE]},
-        {"exclude_prefixes": ["OMIM"]},
-        {"exclude_regex": ["^OMIM:\\d+$"]},
-        {"taxon": 10090},
-    ],
-)
-def test_node_encoding_no_map_rejects_resolution_knobs(kwargs: dict[str, Any]) -> None:
-    """Resolution-only knobs alongside no_map: true are dead config and fail loudly at config time.
-
-    Each knob only steers fullmap ranking/filtering; with no_map no lookup happens,
-    so keeping them would mislead the reader into thinking they take effect.
-    """
-    with pytest.raises(ValidationError) as exc_info:
-        NodeEncoding(method="column", encoding="A", no_map=True, **kwargs)  # pyright: ignore
-    assert "no-map-dead-config" in str(exc_info.value)
-
-
-def test_node_encoding_no_map_allows_default_taxon() -> None:
-    """An explicit default taxon (9606) is indistinguishable from the unset default and stays allowed."""
-    node: NodeEncoding = NodeEncoding(method="column", encoding="A", no_map=True, taxon=9606)  # pyright: ignore
-    assert node.no_map is True
-
-
-def test_qualifier_resolved_property_truth_table() -> None:
-    """resolved reflects vocabulary presence AND the no_map opt-out.
-
-    Enum-ranged qualifiers never resolve; CURIE-ranged ones resolve unless no_map
-    opts them out. This property is the single routing predicate in lib._node_ops.
-    """
-    enum_ranged: Qualifier = Qualifier(qualifier="object_direction_qualifier", method="value", encoding="increased")  # pyright: ignore
-    assert enum_ranged.resolved is False
-    curie_ranged: Qualifier = Qualifier(qualifier="anatomical_context_qualifier", method="column", encoding="A")  # pyright: ignore
-    assert curie_ranged.resolved is True
-    curie_no_map: Qualifier = Qualifier(qualifier="anatomical_context_qualifier", method="column", encoding="A", no_map=True)  # pyright: ignore
-    assert curie_no_map.resolved is False
-
-
-def test_qualifier_no_map_rejected_on_enum_ranged() -> None:
-    """no_map on an enum-ranged qualifier is redundant (already verbatim) and is rejected as dead config."""
-    with pytest.raises(ValidationError) as exc_info:
-        models.Qualifier(qualifier="object_direction_qualifier", method="value", encoding="increased", no_map=True)  # pyright: ignore
-    assert "no-map-dead-config" in str(exc_info.value)
-
-
 def test_qualifier_rejects_disabled_species_context_qualifier() -> None:
     """species_context_qualifier is disabled and cannot be manually declared."""
     with pytest.raises(ValidationError) as exc_info:
@@ -1183,7 +1097,7 @@ def test_provenance_pmc_repo_with_non_pmc_publication_rejected() -> None:
 
 
 def test_no_deprecation_warnings_for_current_fixtures(fixtures_path: Path, recwarn: pytest.WarningsRecorder) -> None:
-    """US-M4: an EMPTY DEPRECATED_KEYS registry makes the before-hook a silent no-op.
+    """US-M4: a registry that names only removed keys makes the before-hook silent for shipped configs.
 
     Every shipped fixture and docs example must load and validate with ZERO UserWarnings,
     proving the deprecation scaffold never regresses today's corpus. Scoped to UserWarning so
@@ -1248,13 +1162,32 @@ def test_deprecated_key_in_registry_warns_but_still_validates(monkeypatch: pytes
 
     Monkeypatching a REAL current field name (`delimiter`) into DEPRECATED_KEYS makes the
     before-hook emit a UserWarning while `extra="forbid"` still accepts the key and the value
-    round-trips intact -- isolating "warn, don't fail". monkeypatch restores the empty registry
-    so no other test observes the temporary entry.
+    round-trips intact -- isolating "warn, don't fail". monkeypatch restores the registry, so no
+    other test observes the temporary entry.
     """
     monkeypatch.setitem(models.DEPRECATED_KEYS, "delimiter", "delimiter is deprecated; use 'sep' instead")
     with pytest.warns(UserWarning, match="sep"):
         source: Text = Text(local=Path("./t.tsv"), url=["https://example.com/t.tsv"], kind="text", delimiter="\t")  # pyright: ignore
     assert source.delimiter == "\t"
+
+
+def test_removed_no_map_key_warns_then_still_fails() -> None:
+    """A 21.0.0-era config that still sets `no_map` is told why it fails, then still fails.
+
+    The mode is registered in `DEPRECATED_KEYS` so the before-hook names the removal and the
+    migration, while `extra="forbid"` keeps rejecting the key. Both halves are pinned because each
+    fails differently: dropping the registry entry regresses the message to a bare "Extra inputs are
+    not permitted", and popping the key instead would silently accept a config whose output the
+    removal exists to prevent. Both values are covered because the hook keys on presence
+    (`for key in data`), so a config that was merely opting out with `no_map: false` breaks too.
+    """
+    for value in (True, False):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(ValidationError, match="no_map"):
+                NodeEncoding.model_validate({"method": "value", "encoding": "BRCA1", "no_map": value})
+        notes: list[str] = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+        assert any("`no_map` is removed" in note for note in notes), f"expected the removal note for {value}, saw {notes}"
 
 
 def test_deprecated_hook_is_noop_for_non_dict_input(recwarn: pytest.WarningsRecorder) -> None:

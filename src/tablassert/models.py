@@ -47,11 +47,20 @@ else:
     pl = LazyModule("polars")
 
 
-# Deprecated config keys -> guidance. EMPTY today: the before-hook below is a silent no-op until a
-# future rename registers a key here to WARN on it. The hook only warns and returns the data
-# unchanged — a renamed key that is no longer a valid field is STILL rejected by extra="forbid"
-# unless the future hook also pops/translates it; registering a key here supplies the warning half only.
-DEPRECATED_KEYS: dict[str, str] = {}
+# Deprecated config keys -> guidance. The before-hook below only warns and returns the data
+# unchanged: a key that is no longer a valid field is STILL rejected by extra="forbid" unless the
+# hook also pops/translates it, so registering a key here supplies the warning half only. That is
+# the right half for a removed feature: the config still fails, but it says why and what to do.
+DEPRECATED_KEYS: dict[str, str] = {
+    "no_map": (
+        "`no_map` is removed: subject, object, and CURIE-ranged qualifier values resolve against the fullmap again. "
+        "The mode emitted node ids verbatim and pinned each one to `biolink:NamedThing`, which flattened every derived "
+        "edge to `biolink:Association`. Tables that already carry CURIEs need nothing else, because the fullmap indexes "
+        "CURIEs and their equivalent identifiers as terms, so a CURIE cell resolves back to its own CURIE. The usual "
+        "resolution rules still apply: `taxon`, `prioritize`/`avoid`, `exclude_prefixes`/`exclude_regex`, and a blank "
+        "cell still drops the row."
+    )
+}
 
 
 def _shown(name: str, target: str) -> str:
@@ -94,10 +103,11 @@ class TablaBase(BaseModel):
         """Soft-warn when a raw input key is registered in ``DEPRECATED_KEYS``.
 
         Pure observation: returns ``data`` unchanged and never rejects (``extra="forbid"``
-        still governs truly-unknown keys). The registry is EMPTY today, so this is a silent
-        no-op; a future field rename registers its old key here to warn instead of hard-fail.
+        still governs keys that name no live field, so a removed feature's key warns and then
+        still fails; that pairing is the point, since silently dropping the key would build the
+        output the removal exists to prevent). ``no_map`` is the registered entry today.
         Note: with ``validate_assignment=True`` pydantic also re-runs this on attribute set,
-        so a registered key warns on assignment too — inert while the registry is empty.
+        so a registered key warns on assignment too.
         """
         if isinstance(data, dict):
             for key in data:
@@ -288,16 +298,6 @@ class Encoding(TablaBase):
     )
 
 
-#: CURIE shape enforced on verbatim (``no_map``) node values: non-empty ``PREFIX:local-id``.
-#: Shared by config-time literal validation (models) and build-time cell audits (lib).
-CURIE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.\-/]+$")
-
-
-def is_curie(value: object) -> bool:
-    """Whether ``value`` is a CURIE-shaped string (``PREFIX:local-id``, both halves non-empty)."""
-    return isinstance(value, str) and CURIE_PATTERN.match(value.strip()) is not None
-
-
 class NodeEncoding(Encoding):
     taxon: PositiveInt | None = Field(
         9606,
@@ -321,87 +321,6 @@ class NodeEncoding(Encoding):
         description="Regex patterns; any resolved CURIE matching one is dropped during entity resolution (case-sensitive).",
         examples=[["^OMIM:\\d+$"]],
     )
-
-    no_map: bool = Field(
-        False,
-        description=(
-            "When True, skip fullmap entity resolution: the encoded value is used verbatim as the node CURIE, "
-            "for data that already carries its own CURIEs. No NLP normalization, taxon constraint, or category "
-            "lookup is applied; blank cells are dropped like unresolved nodes and non-CURIE cells fail the build."
-        ),
-        examples=[True],
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def no_map_rejects_explicit_taxon(cls, data: Any) -> Any:
-        """Reject ``no_map`` with an explicit non-default ``taxon`` (dead resolution config).
-
-        ``taxon`` defaults to 9606 and only steers fullmap ranking, so an explicit
-        non-default taxon alongside ``no_map: true`` is config that can never take
-        effect. The default itself stays indistinguishable from an explicit 9606 and
-        is therefore allowed. Checked ``before`` precisely so "explicitly set" is
-        detectable from the raw input dict.
-        """
-        if isinstance(data, dict) and data.get("no_map") and "taxon" in data and data["taxon"] not in (None, 9606):
-            raise TablassertValidationError(
-                f"`no_map: true` skips entity resolution, so `taxon: {data['taxon']}` can never take effect; remove the taxon constraint.",
-                code="no-map-dead-config",
-            )
-        return data
-
-    @model_validator(mode="after")
-    def no_map_rejects_resolution_knobs(self: Self) -> Self:
-        """Reject ``no_map`` combined with resolution-only knobs (dead config).
-
-        ``prioritize``, ``avoid``, ``exclude_prefixes``, and ``exclude_regex`` only
-        steer fullmap ranking and filtering; with ``no_map: true`` no lookup happens,
-        so these fields mislead the reader. Fail loudly at config time, like the
-        ``nullable``-on-literal check on :class:`Qualifier`.
-        """
-        if not self.no_map:
-            return self
-        dead: list[str] = [
-            name
-            for name, value in (
-                ("prioritize", self.prioritize),
-                ("avoid", self.avoid),
-                ("exclude_prefixes", self.exclude_prefixes),
-                ("exclude_regex", self.exclude_regex),
-            )
-            if value
-        ]
-        if dead:
-            raise TablassertValidationError(
-                f"`no_map: true` skips entity resolution, so {', '.join(f'`{name}`' for name in dead)} can never take effect; remove them.",
-                code="no-map-dead-config",
-            )
-        return self
-
-    @model_validator(mode="after")
-    def no_map_literal_must_be_curie(self: Self) -> Self:
-        """Validate that a ``no_map`` literal encodes a CURIE at config time.
-
-        A ``method: value`` node with ``no_map: true`` becomes the node id verbatim,
-        so the literal (after ``prefix``/``suffix`` are applied, matching the build's
-        ``encoding()``) must already be CURIE-shaped; otherwise every row would be
-        dropped at build time. ``method: column`` cells are audited per row at build
-        time instead.
-        """
-        if not self.no_map or self.method != EncodingMethods.VALUE:
-            return self
-        # Enum-ranged qualifier literals are closed-vocabulary tokens (audited against
-        # the vocabulary, and `no_map` on them is rejected as dead config), not CURIEs.
-        if getattr(self, "vocabulary", None) is not None:
-            return self
-        literal: str = f"{self.prefix or ''}{self.encoding}{self.suffix or ''}".strip()
-        if not is_curie(literal):
-            raise TablassertValidationError(
-                f"`no_map: true` uses the encoded value verbatim as the node CURIE, but the literal {literal!r} is not CURIE-shaped "
-                "(expected `PREFIX:local-id`). Fix the literal, or add `prefix`/`suffix` to form a CURIE.",
-                code="no-map-bad-curie",
-            )
-        return self
 
     @field_validator("exclude_regex", mode="after")
     @classmethod
@@ -450,26 +369,10 @@ class Qualifier(NodeEncoding):
     def resolved(self: Self) -> bool:
         """Whether this qualifier's values go through fullmap entity resolution.
 
-        Enum-ranged qualifiers carry a literal token from a closed Biolink vocabulary
-        and must be passed through verbatim. CURIE-ranged qualifiers are resolved
-        unless they opt out with ``no_map: true`` (their values are already CURIEs).
+        Only CURIE-ranged qualifiers are resolved. Enum-ranged ones carry a literal
+        token from a closed Biolink vocabulary and must be passed through verbatim.
         """
-        return self.vocabulary is None and not self.no_map
-
-    @model_validator(mode="after")
-    def reject_no_map_on_enum_ranged(self: Self) -> Self:
-        """Reject ``no_map: true`` on enum-ranged qualifiers as dead config.
-
-        Enum-ranged qualifiers already pass their literal tokens through verbatim, so
-        ``no_map`` would be a no-op that misleads the reader; fail loudly at config
-        time, like the ``nullable``-on-literal check below.
-        """
-        if self.no_map and self.vocabulary is not None:
-            raise TablassertValidationError(
-                f"{self.qualifier} has a closed Biolink vocabulary and already passes values through verbatim, so `no_map` is redundant; remove it.",
-                code="no-map-dead-config",
-            )
-        return self
+        return self.vocabulary is None
 
     @model_validator(mode="after")
     def reject_disabled_qualifiers(self: Self) -> Self:
