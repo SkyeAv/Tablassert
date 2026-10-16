@@ -272,9 +272,6 @@ OP_COST: dict[Callable, int] = {
     lib.split_list: 1,
     # Vocabulary audit: one eager distinct-value pass over a single enum column.
     lib.qualifier_vocabulary_audit: 1,
-    # CURIE audit: one eager pass over a single no_map column (distinct-value check,
-    # blank-row filter, category column synthesis).
-    lib.curie_audit: 1,
     # Clean: coerce_columns applies five coercion rules (schema resolve + renames + value
     # coercion) in one pass, so it outprices a single-expression clean op.
     lib.coerce_columns: 3,
