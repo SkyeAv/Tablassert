@@ -1706,28 +1706,28 @@
 <tr>
 <td><code>qc_similarity_threshold</code></td>
 <td>Float 0-1</td>
-<td>SapBERT cosine threshold used by QC</td>
+<td>SapBERT cosine threshold used by QC (default 0.5)</td>
 </tr>
 <tr>
 <td><code>qc_fuzzy_ratio_threshold</code></td>
 <td>Float 0-100</td>
-<td>RapidFuzz ratio threshold used by QC</td>
+<td>RapidFuzz ratio threshold used by QC (default 70)</td>
 </tr>
 <tr>
 <td><code>qc_fuzzy_partial_threshold</code></td>
 <td>Float 0-100</td>
-<td>RapidFuzz partial/token-set threshold used by QC</td>
+<td>RapidFuzz partial/token-set threshold used by QC (default 80)</td>
 </tr>
 <tr>
 <td><code>qc_aliases</code></td>
 <td>Mapping[String, String]</td>
-<td>Source-text aliases applied before QC similarity stages</td>
+<td>Source-text aliases applied before QC similarity stages (default empty)</td>
 </tr>
 </tbody>
 </table>
 <h2 id="stable-edge-ids">Stable edge ids<a class="headerlink" href="#stable-edge-ids" title="Permanent link">&para;</a></h2>
 <p>Every edge gets a deterministic <code>id</code>: a UUID v3 derived from the edge itself. By default it is
-derived from the <strong>whole record</strong>, which makes it maximally brittle: a corrected <code>p_value</code>, a new
+derived from the <strong>whole record</strong>, which makes it change on any field edit: a corrected <code>p_value</code>, a new
 <code>supporting_text</code> entry, a reordered source row, or a Biolink release that renames a slot all mint a
 brand-new id. Downstream Translator consumers then see a new edge where they should see the same
 edge with updated attributes.</p>
@@ -1752,14 +1752,14 @@ edge with updated attributes.</p>
 <code>sources</code>, <code>category</code>, <code>knowledge_level</code>, <code>agent_type</code>.</p>
 <p><strong>Then build, and let the failure tell you what is missing.</strong> That list is a starting point, not an
 answer: whether it is a key depends on your data, and the only way to find out is to run it. On a
-real 1.27M-edge graph the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
+real 1.27M-edge MultiomicsKG 3.0.0 build, the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
 predicate, object, publication and row were identical, differing only in the NLP level recorded in
 <code>supporting_text</code> because two raw strings had resolved onto the same CURIE. Adding
 <code>supporting_text</code> made it a key.</p>
 <p>Expect to iterate once or twice. Each failure names the id, the fields that differ, and one
 offending edge, so each round is mechanical.</p>
 <h3 id="what-it-buys">What it buys<a class="headerlink" href="#what-it-buys" title="Permanent link">&para;</a></h3>
-<p>On that same 1.27M-edge graph, re-analysing the statistics (new <code>p_value</code> and <code>effect_size</code> on
+<p>On that same MultiomicsKG 3.0.0 build, re-analysing the statistics (new <code>p_value</code> and <code>effect_size</code> on
 every row) and rebuilding:</p>
 <table>
 <thead>
@@ -1803,18 +1803,18 @@ answer is one edge with the combined evidence, not a failed build. Opt in with:<
 </code></pre></div>
 <p>Under <code>merge</code>, a divergent same-id record is folded into the first record that claimed the id:</p>
 <ul>
-<li><strong>list fields</strong> (<code>publications</code>, <code>sources</code>, <code>source_record_urls</code>, <code>supporting_text</code>, <code>category</code>,
-  <code>upstream_resource_ids</code>, <code>has_supporting_studies</code>, ...) are unioned, deduplicated, and <strong>sorted</strong>,
+<li><strong>list fields</strong> (<code>publications</code>, <code>sources</code>, <code>supporting_text</code>, <code>category</code>,
+  <code>has_supporting_studies</code>, ...) are unioned, deduplicated, and <strong>sorted</strong>,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
   <code>sources[]</code> dedup by content; key order alone never keeps two copies.</li>
 <li><strong>scalar fields</strong> keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.</li>
-<li>fields only the later record carries are copied over: first-wins arbitrates <em>conflicts</em>, not
-  additions.</li>
-<li><strong>one scalar is exempt from first-wins:</strong> when the merged record carries the build-internal
+<li>fields only the later record carries are copied over: the lexicographic-minimum rule arbitrates
+  <em>conflicts</em>, not additions.</li>
+<li><strong>one scalar is exempt from that rule:</strong> when the merged record carries the build-internal
   <code>supporting_case_ids</code> list (the case IDs behind a <code>number_of_cases</code> count), the merged count
   becomes the length of the unioned list, so a case ID shared by both records counts once where
-  first-wins would under-report and summing would double-count. The superseded divergence is not
+  the minimum rule would under-report and summing would double-count. The superseded divergence is not
   reported as a scalar conflict, and the carrier list is stripped from every edge before write in
   both modes, so it never ships in the final NDJSON.</li>
 </ul>
@@ -1837,7 +1837,7 @@ shards, or one renamed across versions that has to keep its published ids.</p>
 switching identity models; ids are stable from then on. Plan it as a deliberate version bump and
 tell your consumers.</p>
 <h3 id="the-rig-section">The <code>rig:</code> section<a class="headerlink" href="#the-rig-section" title="Permanent link">&para;</a></h3>
-<p>The <code>rig:</code> section carries every human-authored RIG fact. Its shape mirrors the released <a href="https://github.com/biolink/resource-ingest-guide-schema">RIG schema</a>, so the generated <code>.RIG.yaml</code> is always schema-shaped. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and <strong>validates the complete document before writing anything</strong>, so a build never leaves behind an invalid or incomplete RIG.</p>
+<p>The <code>rig:</code> section carries every human-authored RIG fact. Its shape follows the released <a href="https://github.com/biolink/resource-ingest-guide-schema">RIG schema</a>, with two deliberate differences: the <code>artifact_base_url</code> and <code>artifact_base_path</code> keys below are Tablassert-only config consumed by the generator (never written to the <code>.RIG.yaml</code>), and a few fields differ in requiredness from the upstream schema and template, which disagree with each other on <code>source_status</code>; Tablassert requires <code>provenance_info</code>, <code>source_status</code>, and <code>ingest_info.scope</code>, and treats <code>ingest_info.relevant_files</code> as optional because the generator pre-fills the generated-artifact entries. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and <strong>validates the complete document before writing anything</strong>, so a build never leaves behind an invalid or incomplete RIG.</p>
 <table>
 <thead>
 <tr>
@@ -1870,7 +1870,7 @@ tell your consumers.</p>
 <td><code>rig.target_info</code></td>
 <td>Object</td>
 <td>No</td>
-<td>Target-level <code>future_considerations</code> and <code>additional_notes</code> (edge/node type summaries are always generated)</td>
+<td>Target-level <code>future_considerations</code> (each with a <code>category</code>: <code>spoq_pattern</code>, <code>predicates</code>, <code>qualifiers</code>, <code>edge_properties</code>, <code>node_properties</code>, or <code>other</code>) and <code>additional_notes</code>; edge/node type summaries are always generated</td>
 </tr>
 <tr>
 <td><code>rig.ui_explanation</code></td>
@@ -1882,7 +1882,7 @@ tell your consumers.</p>
 <td><code>rig.source_files</code></td>
 <td>List[String]</td>
 <td>No</td>
-<td>Upstream source file names/URLs listed verbatim as <code>source_files</code> on every generated <code>edge_type_info</code> entry; never scraped from edge <code>source_record_urls</code></td>
+<td>Upstream source file names/URLs, sorted and deduplicated, written as <code>source_files</code> on every generated <code>edge_type_info</code> entry; never scraped from edge <code>source_record_urls</code></td>
 </tr>
 <tr>
 <td><code>rig.provenance_info</code></td>
@@ -1900,13 +1900,13 @@ tell your consumers.</p>
 <td><code>rig.artifact_base_url</code></td>
 <td>String</td>
 <td>Yes</td>
-<td>Public URL prefix for the generated KGX artifacts; each <code>.nodes.ndjson</code>/<code>.edges.ndjson</code> name is appended to build RIG <code>relevant_files</code> locations</td>
+<td>Public URL prefix for the generated KGX artifacts; each <code>.nodes.ndjson</code>/<code>.edges.ndjson</code> name is appended to build RIG <code>relevant_files</code> locations. Tablassert-only config key, not a RIG schema slot, and never written to the <code>.RIG.yaml</code></td>
 </tr>
 <tr>
 <td><code>rig.artifact_base_path</code></td>
 <td>Path</td>
 <td>Yes</td>
-<td>Output directory the generated artifacts (and the RIG) are written into; created when missing</td>
+<td>Output directory the generated artifacts (and the RIG) are written into; created when missing. Tablassert-only config key, not a RIG schema slot, and never written to the <code>.RIG.yaml</code></td>
 </tr>
 </tbody>
 </table>
@@ -1955,7 +1955,7 @@ tell your consumers.</p>
 <td><code>data_access_locations</code></td>
 <td>List[String]</td>
 <td>Yes</td>
-<td>Where the upstream source data is accessed; each entry must contain an http(s) or file URL</td>
+<td>Where the upstream source data is accessed; at least one entry required, each containing an http(s) or file URL</td>
 </tr>
 <tr>
 <td><code>data_provision_mechanisms</code></td>
@@ -1989,6 +1989,7 @@ tell your consumers.</p>
 </tr>
 </tbody>
 </table>
+<p><code>source_status</code> is required here because Tablassert follows the translator-ingests template, which marks it required; the released LinkML schema leaves it optional.</p>
 <h4 id="rigingest_info"><code>rig.ingest_info</code><a class="headerlink" href="#rigingest_info" title="Permanent link">&para;</a></h4>
 <table>
 <thead>
@@ -2091,7 +2092,7 @@ tell your consumers.</p>
 <li>edge/node summaries disagree with the observed graph (categories, predicates, KL/AT values, infores CURIEs);</li>
 <li>a configured upstream <code>relevant_files</code> entry matches no table source file or URL.</li>
 </ul>
-<p>This is what makes every emitted RIG PR-worthy by construction: placeholders and silent gaps fail the build instead of shipping.</p>
+<p>Every emitted RIG passes this audit before it is written: placeholders and silent gaps fail the build instead of shipping.</p>
 <h2 id="minimal-example">Minimal Example<a class="headerlink" href="#minimal-example" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MY_GRAPH</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0.0</span>
@@ -2170,6 +2171,7 @@ tell your consumers.</p>
 <li>Validate with the QC audit when <code>build-kg --qc</code> is passed</li>
 <li><strong>Build subgraphs</strong> - Compile each section's resolved data into a parquet file</li>
 <li><strong>Compile graph</strong> - Aggregate all subgraph parquets, export <code>{name}_{version}.nodes.ndjson</code> / <code>.edges.ndjson</code> into <code>rig.artifact_base_path</code>, summarize the final graph, audit the RIG document, and write <code>{name}_{version}.RIG.yaml</code></li>
+<li><strong>Study graph</strong> (<code>--qc</code> only) - Run the QC audit over the compiled graph</li>
 </ol>
 <h2 id="output-files">Output Files<a class="headerlink" href="#output-files" title="Permanent link">&para;</a></h2>
 <p>Given this configuration:</p>

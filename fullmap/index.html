@@ -1249,14 +1249,17 @@
 
 <h1 id="fullmap">Fullmap<a class="headerlink" href="#fullmap" title="Permanent link">&para;</a></h1>
 <p>Build a fullmap once and every <code>resolve()</code> / <code>resolve_many()</code> call maps free text to the right
-biological CURIE; the completeness and freshness of this database directly sets how many of your
-entities resolve correctly and how trustworthy the resulting graph is.</p>
+biological CURIE. How complete and how fresh this database is sets how many of your entities resolve
+and how trustworthy the resulting graph is.</p>
 <p>Fullmap is Tablassert's embedded entity-resolution database: a small set of <a href="https://github.com/cberner/redb">redb</a>
 files containing biological synonyms, CURIEs, Biolink categories, taxon IDs, and source provenance,
 built from NCATS Translator BABEL export files. It comprises a primary file holding the dimensions,
 CURIEs, and schema metadata, plus hash-sharded RECORDS files (<code>fullmap.s0.redb</code> ... <code>fullmap.s15.redb</code>
 by default) holding the term-to-postings index.</p>
-<p>Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). When the optional <code>[aria2]</code> extra is installed (<code>pip install "tablassert[aria2]"</code>; Linux/Windows wheels only), both download stages (the prebuilt <code>fullmap.tar.zst</code> archive and, for a from-scratch build, the BABEL class and synonym files) use the bundled aria2c binary automatically; without it, Tablassert's Python downloader is used.</p>
+<p>Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool and no install
+step. When the optional <code>[aria2]</code> extra is installed (<code>pip install "tablassert[aria2]"</code>; Linux/Windows
+wheels only), both download stages use the bundled aria2c binary automatically; without it, Tablassert's
+Python downloader is used.</p>
 <h2 id="build-command">Build Command<a class="headerlink" href="#build-command" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Default: download the prebuilt fullmap.tar.zst for this version and extract it (fast)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>tablassert<span class="w"> </span>build-fullmap
@@ -1264,7 +1267,7 @@ by default) holding the term-to-postings index.</p>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Force a from-scratch build from BABEL outputs (skips the prebuilt download)</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>tablassert<span class="w"> </span>build-fullmap<span class="w"> </span>--force
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Optional: with `pip install &quot;tablassert[aria2]&quot;`, the same command downloads through the bundled aria2c automatically (the multi-GB prebuilt is the ideal aria2 use case)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Optional: with `pip install &quot;tablassert[aria2]&quot;`, the same command downloads through the bundled aria2c automatically</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>tablassert<span class="w"> </span>build-fullmap
 </code></pre></div>
 <p>The taxon allowlist is always on; there is no flag. Every database <code>build-fullmap</code> installs uses the
@@ -1276,9 +1279,10 @@ records its allowlist identity in <code>META.taxon_allowlist</code>, and that id
 <ul>
 <li>A prebuilt archive whose recorded identity does not match the current allowlist fails validation
   during extraction, so it is never installed; the command falls back to a filtered source build.
-  Note the operational consequence: until a filtered archive is published for a Tablassert version,
-  the default invocation downloads that version's unfiltered archive once, fails the identity check,
-  and then performs the full BABEL download + build.</li>
+  The operational consequence depends on what RENCI has published: if an archive for the requested
+  version and allowlist exists it is used directly, and otherwise the default invocation downloads the
+  closest published archive, fails the identity check, and then performs the full BABEL download and
+  build.</li>
 <li>A database already present at <code>--output</code> is reused only when its recorded identity matches;
   otherwise it is rebuilt.</li>
 </ul>
@@ -1287,7 +1291,8 @@ cache directory, BABEL snapshot version, and the <code>--force</code> / <code>-f
 more examples.</p>
 <p>By default, <code>build-fullmap</code> first downloads a <strong>prebuilt</strong> database published for this Tablassert
 version, a <code>fullmap.tar.zst</code> under <code>.../fullmap/&lt;tablassert-version&gt;/</code> (the version directory is the
-installed package version, never hardcoded), verified against a co-published <code>sha256sum.txt</code> and
+installed package version, never hardcoded), verified against a co-published <code>sha256sum.txt</code> when that
+file is present and parseable (otherwise the download proceeds with a warning) and
 extracted beside <code>--output</code> entirely in the Rust extension: it streams the archive through zstd
 decompression and untars it (the multi-GB decompressed tar is never materialized on disk) with the
 GIL released, extracts into a
@@ -1300,7 +1305,7 @@ passes is atomically renamed into place (the primary to <code>--output</code>, s
 and the command falls back to the from-scratch build below. If no prebuilt is published for this
 version it falls back the same way; <code>--force</code> / <code>-f</code> skips the prebuilt attempt and always builds.
 When the optional <code>[aria2]</code> extra is installed, the bundled aria2c from that extra accelerates
-<strong>either</strong> download automatically (the multi-GB prebuilt archive is the ideal aria2 use case), and
+<strong>either</strong> download automatically, and
 the Python downloader is used otherwise.</p>
 <p>Two facts matter most when planning a build:</p>
 <ul>
@@ -1332,9 +1337,9 @@ memory budget; the <a href="https://github.com/microsoft/mimalloc">mimalloc</a> 
 multi-threaded allocation from bloating resident memory.</p>
 <ul>
 <li><strong>Download</strong>: files come from <code>https://stars.renci.org/var/babel_outputs</code> via resumable,
-  range-request downloads; cached files are reused. When the <code>[aria2]</code> extra is installed, only
-  this stage of the from-scratch pipeline uses the bundled <code>aria2c</code> binary from that extra (the
-  prebuilt archive download above uses it too), with aria2's segmented HTTP downloads and
+  range-request downloads; cached files are reused. When the <code>[aria2]</code> extra is installed, both
+  this stage and the prebuilt archive download use the bundled <code>aria2c</code> binary, with aria2's
+  segmented HTTP downloads and
   retry/resume control files while suppressing aria2's own progress UI so Tablassert's progress
   bar stays clean.
   The progress detail remains file-level (<code>aria2c downloading</code>) rather than byte-level in that mode.</li>
@@ -1349,7 +1354,7 @@ multi-threaded allocation from bloating resident memory.</p>
   assigns compact integer CURIE IDs via a dedup map keyed on <code>xxh3_128(curie)</code>, and
   accumulates postings mapping each normalized term to its (CURIE, source) pairs. Each worker drains its per-CURIE rows and
   term postings to bounded on-disk spill runs once its buffer fills, the term postings partitioned
-  per-shard at spill time (each <code>run_s{shard}_{id}.bin</code> holds only terms with
+  per-shard at spill time (each <code>run_s{shard}_{run_id:08}.bin</code> holds only terms with
   <code>xxh64(term) &amp; (shards-1)</code> matching that shard), which keeps peak RAM flat regardless of input size
   and lets the write phase merge each shard independently. Dead terms (purely numeric, or generic
   labels like <code>none</code>/<code>nan</code>/<code>null</code>) are skipped, since they can never be queried.</li>
@@ -1361,11 +1366,11 @@ multi-threaded allocation from bloating resident memory.</p>
   runs and inserting the merged term groups inline into that shard's redb file (one database per
   shard, since redb allows a single writer per file) in hash-sorted batches for near-sequential B-tree
   appends (each batch is appended through redb's end-of-table cursor API, the faster ascending
-  bulk-load path; the engine's ascending-key page optimization also lets a key-order-loaded shard
-  occupy about half as many pages, so current builds write ~50% smaller shard files at the same
+  bulk-load path; loading each shard in ascending key order also lets the engine pack its pages
+  densely, so current builds write smaller shard files at the same
   schema). Because every term's postings already live in its own shard's runs, each merge groups a
-  term completely with no cross-shard coordination; as the merge+insert is the bottleneck,
-  <code>shard_count</code> writers deliver ~Nx single-threaded write throughput.</li>
+  term completely with no cross-shard coordination, and one writer per shard keeps the merge+insert
+  bottleneck off the critical path.</li>
 </ul>
 </details>
 <h3 id="build-tunables-environment">Build Tunables (environment)<a class="headerlink" href="#build-tunables-environment" title="Permanent link">&para;</a></h3>
@@ -1383,7 +1388,7 @@ override only when targeting an unusual machine.</p>
 <tr>
 <td><code>TABLASSERT_FULLMAP_EXCLUDE_PREFIXES</code></td>
 <td><em>(empty)</em></td>
-<td>Comma-separated CURIE prefixes to drop at build time (e.g. <code>Publication</code>). Excluding prefixes you never resolve dramatically cuts build time, peak memory, and database size. InChIKey terms are retained unless excluded explicitly.</td>
+<td>Comma-separated CURIE prefixes to drop at build time (e.g. <code>InChIKey</code>, <code>CAID</code>). Dropping prefixes you never resolve cuts build time, peak memory, and database size. InChIKey terms are retained unless excluded explicitly.</td>
 </tr>
 <tr>
 <td><code>TABLASSERT_FULLMAP_CHUNK_BYTES</code></td>
@@ -1476,7 +1481,7 @@ missing tag raises rather than silently reading incompatible data. Databases bui
 <code>v1</code>/<code>v2</code>/<code>v3</code>/<code>v4</code>/<code>v5</code> schemas are rejected: there is no automatic schema migration, so a schema bump
 (the v3 to v4 move to sharded files, the v4 to v5 move to the redb 4 engine, and the v5 to v6 move to normalized level-one keys) requires rebuilding
 via <code>tablassert build-fullmap</code>.</p>
-<p>Readers open every fullmap file READ-ONLY with a SHARED file lock (redb &gt;= 3 <code>ReadOnlyDatabase</code>), so any
+<p>Readers open every fullmap file READ-ONLY with a SHARED file lock (redb 4 <code>ReadOnlyDatabase</code>), so any
 number of processes can run lookups against the same fullmap concurrently; only a <code>build-fullmap</code> rebuild
 (an exclusive-lock writer) briefly blocks readers. Each lookup pins one primary-plus-shards file
 generation, cached handles are validated against the file's <code>(dev, ino)</code> on every use, so a reader
@@ -1518,7 +1523,7 @@ directory. Tablassert resolves it via <code>fullmap_db_path()</code>:</p>
 <a href="../api/fullmap/">Entity Resolution</a> for the lower-level <code>resolve()</code> API.</p>
 <h2 id="inspecting-a-fullmap">Inspecting a Fullmap<a class="headerlink" href="#inspecting-a-fullmap" title="Permanent link">&para;</a></h2>
 <p><code>tablassert quick-map TERMS... -f &lt;fullmap&gt;</code> resolves one or more terms against a built database
-through the exact op chain a build runs per node column, printing one <code>rich</code> table per term with
+through the exact op chain a build runs per node column, printing one <code>rich</code> table per matched term with
 its ranked matches (<code>CURIE</code>, <code>PREFERRED_NAME</code>, <code>CATEGORY_NAME</code>, <code>TAXON_ID</code>, <code>SOURCE_NAME</code>,
 <code>NLP_LEVEL</code>, <code>PR</code>) and the normalized probe keys the term became. Its flags mirror the
 <code>NodeEncoding</code> config fields (<code>--taxon</code>, <code>--prioritize</code>, <code>--avoid</code>, <code>--exclude-prefixes</code>,

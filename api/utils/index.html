@@ -1491,7 +1491,7 @@
 <p>The single parent working directory. All runtime artifacts live beneath it.</p>
 <p><strong><code>STORE: Path</code></strong>: <code>BASE / "store"</code></p>
 <p>Intermediate parquet storage for compiled subgraphs (<code>.tablassert/store/</code>). Created on import.</p>
-<p>The log directory (<code>log.LOGASSERT</code>, <code>.tablassert/log/</code>) holding the loguru sink file <code>.tablassert/log/tablassert.log</code> when the <code>log</code> extra is installed, and the cached SapBERT model (<code>.tablassert/sapbert/</code>, <code>qc.MODEL</code>) are likewise derived from <code>BASE</code>.</p>
+<p>The log directory (<code>log.LOGASSERT</code>, <code>.tablassert/log/</code>) holding the loguru sink file <code>.tablassert/log/tablassert.log</code> when the <code>log</code> extra is installed, and the cached SapBERT model (<code>qc.MODEL</code>, <code>.tablassert/sapbert-babel/</code>) are likewise derived from <code>BASE</code>.</p>
 <h2 id="mkhash">mkhash()<a class="headerlink" href="#mkhash" title="Permanent link">&para;</a></h2>
 <p>Generates an <strong>xxh64</strong> digest (hex string, 16 characters) for arbitrary input, computed by the Rust extension (<code>tablassert.rs.xxh64</code>).</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">mkhash</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
@@ -1523,9 +1523,9 @@
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span>
 </code></pre></div>
 <p>For a section with a local source, the key combines the section configuration digest with the source content digest and hashes the result into one 16-character xxh64 value. Callers may provide a precomputed <code>content_digest</code> to avoid rereading the file; otherwise <code>local</code> is passed to <code>file_content_hash</code>. If neither is provided, the function returns the section's plain <code>mkhash</code> value. The build pipeline uses the content-aware form for local sources, so changing one source invalidates the cached parquet for each section that reads it without invalidating sections backed by unchanged sources.</p>
-<p>The key formula is <code>mkhash(f"{mkhash(section)}:{content_digest}")</code>. Build-mode flags add their own filename suffixes (<code>.head</code>, <code>.release</code>, or <code>.qc</code>) after the key; they do not change the digest formula.</p>
+<p>The key formula is <code>mkhash(f"{mkhash(section)}:{content_digest}")</code>. Build-mode flags add their own filename suffixes (<code>.head</code>, <code>.release</code>, <code>.qc</code>, or <code>.linkouts</code>, concatenated when several are active) before the <code>.parquet</code> extension; they do not change the digest formula.</p>
 <hr />
-<h2 id="namespace_uuid-rust-extension-tablassertrs">namespace_uuid()  <em>(Rust extension: <code>tablassert.rs</code>)</em><a class="headerlink" href="#namespace_uuid-rust-extension-tablassertrs" title="Permanent link">&para;</a></h2>
+<h2 id="namespace_uuid-rust-extension-tablassertrs">namespace_uuid() <em>(Rust extension: <code>tablassert.rs</code>)</em><a class="headerlink" href="#namespace_uuid-rust-extension-tablassertrs" title="Permanent link">&para;</a></h2>
 <p>Generates deterministic UUIDs for KGX edge identifiers using UUID v3 (MD5-based namespacing). Provided by the Rust extension, not <code>tablassert.utils</code>.</p>
 <h3 id="function-signature">Function Signature<a class="headerlink" href="#function-signature" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">namespace_uuid</span><span class="p">(</span><span class="n">domain</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span>
@@ -1534,7 +1534,10 @@
 <p><strong><code>domain: str</code></strong></p>
 <p>Domain string used to create the namespace UUID. The default domain used internally for KGX edge IDs is <code>"TABLASSERT"</code>.</p>
 <p><strong><code>values: list[str]</code></strong></p>
-<p>The values to incorporate into the UUID. Empty entries are dropped; each surviving value is length-prefixed as <code>&lt;byte-length&gt;:&lt;value&gt;</code> and concatenated, then hashed within the domain namespace.</p>
+<p>The values to incorporate into the UUID. Every entry is used, empty strings included, and order is
+significant: each value is length-prefixed as <code>&lt;byte-length&gt;:&lt;value&gt;</code> and the parts are concatenated in
+the order given, then hashed within the domain namespace. Two different value lists therefore almost
+never derive the same id, and dropping an empty entry changes the result.</p>
 <h3 id="return-value">Return Value<a class="headerlink" href="#return-value" title="Permanent link">&para;</a></h3>
 <p>Returns a string representation of a UUID v3: <code>"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"</code>.</p>
 <h3 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
@@ -1586,7 +1589,8 @@ exact repeat collapses; two genuinely different edges deriving one id abort the 
 so two rows with different raw mention spellings resolve to the same CURIE) can instead set
 <code>uuid_on_collision: merge</code> (requires <code>uuid_fields</code>). Divergent same-id records are then folded
 into one edge: list fields are unioned, deduplicated by content, and sorted (so the merged edge is
-identical regardless of row order), conflicting scalars keep the first record's value, and a
+identical regardless of row order), conflicting scalars keep the lexicographically smallest canonical
+value, and a
 build-log summary reports how many records merged and how many scalar conflicts were arbitrated.
 Merge mode buffers one full record per unique id until end-of-stream (the memory cost the default
 streaming path avoids), which is why it is opt-in. See

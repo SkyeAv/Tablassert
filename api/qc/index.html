@@ -1487,7 +1487,7 @@
 <h1 id="quality-control-qc">Quality Control (qc)<a class="headerlink" href="#quality-control-qc" title="Permanent link">&para;</a></h1>
 <p>The <code>qc</code> module validates entity-resolution mappings through a four-stage pipeline (exact, fuzzy, abbreviation expansion, SapBERT semantic similarity); it runs behind <code>build-kg --qc</code> and <code>resolve_many(qc=True)</code> to keep only high-confidence assertions.</p>
 <p>QC runtime support is optional. Install <code>tablassert[qc]</code> to enable it: the extra pulls <code>scikit-learn</code> and <code>sentence-transformers</code> (<code>torch</code> and <code>numpy</code> arrive transitively); <code>rapidfuzz</code> is a core dependency and is always available.</p>
-<p><code>fullmap_audit()</code> checks the whole extra before it does any work and raises <code>QcRuntimeMissingError</code> naming every absent package and the install command. Checking up front matters because the two packages are needed at different stages (<code>scikit-learn</code> from the start, <code>sentence-transformers</code> only if Stage 4 is reached), so a half-installed extra would otherwise fail after the audit had already run. <code>build-kg --qc</code> performs the same check before the build begins, since the audit does not run until the very end of the build.</p>
+<p><code>fullmap_audit()</code> checks the whole extra before it does any work and raises <code>QcRuntimeMissingError</code> naming every absent package and the install command. Checking up front matters because the two packages are needed at different stages (<code>scikit-learn</code> from the start, <code>sentence-transformers</code> only if Stage 4 is reached), so a half-installed extra would otherwise fail after the audit had already run. <code>build-kg --qc</code> performs the same check before the build begins, so a missing extra fails immediately instead of after resolution has already cost time.</p>
 <h2 id="fullmap_audit">fullmap_audit()<a class="headerlink" href="#fullmap_audit" title="Permanent link">&para;</a></h2>
 <p>Primary quality control function that filters entity mappings based on confidence criteria.</p>
 <h3 id="function-signature">Function Signature<a class="headerlink" href="#function-signature" title="Permanent link">&para;</a></h3>
@@ -1534,31 +1534,34 @@
 <p>The function applies four validation stages in sequence. Each stage progressively filters out correct resolutions and leaves suspected errors for the next stage.</p>
 <h4 id="stage-1-exact-match-rule-based-pass-through">Stage 1: Exact Match &amp; Rule-Based Pass-Through<a class="headerlink" href="#stage-1-exact-match-rule-based-pass-through" title="Permanent link">&para;</a></h4>
 <p><strong>Fast path for high-confidence mappings.</strong> A row passes if any of these hold:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">original</span> <span class="o">==</span> <span class="n">preferred_name</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">_qc_alias</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">aliases</span><span class="p">)</span> <span class="o">==</span> <span class="n">preferred_name</span>
 </code></pre></div>
 <ul>
-<li>The pre-resolution text exactly equals the resolved preferred name.</li>
+<li>The alias-resolved pre-resolution text equals the resolved preferred name. <code>aliases</code> maps a casefolded
+  source text to its preferred spelling, so a configured alias can pass on exact match.</li>
 <li>The resolved CURIE matches an exempt prefix (<code>CHEBI</code>, <code>PR</code>, <code>UniProtKB</code>, <code>NCBIGene</code>, <code>UMLS</code>, <code>UNII</code>, <code>PUBCHEM</code>, <code>MONDO</code>).</li>
 <li>The original text contains <code>:</code> (already looks like a CURIE).</li>
 <li>The preferred name matches an exception prefix (<code>^LOC</code> or <code>^si:</code>).</li>
 </ul>
-<p><strong>Performance:</strong> O(1) string comparison per row.</p>
 <h4 id="stage-2-fuzzy-matching">Stage 2: Fuzzy Matching<a class="headerlink" href="#stage-2-fuzzy-matching" title="Permanent link">&para;</a></h4>
 <p><strong>Medium confidence using RapidFuzz (batched via <code>rapidfuzz.process.cpdist</code>).</strong></p>
-<p>Two fuzzy matching algorithms:
-1. <strong>Ratio:</strong> Overall string similarity
-2. <strong>Partial token sort ratio:</strong> Combined token/subsequence matching</p>
-<p><strong>Thresholds:</strong> <code>fuzz.ratio</code> &gt;= 70 OR <code>fuzz.partial_token_sort_ratio</code> &gt;= 80</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">fuzz</span><span class="o">.</span><span class="n">ratio</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">70</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="ow">or</span> <span class="n">fuzz</span><span class="o">.</span><span class="n">partial_token_sort_ratio</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">80</span>
+<p>Three scorers run over each unique pending pair, batched through <code>rapidfuzz.process.cpdist</code>:
+1. <strong>Ratio:</strong> <code>fuzz.ratio</code>, overall string similarity
+2. <strong>Partial token sort ratio:</strong> <code>fuzz.partial_token_sort_ratio</code>, subsequence matching
+3. <strong>Token set ratio:</strong> <code>fuzz.token_set_ratio</code>, duplicate-tolerant token overlap</p>
+<p>A pair passes if any scorer clears its threshold. <code>fuzz.ratio</code> is compared against
+<code>fuzzy_ratio_threshold</code> (default 70.0); the two token scorers share <code>fuzzy_partial_threshold</code>
+(default 80.0). Both thresholds are graph-configurable through <code>qc_fuzzy_ratio_threshold</code> and
+<code>qc_fuzzy_partial_threshold</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">fuzz</span><span class="o">.</span><span class="n">ratio</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">fuzzy_ratio_threshold</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="ow">or</span> <span class="n">fuzz</span><span class="o">.</span><span class="n">partial_token_sort_ratio</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">fuzzy_partial_threshold</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="ow">or</span> <span class="n">fuzz</span><span class="o">.</span><span class="n">token_set_ratio</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">fuzzy_partial_threshold</span>
 </code></pre></div>
-<p><strong>Performance:</strong> O(n) string operations, batched.</p>
 <h4 id="stage-3-abbreviation-expansion">Stage 3: Abbreviation Expansion<a class="headerlink" href="#stage-3-abbreviation-expansion" title="Permanent link">&para;</a></h4>
 <p><strong>Deterministic pass for abbreviation/expansion pairs (Schwartz-Hearst).</strong> A row passes when the pre-resolution text abbreviates the preferred name, or vice versa:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">_is_abbrev</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">preferred_name</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_is_abbrev</span><span class="p">(</span><span class="n">preferred_name</span><span class="p">,</span> <span class="n">original</span><span class="p">)</span>
 </code></pre></div>
 <p>The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss, the <code>AML</code> / <code>acute myeloid leukemia</code> pair.</p>
-<p><strong>Performance:</strong> O(n) character scans per row, no model inference.</p>
 <h4 id="stage-4-sapbert-semantic-similarity">Stage 4: SapBERT Semantic Similarity<a class="headerlink" href="#stage-4-sapbert-semantic-similarity" title="Permanent link">&para;</a></h4>
 <p><strong>High confidence using SapBERT embeddings.</strong></p>
 <ol>
@@ -1570,7 +1573,8 @@
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">similarity</span> <span class="o">=</span> <span class="n">cosine_similarity</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[:</span><span class="n">n</span><span class="p">],</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">n</span><span class="p">:])</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">return</span> <span class="n">similarity</span> <span class="o">&gt;=</span> <span class="n">qc</span><span class="o">.</span><span class="n">SIMILARITY_THRESHOLD</span>  <span class="c1"># 0.5</span>
 </code></pre></div>
-<p><strong>Performance:</strong> Expensive (transformer inference); the model is loaded once and cached.</p>
+<p>The model is loaded once and cached for the lifetime of the process, so transformer inference is the
+costly stage of the cascade.</p>
 <h3 id="sapbert-model">SapBERT Model<a class="headerlink" href="#sapbert-model" title="Permanent link">&para;</a></h3>
 <p><strong>Model:</strong> <code>RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23</code></p>
 <p><strong>Backend:</strong> <a href="https://www.sbert.net/">sentence-transformers</a> (PyTorch). Embeddings are compared with scikit-learn's <code>cosine_similarity</code>. SapBERT's self-alignment pretraining pulls synonym pairs together in embedding space; this checkpoint is RENCI's fine-tune of <code>cambridgeltl/SapBERT-from-PubMedBERT-fulltext</code> on synonym pairs sampled from NCATS Translator Babel identifier cliques, so its training signal matches this stage's task, deciding whether two names denote the same entity. The 0.5 threshold was carried over from the earlier BioBERT gate and has not been re-tuned for SapBERT's score distribution.</p>
@@ -1602,14 +1606,16 @@
 <a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="c1"># Rows with low-confidence mappings removed</span>
 </code></pre></div>
 <h3 id="pipeline-flow">Pipeline Flow<a class="headerlink" href="#pipeline-flow" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Input: 1000 rows with entity mappings
+<p>The cascade runs on unique <code>(original, preferred)</code> pairs, deduplicated before scoring, so the counts
+below are pairs rather than source rows. Illustrative counts:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Input:  1000 unique pairs with entity mappings
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Stage 1 (Exact): 700 pass, 300 pending
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Stage 2 (Fuzzy): 250 pass, 50 pending
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Stage 3 (Abbreviation): 10 pass, 40 pending
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>Stage 4 (SapBERT): 30 pass, 10 rejected
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>Output: 990 rows (700 + 250 + 10 + 30)
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>Output: 990 pairs pass (700 + 250 + 10 + 30)
 </code></pre></div>
 <h3 id="confidence-levels">Confidence Levels<a class="headerlink" href="#confidence-levels" title="Permanent link">&para;</a></h3>
 <table>

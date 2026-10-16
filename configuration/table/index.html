@@ -1896,13 +1896,13 @@
 </tr>
 <tr>
 <td><code>row_slice</code></td>
-<td>List[PositiveInt|"auto"]</td>
+<td>List[NonNegativeInt|"auto"]</td>
 <td>No</td>
-<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a positive integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
+<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a non-negative integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
 </tr>
 <tr>
 <td><code>rows</code></td>
-<td>List[PositiveInt]</td>
+<td>List[NonNegativeInt]</td>
 <td>No</td>
 <td>Zero-based row indices to keep after any <code>row_slice</code> crop. Mutually exclusive with <code>row_slice</code>.</td>
 </tr>
@@ -1963,13 +1963,13 @@
 </tr>
 <tr>
 <td><code>row_slice</code></td>
-<td>List[PositiveInt|"auto"]</td>
+<td>List[NonNegativeInt|"auto"]</td>
 <td>No</td>
-<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a positive integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
+<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a non-negative integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
 </tr>
 <tr>
 <td><code>rows</code></td>
-<td>List[PositiveInt]</td>
+<td>List[NonNegativeInt]</td>
 <td>No</td>
 <td>Zero-based row indices to keep after any <code>row_slice</code> crop. Mutually exclusive with <code>row_slice</code>.</td>
 </tr>
@@ -2028,13 +2028,13 @@ as-is.</p>
 </tr>
 <tr>
 <td><code>row_slice</code></td>
-<td>List[PositiveInt|"auto"]</td>
+<td>List[NonNegativeInt|"auto"]</td>
 <td>No</td>
-<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a positive integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
+<td>Two-value zero-based crop bounds: <code>[start, stop]</code>. Each value may be a non-negative integer or <code>"auto"</code>. Mutually exclusive with <code>rows</code>.</td>
 </tr>
 <tr>
 <td><code>rows</code></td>
-<td>List[PositiveInt]</td>
+<td>List[NonNegativeInt]</td>
 <td>No</td>
 <td>Zero-based row indices to keep after any <code>row_slice</code> crop. Mutually exclusive with <code>row_slice</code>.</td>
 </tr>
@@ -2130,7 +2130,7 @@ as-is.</p>
 <td><code>category_override</code></td>
 <td>Map[Categories, EdgeCategories]</td>
 <td>No</td>
-<td>Pin the association class per resolved object category (bare names, no <code>biolink:</code> prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose <code>predicate</code> slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. <code>Disease</code> and <code>PhenotypicFeature</code> both derive to <code>ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation</code>, but only <code>EntityToDiseaseAssociation</code> / <code>EntityToPhenotypicFeatureAssociation</code> declare slots like <code>regulatory_approvals</code> and <code>number_of_cases</code>. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: <code>population_context_qualifier</code> and <code>temporal_context_qualifier</code> on both classes, plus <code>sex_qualifier</code> on the disease side. Deliberately ungranted: <code>species_context_qualifier</code> (disabled -- never emittable) plus <code>temporal_interval_qualifier</code> and <code>severity_qualifier</code> (unsatisfiable -- attached to no class, so a grant could never validate).</td>
+<td>Pin the association class per resolved object category (bare names, no <code>biolink:</code> prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose <code>predicate</code> slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. <code>Disease</code> and <code>PhenotypicFeature</code> both derive to <code>ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation</code>, but only <code>EntityToDiseaseAssociation</code> / <code>EntityToPhenotypicFeatureAssociation</code> declare slots like <code>regulatory_approvals</code> and <code>number_of_cases</code>. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: <code>temporal_context_qualifier</code> on both classes, plus <code>sex_qualifier</code> on the disease side (<code>population_context_qualifier</code> needed a grant only until biolink-model 4.4.6 declared it natively on both pinned classes). Deliberately ungranted: <code>species_context_qualifier</code> (disabled, never emittable) plus <code>temporal_interval_qualifier</code> and <code>severity_qualifier</code> (unsatisfiable: attached to no class, so a grant could never validate).</td>
 </tr>
 </tbody>
 </table>
@@ -2188,7 +2188,7 @@ as-is.</p>
 <td><code>taxon</code></td>
 <td>PositiveInt</td>
 <td>No</td>
-<td>NCBI Taxon ID for filtering (e.g., <code>9606</code> for human)</td>
+<td>NCBI Taxon ID for filtering (e.g., <code>9606</code> for human); defaults to <code>9606</code> (Homo sapiens), set null to disable</td>
 </tr>
 <tr>
 <td><code>prioritize</code></td>
@@ -2694,7 +2694,7 @@ them (the null value is stripped from the edge):</p>
 <li><strong>Ordering is stable.</strong> Folded entries are sorted alphabetically by column name.</li>
 </ul>
 <p>This means nothing in your source data is silently dropped: context that doesn't map to a structured Biolink slot travels along inside <code>supporting_text</code> instead.</p>
-<p>In addition to user-declared annotations, every edge automatically carries <code>extracted_from_row_number</code>, a 1-based index into the original source table (matching Excel-style row numbering). It is not declared as an annotation. Tablassert emits it internally so each edge always carries its source-row provenance, and the inlined supporting study consumes it: the <code>StudyResult</code> that anchors the study's row is identified by the scoped CURIE <code>row:&lt;N&gt;</code>. The row and sheet columns are never folded into <code>supporting_text</code>.</p>
+<p>In addition to user-declared annotations, Tablassert tracks each edge's source row internally as <code>extracted_from_row_number</code>, a 1-based index into the original source table (matching Excel-style row numbering). It is never emitted as an edge field: the inlined supporting study consumes it to anchor each <code>StudyResult</code> by the scoped CURIE <code>row:&lt;N&gt;</code>, and the column is then dropped, along with <code>sheet_name</code>, rather than folded into <code>supporting_text</code>.</p>
 <p>The supporting study's identity is disjoint by construction: <code>Study.id</code> is the section's publication CURIE (<code>PMID:123</code>, <code>PMCID:PMC11708054</code>); <code>Study.name</code> is a human label naming the originating table config file and the section's 1-based position within it (e.g. <code>KANG12.yaml SECTION 2</code>). It is never a composition of the two. A section declaring <strong>no <code>publications</code></strong> falls back to the config stem (the YAML filename without its extension) as the id, and the struct is then emitted <strong>only when it carries something to preserve</strong>, such as study metadata, routed unsatisfiable values, or class-pruned values. Biolink defines <code>has supporting studies</code> as "studies that produced information used as evidence", so a contentless unpublished section emits no <code>has_supporting_studies</code> at all; a section with a real publication always keeps the wrapper:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="nt">&quot;has_supporting_studies&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span><span class="nt">&quot;PMCID:PMC11708054&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>

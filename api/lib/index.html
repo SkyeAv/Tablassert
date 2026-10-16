@@ -1423,7 +1423,9 @@
 <p>Filesystem path to the fullmap redb file, or a base directory containing it (resolved via <code>fullmap_db_path()</code>; see <a href="../../fullmap/">Fullmap</a>).</p>
 <p><strong><code>taxon: Optional[str]</code> (default: <code>None</code>)</strong></p>
 <p>Optional NCBI Taxon ID for filtering results to a specific organism.</p>
-<p>Example: <code>"9606"</code> restricts <strong>gene</strong> matches to human-specific entries; non-gene categories (e.g., diseases, chemicals) are returned regardless of taxon. When <code>None</code>, no taxon filtering is applied and matches from all organisms are returned.</p>
+<p>Example: <code>"9606"</code> keeps matches recorded to human and matches carrying no taxon (<code>TAXON_ID</code> 0), which is
+why disease and chemical rows usually survive it, and drops matches recorded to any other taxon. When
+<code>None</code>, no taxon filtering is applied and matches from all organisms are returned.</p>
 <p><strong><code>prioritize: Optional[list[Categories]]</code> (default: <code>None</code>)</strong></p>
 <p>Optional list of Biolink categories to prefer when multiple matches exist for the same input term. Categories listed here receive higher ranking scores during resolution.</p>
 <p>Example: <code>[Categories.GENE, Categories.PROTEIN]</code> prefers gene and protein mappings over other categories like diseases or chemicals.</p>
@@ -1431,7 +1433,7 @@
 <p>Optional list of Biolink categories to exclude from results entirely. Any match belonging to an avoided category is filtered out before ranking.</p>
 <p>Example: <code>[Categories.GENE]</code> prevents gene mappings from appearing in the output, even if they would otherwise be the best match.</p>
 <p><strong><code>column_context: bool</code> (default: <code>True</code>)</strong></p>
-<p>Controls category-frequency tie-breaking when multiple matches exist for a term. When <code>True</code>, the deduplication stage adds a category-frequency score (computed in Polars after the SQL query) and prefers the category that appears most frequently across all matched terms in the batch. When <code>False</code>, frequency-based tie-breaking is disabled.</p>
+<p>Controls category-frequency tie-breaking when multiple matches exist for a term. When <code>True</code>, the deduplication stage adds a <code>FREQUENCY</code> column scoring how often each category appears across all matched terms in the batch, computed in Polars over the fetched rows, and prefers the most frequent category. When <code>False</code>, frequency-based tie-breaking is disabled and the column is absent.</p>
 <p>This is useful when resolving a column of related entities (e.g., all genes): the shared context helps disambiguate terms that map to multiple categories.</p>
 <p><strong><code>qc: bool</code> (default: <code>False</code>)</strong></p>
 <p>When <code>True</code>, runs the QC audit stage after entity resolution. The QC pipeline validates mappings through a four-stage audit: exact match, fuzzy matching via rapidfuzz, abbreviation expansion (Schwartz-Hearst), and SapBERT sentence embeddings with cosine similarity. Mappings that fail all four stages are dropped from the returned list (in addition to the unresolved-entity filtering performed by <code>resolve()</code>). Requires the QC runtime to be installed (<code>tablassert[qc]</code>); see <a href="../qc/">Quality Control</a> for the stage thresholds and backend.</p>
@@ -1594,7 +1596,7 @@
 <ul>
 <li>If the <code>fullmap</code> path does not resolve to a valid redb file, or the file's schema tag doesn't match the expected version, the Rust extension raises a <code>RuntimeError</code>.</li>
 <li>If <code>entities</code> is empty, the function returns <code>[]</code>.</li>
-<li>Unresolved entities are silently filtered from the output (logged at INFO level by default via <code>resolve()</code>).</li>
+<li>Unresolved entities are filtered from the output and reported through <code>resolve()</code> logging.</li>
 </ul>
 <h2 id="integration">Integration<a class="headerlink" href="#integration" title="Permanent link">&para;</a></h2>
 <p><code>resolve_many()</code> is a self-contained entry point. It does not require any prior setup beyond having a fullmap database available. For full pipeline builds, use the CLI (<code>tablassert build-kg</code>) which orchestrates resolution through the <code>Tcode</code> class.</p>

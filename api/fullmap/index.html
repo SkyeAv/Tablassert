@@ -1513,8 +1513,10 @@
 <p><strong><code>db: Path</code></strong></p>
 <p>Path to the fullmap redb file (already resolved; see <code>fullmap_db_path()</code> and <a href="../../fullmap/">Fullmap</a>).</p>
 <p><strong><code>taxon: Optional[str]</code></strong></p>
-<p>Optional NCBI Taxon ID for filtering results.</p>
-<p>Example: <code>"9606"</code> filters to human-specific entities.</p>
+<p>Optional NCBI Taxon ID for filtering results. The constraint applies to matches that carry taxon
+metadata; matches with <code>TAXON_ID</code> 0 (no taxon recorded) are always retained.</p>
+<p>Example: <code>"9606"</code> keeps human entries and entries with no taxon recorded, and drops entries recorded to
+another taxon.</p>
 <p><strong><code>prioritize: Optional[list[Categories]]</code></strong></p>
 <p>Optional list of Biolink categories to prefer when multiple matches exist.</p>
 <p>Example: <code>[Categories.GENE, Categories.PROTEIN]</code> prefers gene/protein mappings.</p>
@@ -1629,25 +1631,30 @@ dropped as well.</p>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># LazyFrame with data to resolve</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">pl</span><span class="o">.</span><span class="n">scan_parquet</span><span class="p">(</span><span class="s2">&quot;data.parquet&quot;</span><span class="p">)</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1"># Resolve gene symbols to CURIEs</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">result</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>  <span class="n">lf</span><span class="o">=</span><span class="n">lf</span><span class="p">,</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>  <span class="n">col</span><span class="o">=</span><span class="s2">&quot;gene_symbol&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>  <span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>  <span class="n">taxon</span><span class="o">=</span><span class="s2">&quot;9606&quot;</span><span class="p">,</span>  <span class="c1"># Human only</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>  <span class="n">prioritize</span><span class="o">=</span><span class="p">[</span><span class="n">Categories</span><span class="o">.</span><span class="n">GENE</span><span class="p">],</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>  <span class="n">avoid</span><span class="o">=</span><span class="p">[</span><span class="n">Categories</span><span class="o">.</span><span class="n">PROTEIN</span><span class="p">],</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>  <span class="n">log</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>  <span class="n">section_hash</span><span class="o">=</span><span class="s2">&quot;tutorial-section&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>  <span class="n">config_file</span><span class="o">=</span><span class="s2">&quot;tutorial-table.yaml&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>  <span class="n">column_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="p">)</span>
-<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>
-<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="c1"># Result LazyFrame includes:</span>
-<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="c1"># - gene_symbol: &quot;HGNC:11998&quot;</span>
-<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="c1"># - gene_symbol_name: &quot;TP53&quot;</span>
-<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="c1"># - gene_symbol_category: &quot;biolink:Gene&quot;</span>
-<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a><span class="c1"># - etc.</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1"># Resolve gene symbols to CURIEs. level_one and level_two must already have been</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># applied, so the frame carries both &quot;gene_symbol&quot; and &quot;gene_symbol_two&quot;.</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tablassert.nlp</span><span class="w"> </span><span class="kn">import</span> <span class="n">level_one</span><span class="p">,</span> <span class="n">level_two</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_one</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene_symbol&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="n">lf</span> <span class="o">=</span> <span class="n">level_two</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="s2">&quot;gene_symbol&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">result</span> <span class="o">=</span> <span class="n">resolve</span><span class="p">(</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>  <span class="n">lf</span><span class="o">=</span><span class="n">lf</span><span class="p">,</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>  <span class="n">col</span><span class="o">=</span><span class="s2">&quot;gene_symbol&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>  <span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>  <span class="n">taxon</span><span class="o">=</span><span class="s2">&quot;9606&quot;</span><span class="p">,</span>  <span class="c1"># Human only</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>  <span class="n">prioritize</span><span class="o">=</span><span class="p">[</span><span class="n">Categories</span><span class="o">.</span><span class="n">GENE</span><span class="p">],</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>  <span class="n">avoid</span><span class="o">=</span><span class="p">[</span><span class="n">Categories</span><span class="o">.</span><span class="n">PROTEIN</span><span class="p">],</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>  <span class="n">log</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>  <span class="n">section_hash</span><span class="o">=</span><span class="s2">&quot;tutorial-section&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>  <span class="n">config_file</span><span class="o">=</span><span class="s2">&quot;tutorial-table.yaml&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>  <span class="n">column_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="p">)</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="c1"># Result LazyFrame includes:</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="c1"># - gene_symbol: &quot;HGNC:11998&quot;</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="c1"># - gene_symbol_name: &quot;TP53&quot;</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="c1"># - gene_symbol_category: &quot;biolink:Gene&quot;</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="c1"># - etc.</span>
 </code></pre></div>
 <h3 id="mapping-a-python-list">Mapping a Python List<a class="headerlink" href="#mapping-a-python-list" title="Permanent link">&para;</a></h3>
 <p>Resolve a plain Python list by building a LazyFrame and applying the NLP levels before <code>resolve()</code>:</p>
@@ -1681,7 +1688,10 @@ dropped as well.</p>
 - Preferred for disease names and free text</p>
 <p>Rows without a valid CURIE are filtered from the returned frame.</p>
 <h3 id="provenance-tracking">Provenance Tracking<a class="headerlink" href="#provenance-tracking" title="Permanent link">&para;</a></h3>
-<p>Every resolved entity carries its source database, source version (snapshot date), and the matched synonym that triggered the match, enabling auditing and quality control. Case is handled by the NLP levels above: <code>level_one</code> matches any case variant, <code>level_two</code> further strips punctuation for hyphenated or slash-delimited names.</p>
+<p>Every resolved entity carries its source database (<code>SOURCE_NAME</code>), source version (<code>SOURCE_VERSION</code>, the
+snapshot date), and the normalized term that produced the match, enabling auditing and quality control.
+Case is handled by the NLP levels above: <code>level_one</code> matches any case variant, <code>level_two</code> further
+strips punctuation for hyphenated or slash-delimited names.</p>
 <h2 id="integration-with-qc">Integration with QC<a class="headerlink" href="#integration-with-qc" title="Permanent link">&para;</a></h2>
 <p>Entity resolution output is validated by <code>fullmap_audit()</code> from the <code>qc</code> module before being included in the knowledge graph.</p>
 <p>See <a href="../qc/">Quality Control</a> for details.</p>
@@ -1743,8 +1753,9 @@ collapse to one entry.</p>
 <ul>
 <li><code>column_context</code> is fixed <code>False</code>: the frequency tiebreaker counts category occurrences within
   one resolved column of a real table, and a handful of probe terms is not that population.</li>
-<li>A term whose keys were all dropped by the junk-term filter (purely numeric or sentinel values)
-  resolves to the empty frame, because a build would never probe it either.</li>
+<li>A term whose keys were all dropped by the junk-term filter (an empty string, an all-digit string, or
+  one of the generic labels such as <code>none</code>, <code>nan</code>, <code>na</code>, <code>null</code>, <code>unknown</code>, <code>p_value</code>, <code>symbol</code>) resolves
+  to the empty frame, because a build would never probe it either.</li>
 </ul>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>

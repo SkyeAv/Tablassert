@@ -1432,7 +1432,7 @@
 </code></pre></div>
 <h2 id="installation-methods">Installation Methods<a class="headerlink" href="#installation-methods" title="Permanent link">&para;</a></h2>
 <h3 id="method-1-install-from-pypi">Method 1: Install from PyPI<a class="headerlink" href="#method-1-install-from-pypi" title="Permanent link">&para;</a></h3>
-<p>Recommended for most users. The base install exposes Tablassert's Python API; add <code>[cli]</code> to install the <code>tablassert</code> command. QC and other extras are opt-in.</p>
+<p>Recommended for most users. Install into your project's environment to use the Python API (<code>pip install "tablassert"</code> or <code>uv add tablassert</code>), or install the standalone command-line tool with <code>uv tool install "tablassert[cli]"</code>. QC and other extras are opt-in.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;tablassert[cli]&quot;</span><span class="w">   </span><span class="c1"># or: pip install &quot;tablassert[cli]&quot;</span>
 </code></pre></div>
 <h4 id="optional-extras">Optional Extras<a class="headerlink" href="#optional-extras" title="Permanent link">&para;</a></h4>
@@ -1477,18 +1477,18 @@
 Linux and macOS; elsewhere pip builds from the sdist, which needs a Rust toolchain.</p>
 <div class="admonition note">
 <p class="admonition-title"><code>[aria2]</code> platform and license notes</p>
-<p>The <code>[aria2]</code> extra depends on the PyPI <code>aria2</code> package, which imports as <code>aria2c</code> and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, so a normal macOS install resolves to Tablassert's Python downloader.</p>
+<p>The <code>[aria2]</code> extra depends on the PyPI <code>aria2</code> package, which imports as <code>aria2c</code> and bundles a static aria2c binary. Its wheels are available for Linux and Windows only; the extra ships no macOS wheels, and the sdist's build hook fails on macOS, so do not install <code>[aria2]</code> there: <code>build-fullmap</code> falls back to Tablassert's Python downloader.</p>
 <p>The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.</p>
 </div>
 <p>Excel (<code>.xlsx</code>) input is read through Polars' <code>calamine</code> engine, which ships with the base install
-(<code>fastexcel</code>). A handful of workbooks calamine rejects are readable by the pure-Python fallback
-engine: <code>pip install openpyxl</code>.</p>
+(<code>fastexcel</code>). Workbooks that calamine cannot parse are rejected with its error; there is no fallback
+engine.</p>
 <h4 id="when-an-extra-is-missing">When an extra is missing<a class="headerlink" href="#when-an-extra-is-missing" title="Permanent link">&para;</a></h4>
 <p>Reaching a feature whose extra was never installed is a normal, recoverable mistake, so Tablassert
-never lets it surface as a bare <code>ModuleNotFoundError</code>. Every one of these paths reports the absent
-distribution <strong>and</strong> the command that fixes it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Missing optional dependencies &#39;scikit-learn&#39;, &#39;sentence-transformers&#39;, required by the QC audit.
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Install the [qc] extra: pip install &quot;tablassert[qc]&quot; (uv: uv tool install &quot;tablassert[qc]&quot;)
+never lets it surface as a bare <code>ModuleNotFoundError</code>. Every one of these paths names the absent
+distribution <strong>and</strong> the command that fixes it, in this shape (the first sentence lists the missing
+distributions; the second is the install command):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Install the [qc] extra: pip install &quot;tablassert[qc]&quot; (uv: uv tool install &quot;tablassert[qc]&quot;)
 </code></pre></div>
 <p>Where the gap is knowable up front, it is reported up front rather than mid-run (one row below is the
 exception: <code>build-fullmap</code>'s <code>[aria2]</code> check is a downloader probe that picks a downloader and never
