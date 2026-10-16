@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.0.0 - 2026-10-16
+
+### Breaking Changes
+- **The `no_map` node mode is removed, so statement subjects and objects always resolve.** The 21.0.0 opt-out let a subject or object skip fullmap entity resolution and emit its own CURIE verbatim, but with no lookup there is no role to derive, so every verbatim node was pinned to `biolink:NamedThing` and each edge derived from it flattened to `biolink:Association`; the resolution path is restored to how it worked in 20.0.0 (`resolve_batch` handles every node), `lib.curie_audit` and the `verbatim` branch of `Tcode._node_ops` are deleted, the error codes `no-map-dead-config`, `no-map-bad-curie`, and `no-map-curie-violation` are dropped, and `Qualifier.resolved` is `vocabulary is None` again, so CURIE-ranged qualifiers always resolve while enum-ranged qualifiers still pass their vocabulary tokens through verbatim. Configs that still set the key fail validation: the `DEPRECATED_KEYS` before-hook names the removal and the migration, then `extra="forbid"` rejects the key at either value. ([#221](https://github.com/SkyeAv/Tablassert/pull/221))
+  **Migration:** remove `no_map` from the table config; tables whose cells already carry CURIEs need nothing else, because the fullmap indexes CURIEs and their equivalent identifiers as terms, so a CURIE cell resolves back to its own CURIE. Resolution rules still apply: `taxon`, `prioritize`/`avoid`, `exclude_prefixes`/`exclude_regex`, and a blank cell still drops the row.
+
+### Changed
+- **Documentation is aligned with the live sources, and a typography gate now blocks regressions.** The CLI, fullmap, API, and configuration pages are corrected against the Python/Rust sources, live CLI behavior, and pipeline-emitted output (QC thresholds and log path, the lexicographic-minimum merge and uuid-on-collision rules, the documented 9606 taxon default, and sample node/edge JSON regenerated from real pipeline output), the CHANGELOG's 317 non-ASCII characters are rewritten to plain ASCII, and the new `tests/test_docs_style.py` rejects non-ASCII outside an explicit allowlist, prose arrows, space-flanked `--` substitutes, and mid-prose double spaces across the root pages and `docs/**/*.md`. No source behavior changes. ([#222](https://github.com/SkyeAv/Tablassert/pull/222))
+
 ## 21.0.0 - 2026-10-15
 
 ### Breaking Changes
