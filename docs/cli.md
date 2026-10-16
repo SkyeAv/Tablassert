@@ -22,7 +22,7 @@ These are flags on the root `tablassert` command, **not** subcommands.
 
 | Flag | Description |
 | --- | --- |
-| `--version` | Print the installed package version as `tablassert <version>` (e.g. `tablassert 10.1.0`) and exit |
+| `--version` | Print the installed package version as `tablassert <version>` (e.g. `tablassert 21.0.0`) and exit |
 | `--help`, `-h` | Show help for the app or a subcommand |
 
 !!! warning "Two different versions"
@@ -57,7 +57,7 @@ tablassert build-fullmap [ARGS]
 tablassert build-fullmap --output /data/fullmap/fullmap.redb
 # Force a from-scratch rebuild from BABEL outputs (e.g. after a BABEL snapshot bump)
 tablassert build-fullmap --force --output /data/fullmap/fullmap.redb
-# Install the [aria2] extra and the bundled aria2c is used automatically for either download (the multi-GB prebuilt is the ideal aria2 use case)
+# With the [aria2] extra installed, the bundled aria2c is used automatically for either download
 pip install "tablassert[aria2]"
 tablassert build-fullmap --output /data/fullmap/fullmap.redb
 ```
@@ -68,8 +68,9 @@ Every one of those invocations produces a database filtered by the checked-in
 
 By default `build-fullmap` looks for a prebuilt `fullmap.tar.zst` at
 `https://stars.renci.org/var/babel_outputs/<babel-version>/fullmap/<tablassert-version>/` (the version
-directory is the **installed Tablassert package version**, never hardcoded), verifies it against the
-published `sha256sum.txt`, and extracts it beside `--output` in the Rust extension, streaming the
+directory is the **installed Tablassert package version**, never hardcoded). It verifies the archive
+against the published `sha256sum.txt` when that file is present and parseable, and otherwise warns and
+proceeds unverified, then extracts it beside `--output` in the Rust extension, streaming the
 archive through zstd decompression and untarring it with the GIL released (the decompressed tar never
 touches disk), then validating the extracted
 primary + shards against the force-build contract (exact `v6` schema, a recorded `build_id`, the exact
@@ -91,9 +92,10 @@ A database already present at `--output` is reused only when it carries that sam
 an unfiltered (or differently filtered) leftover from an older Tablassert is rebuilt, with a warning.
 Pass `--force` to rebuild unconditionally.
 
-A from-scratch build parallelizes automatically across all available CPU threads: on Linux the
-worker count is capped by available memory (~2 GB per thread, read from `/proc/meminfo`) to avoid
-OOMs. There is no flag to tune.
+A from-scratch build parallelizes automatically. On Linux the worker count is
+`min(available_CPUs, MemAvailable_GB / 2)`, read from `/proc/meminfo`, so each worker is budgeted 2 GB
+of addressable memory and a 16 GB machine caps at 8 workers; elsewhere it falls back to 90 percent of
+the CPU count. There is no flag to tune.
 
 See [Fullmap](fullmap.md) for the data pipeline, output schema, and graph-config usage.
 
@@ -101,13 +103,13 @@ See [Fullmap](fullmap.md) for the data pipeline, output schema, and graph-config
 
 ## quick-map
 
-Use this to see what fullmap entity resolution will do with one or more terms (the rows a
-`build-kg` run would emit for a cell holding that term under the filters shown. Each term runs
-through the exact build path (level-one/level-two normalization, probe-key extraction, one redb
-fetch, then filter, rank, and dedup), one `rich` table per term in input order, with the term's normalized
-probe keys in the title so a miss is diagnosable. The whole input is one batched redb round trip,
-never one per term. A term with no matches prints a `no matches` line and still exits 0: a miss is
-a finding, not a failure; only usage errors and an unreadable fullmap exit 2.
+Use this to see what fullmap entity resolution will do with one or more terms: the rows a `build-kg`
+run would emit for a cell holding that term under the filters shown. Each term runs through the exact
+build path (level-one/level-two normalization, probe-key extraction, one redb fetch, then filter, rank,
+and dedup). Matched terms print one `rich` table each, in input order, with the term's normalized probe
+keys in the title so a miss is diagnosable. The whole input is one batched redb round trip, never one
+per term. A term with no matches prints a `no matches` line and still exits 0. Only a bad flag or a
+missing fullmap exits 2; a fullmap that fails to open surfaces its own error.
 
 ```bash
 tablassert quick-map TERMS... --fullmap ./fullmap/data/fullmap.redb [OPTIONS]
@@ -167,17 +169,17 @@ The positional `GRAPH-CONFIGURATION-FILE` (also `--configuration-file`, `-f`) is
 | `--release`, `-r` | Flag | No | `False` | Emit a slim, significant-only graph (drops `not_significant` edges before resolution) |
 | `--qc`, `-q` | Flag | No | `False` | Audit resolved mappings (exact match, fuzzy match, abbreviation expansion, then SapBERT) so low-confidence edges are flagged; requires the `[qc]` extra, checked before the build starts. Also runs a final study stage that asserts over the emitted NDJSON: no duplicate node ids, every node has a non-empty `id` and `name`, every edge has a non-empty `subject`, `predicate`, and `object`, no undeclared or isolated nodes, no malformed lines, no null or empty values in any field (checked recursively), no stray whitespace (verbatim `original_*` fields excepted from the whitespace check, since they are faithful source copies), and, when any section declares a `category_override`, no edge demoted to bare `biolink:Association` (a row escaped its pin and shipped without the class-specific slots `prune_to_class` nulled into `has_supporting_studies`; the assertion is graph-wide, so one pinned section also gates edges from unpinned sections) and fails the build (non-zero exit) on any violation |
 | `--log`, `-l` | Flag | No | `False` | Enable verbose per-section logging; requires the `[log]` extra, and without it Tablassert produces no logs |
-| `--head`, `-hd` | Flag | No | `False` | Fast output-shape preview: <=5 random rows/section, cached to `.head.parquet`, never clobbers a full build |
-| `--linkouts`, `-lo` | Flag | No | `False` | Append the EdgeLinkouts per-edge record URL (`https://linkouts.skyelanegoetz.com/edges/{edge_id}`, resolved to the final edge id after dedup) to the graph infores entry (`rig.source_info.infores_id`) in every emitted edge's `sources` list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring `provenance.override` are untouched; cached to `.linkouts.parquet`, never clobbers a full build |
+| `--head`, `-hd` | Flag | No | `False` | Fast output-shape preview: <=5 random rows/section, cached under a `.head` store suffix, never clobbers a full build |
+| `--linkouts`, `-lo` | Flag | No | `False` | Append the EdgeLinkouts per-edge record URL (`https://linkouts.skyelanegoetz.com/edges/{edge_id}`, resolved to the final edge id after dedup) to the graph infores entry (`rig.source_info.infores_id`) in every emitted edge's `sources` list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring `provenance.override` are untouched; cached under a `.linkouts` store suffix, never clobbers a full build |
 
 ```bash
 tablassert build-kg graph.yaml --qc --log
 ```
 
 The parallel fullmap reads behind entity resolution are automatic: large lookup batches (>= 1024
-terms) fan out across the record-shard files on all available CPU threads (redb readers share-lock,
-so they never contend), while smaller batches stay serial. There is no flag to tune, and results are
-identical at any worker count.
+terms) fan out across the 16 record-shard files, one thread per shard (redb readers share-lock, so they
+never contend), while smaller batches stay serial. There is no flag to tune, and results are identical
+at any worker count.
 
 Output is written to `rig.artifact_base_path` (created when missing) as `{name}_{version}.nodes.ndjson`,
 `{name}_{version}.edges.ndjson`, and `{name}_{version}.RIG.yaml`; intermediate parquet lands in
@@ -189,13 +191,14 @@ incomplete RIG fails the build with `[rig-validation-failed]` and nothing is emi
 [Graph Configuration](configuration/graph.md).
 
 ??? info "Build progress & stages"
-    The build runs six parallel stages (Loading Tables, Extracting Sections, Building TCode,
+    The build runs six stages in sequence (Loading Tables, Extracting Sections, Building TCode,
     Collecting Instructions, Building Subgraphs, Compiling Graph) plus a seventh, Studying Graph,
-    only when `--qc` is passed. They run under a three-row live progress block (stage header;
-    section bar with count/elapsed/ETA; in-flight item detail). Each completed
-    stage prints a green `✓ Stage N · NAME · elapsed` line above the live block. During Building
-    Subgraphs the detail line also shows the per-section phase (`load`, `filter`, `clean`, `encode`,
-    `resolve`, `qc`, `edge`, `provenance`, `significance`, `finalize`, `write`).
+    only when `--qc` is passed. They render under a three-row live progress block (stage header;
+    section bar with count/elapsed/ETA; in-flight item detail). Each completed stage prints a green
+    confirmation line above the block, naming the stage number, its uppercased name, and its elapsed
+    time. During Building Subgraphs the detail line also shows the per-section phase (`load`,
+    `filter`, `clean`, `encode`, `resolve`, `qc`, `edge`, `provenance`, `significance`, `finalize`,
+    `write`, plus `cache` for a shared run-scoped prefix and `transform` for an unlabeled op).
 
 ### Automatic run-scoped TCode cache
 
@@ -214,8 +217,8 @@ section; other section-local operations retain their own section labels.
 
 ## validate
 
-Use this to validate a configuration against a schema without running the build, ideal for CI and
-pre-commit hooks. The required `--schema` flag selects which schema to validate against (the kind is
+Use this to validate a configuration against a schema without running the build; it is what CI and
+pre-commit hooks call. The required `--schema` flag selects which schema to validate against (the kind is
 no longer sniffed from the YAML).
 
 ```bash
@@ -260,11 +263,11 @@ tablassert validate-kgx --nodes MY_KG_1.0.0.nodes.ndjson --edges MY_KG_1.0.0.edg
 | `--prune`, `-p` | Flag | No | `False` | Rewrite the edges file in place, keeping only edges that validate strictly (pending carryovers are dropped too); nodes are never touched, and a clean file is not rewritten |
 | `--rig` | Path | No | n/a | RIG yaml to include in the identity scan (its `source_info.infores_id` and target `primary_knowledge_sources` are checked) |
 | `--allow-infores` | list[str] | No | n/a | Registry-exempt CURIE, repeatable; use for the locally-minted graph identifier and other deliberate locals |
-| `--registry` | snapshot\\|refresh\\|off | No | `snapshot` | `snapshot` validates offline against the bundled copy; `refresh` fetches the live upstream catalog (network) and caches it under the user cache dir; `off` skips the identity half entirely |
+| `--registry` | snapshot\|refresh\|off | No | `snapshot` | `snapshot` validates offline against the bundled copy; `refresh` fetches the live upstream catalog (network) and caches it under the user cache dir; `off` skips the identity half entirely |
 | `--strict` | Flag | No | `False` | Exit non-zero while any unregistered CURIE remains; without it the identity half is advisory |
 
 Failures are grouped by field and error type, so a systematic modelling problem shows up as one line
-rather than a million:
+per problem rather than one per record:
 
 ```text
 biolink-model 4.4.4
@@ -316,14 +319,14 @@ non-zero in every mode: a file that was never read must never count as a pass.
 
 ### Repairing a graph with `--prune`
 
-`--prune` (`-p`) repairs an already-emitted graph instead of just scoring it: the edges file is
+`--prune` (`-p`) repairs an already-emitted graph instead of only scoring it: the edges file is
 rewritten in place and every edge that does not validate strictly is removed. That includes real
 defects (non-coercible values, extras the model will never declare, rejected predicates), the
 deliberate pending carryovers (`synonym`, `xref`, `relation`, `provided_by`, ...), and lines that
-are not JSON at all (counted separately as malformed). On a real graph the carryovers are most of
-the edges -- a DAKP-style build prunes roughly 800085 of 2000085 -- so `--prune` trades them for a
-strictly-compliant graph. Nodes are validated and reported, never pruned: dropping one would
-strand its references.
+are not JSON at all (counted separately as malformed). On a real graph the carryovers dominate the
+failure list: a DAKP-style build prunes 800085 of 2000085 records (about 40 percent), so `--prune`
+trades them for a strictly-compliant graph. Nodes are validated and reported, never pruned: dropping
+one would strand its references.
 
 ```bash
 tablassert validate-kgx -n MY_KG_1.0.0.nodes.ndjson -e MY_KG_1.0.0.edges.ndjson --prune
@@ -338,7 +341,7 @@ only what ships is judged.
 
 ```text
 edges: pruned 12/424159 non-compliant records
-  9  p_value: float_parsing
+          9  p_value: float_parsing
   e.g. DISEASE_EDGE_000017: p_value: float_parsing
 edges: 424147/424159 valid (0 failures)
 KGX output is Biolink-compliant.

@@ -42,9 +42,11 @@ Path to the fullmap redb file (already resolved; see `fullmap_db_path()` and [Fu
 
 **`taxon: Optional[str]`**
 
-Optional NCBI Taxon ID for filtering results.
+Optional NCBI Taxon ID for filtering results. The constraint applies to matches that carry taxon
+metadata; matches with `TAXON_ID` 0 (no taxon recorded) are always retained.
 
-Example: `"9606"` filters to human-specific entities.
+Example: `"9606"` keeps human entries and entries with no taxon recorded, and drops entries recorded to
+another taxon.
 
 **`prioritize: Optional[list[Categories]]`**
 
@@ -142,7 +144,12 @@ db = Path("/path/to/fullmap/data/fullmap.redb")
 # LazyFrame with data to resolve
 lf = pl.scan_parquet("data.parquet")
 
-# Resolve gene symbols to CURIEs
+# Resolve gene symbols to CURIEs. level_one and level_two must already have been
+# applied, so the frame carries both "gene_symbol" and "gene_symbol_two".
+from tablassert.nlp import level_one, level_two
+
+lf = level_one(lf, "gene_symbol")
+lf = level_two(lf, "gene_symbol")
 result = resolve(
   lf=lf,
   col="gene_symbol",
@@ -206,7 +213,10 @@ Rows without a valid CURIE are filtered from the returned frame.
 
 ### Provenance Tracking
 
-Every resolved entity carries its source database, source version (snapshot date), and the matched synonym that triggered the match, enabling auditing and quality control. Case is handled by the NLP levels above: `level_one` matches any case variant, `level_two` further strips punctuation for hyphenated or slash-delimited names.
+Every resolved entity carries its source database (`SOURCE_NAME`), source version (`SOURCE_VERSION`, the
+snapshot date), and the normalized term that produced the match, enabling auditing and quality control.
+Case is handled by the NLP levels above: `level_one` matches any case variant, `level_two` further
+strips punctuation for hyphenated or slash-delimited names.
 
 ## Integration with QC
 
@@ -297,8 +307,9 @@ for term, matches in quick_map(["TP53", "BRCA1", "nonsense"], db).items():
 
 - `column_context` is fixed `False`: the frequency tiebreaker counts category occurrences within
   one resolved column of a real table, and a handful of probe terms is not that population.
-- A term whose keys were all dropped by the junk-term filter (purely numeric or sentinel values)
-  resolves to the empty frame, because a build would never probe it either.
+- A term whose keys were all dropped by the junk-term filter (an empty string, an all-digit string, or
+  one of the generic labels such as `none`, `nan`, `na`, `null`, `unknown`, `p_value`, `symbol`) resolves
+  to the empty frame, because a build would never probe it either.
 
 ## Next Steps
 

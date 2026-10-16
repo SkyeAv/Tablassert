@@ -27,7 +27,7 @@ Shortcut:
 make setup
 ```
 
-## Daily edit -> check loop
+## Daily edit/check loop
 
 ```bash
 # after changing Rust code, or when the extension may be stale
@@ -102,7 +102,7 @@ What the gates cover:
 
 - **Ruff linting and formatting.** The current tree enforces core pycodestyle/pyflakes safety checks plus stale-suppression detection. It also enforces an expanded rule set covering common bug patterns (bugbear), simplifications, Python-version upgrades, pytest style, import order, and comprehensions. Treat `uv run ruff check .` and `uv run ruff format --check .` as the stable interface rather than relying on individual rule codes.
 - **Pyright.** Type checking runs through `uv run pyright`; the project is tightening this as a strict-inference ratchet over time.
-- **Python tests.** The suite is offline and runs in parallel by default via [pytest-xdist](https://pypi.org/project/pytest-xdist/) (`-n auto` in `pyproject.toml`'s addopts, which also enable `--cov` so coverage is reported inline); expect roughly 20-30 seconds for a full local run. Disable parallelism for a single serial run with `pytest -n 0`. CI installs the `ci` dependency group with the `cli`, `qc`, and `log` extras (`--no-default-groups --group ci --extra cli --extra qc --extra log`) and runs the suite as a single job rather than sharding it across a matrix of runners: most of a run is fixed overhead (interpreter start, imports, xdist worker spin-up, coverage init) rather than test execution, so splitting the suite would cost more in per-runner setup than it recovers.
+- **Python tests.** The suite is offline and runs in parallel by default via [pytest-xdist](https://pypi.org/project/pytest-xdist/) (`-n auto` in `pyproject.toml`'s addopts, which also enable `--cov` so coverage is reported inline); Disable parallelism for a single serial run with `pytest -n 0`. CI installs the `ci` dependency group with the `cli`, `qc`, and `log` extras (`--no-default-groups --group ci --extra cli --extra qc --extra log`) and runs the suite as a single job rather than sharding it across a matrix of runners: most of a run is fixed overhead (interpreter start, imports, xdist worker spin-up, coverage init) rather than test execution, so splitting the suite would cost more in per-runner setup than it recovers.
 - **Rust tests.** `cargo test --manifest-path rust/Cargo.toml` runs the extension's Rust unit tests.
 - **Rust style and lints.** `cargo fmt --check` enforces formatting; clippy runs all targets with warnings denied.
 
@@ -130,7 +130,7 @@ On every **push**, the whole-repo gates:
 
 The ruff hooks cover the **whole tree**, matching CI's `ruff check .`. They used to be scoped to `src/` and `tests/`, which meant `examples/` could only ever fail in CI.
 
-The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI already runs them on every pull request -- the Python suite as a single job, deliberately not sharded across a matrix. Use `make check` when you want everything locally.
+The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI already runs them on every pull request (the Python suite as a single job, deliberately not sharded across a matrix). Use `make check` when you want everything locally.
 
 ## Running subsets
 
@@ -166,6 +166,7 @@ If your OS hard limit is lower, raise the system/user NOFILE limit first, then o
 - Keep PRs focused on one concern.
 - Include tests or explain why none are needed.
 - Run `make check` and include the result in the PR description.
+- For documentation changes, also run the docs guards (`uv run pytest tests/test_docs_source_of_truth.py tests/test_docs_cli_coverage.py tests/test_docs_examples.py`) and `uv run mkdocs build --strict`; doc pages are bound to live models, CLI flags, and output by those tests.
 - PRs are squash-merged to `main`; write commits and PR titles so the squashed history stays clear.
 
 ## Getting help

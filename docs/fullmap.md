@@ -1,8 +1,8 @@
 # Fullmap
 
 Build a fullmap once and every `resolve()` / `resolve_many()` call maps free text to the right
-biological CURIE; the completeness and freshness of this database directly sets how many of your
-entities resolve correctly and how trustworthy the resulting graph is.
+biological CURIE. How complete and how fresh this database is sets how many of your entities resolve
+and how trustworthy the resulting graph is.
 
 Fullmap is Tablassert's embedded entity-resolution database: a small set of [redb](https://github.com/cberner/redb)
 files containing biological synonyms, CURIEs, Biolink categories, taxon IDs, and source provenance,
@@ -10,7 +10,10 @@ built from NCATS Translator BABEL export files. It comprises a primary file hold
 CURIEs, and schema metadata, plus hash-sharded RECORDS files (`fullmap.s0.redb` ... `fullmap.s15.redb`
 by default) holding the term-to-postings index.
 
-Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool or install step required by default (this is an in-process redb shard scheme, not the older external DuckDB shards). When the optional `[aria2]` extra is installed (`pip install "tablassert[aria2]"`; Linux/Windows wheels only), both download stages (the prebuilt `fullmap.tar.zst` archive and, for a from-scratch build, the BABEL class and synonym files) use the bundled aria2c binary automatically; without it, Tablassert's Python downloader is used.
+Fullmap is built entirely in-process by Tablassert's own Rust extension: no external tool and no install
+step. When the optional `[aria2]` extra is installed (`pip install "tablassert[aria2]"`; Linux/Windows
+wheels only), both download stages use the bundled aria2c binary automatically; without it, Tablassert's
+Python downloader is used.
 
 ## Build Command
 
@@ -21,7 +24,7 @@ tablassert build-fullmap
 # Force a from-scratch build from BABEL outputs (skips the prebuilt download)
 tablassert build-fullmap --force
 
-# Optional: with `pip install "tablassert[aria2]"`, the same command downloads through the bundled aria2c automatically (the multi-GB prebuilt is the ideal aria2 use case)
+# Optional: with `pip install "tablassert[aria2]"`, the same command downloads through the bundled aria2c automatically
 tablassert build-fullmap
 ```
 
@@ -34,9 +37,10 @@ records its allowlist identity in `META.taxon_allowlist`, and that identity gate
 
 - A prebuilt archive whose recorded identity does not match the current allowlist fails validation
   during extraction, so it is never installed; the command falls back to a filtered source build.
-  Note the operational consequence: until a filtered archive is published for a Tablassert version,
-  the default invocation downloads that version's unfiltered archive once, fails the identity check,
-  and then performs the full BABEL download + build.
+  The operational consequence depends on what RENCI has published: if an archive for the requested
+  version and allowlist exists it is used directly, and otherwise the default invocation downloads the
+  closest published archive, fails the identity check, and then performs the full BABEL download and
+  build.
 - A database already present at `--output` is reused only when its recorded identity matches;
   otherwise it is rebuilt.
 
@@ -46,7 +50,8 @@ more examples.
 
 By default, `build-fullmap` first downloads a **prebuilt** database published for this Tablassert
 version, a `fullmap.tar.zst` under `.../fullmap/<tablassert-version>/` (the version directory is the
-installed package version, never hardcoded), verified against a co-published `sha256sum.txt` and
+installed package version, never hardcoded), verified against a co-published `sha256sum.txt` when that
+file is present and parseable (otherwise the download proceeds with a warning) and
 extracted beside `--output` entirely in the Rust extension: it streams the archive through zstd
 decompression and untars it (the multi-GB decompressed tar is never materialized on disk) with the
 GIL released, extracts into a
@@ -59,7 +64,7 @@ passes is atomically renamed into place (the primary to `--output`, shards besid
 and the command falls back to the from-scratch build below. If no prebuilt is published for this
 version it falls back the same way; `--force` / `-f` skips the prebuilt attempt and always builds.
 When the optional `[aria2]` extra is installed, the bundled aria2c from that extra accelerates
-**either** download automatically (the multi-GB prebuilt archive is the ideal aria2 use case), and
+**either** download automatically, and
 the Python downloader is used otherwise.
 
 Two facts matter most when planning a build:
@@ -92,9 +97,9 @@ The build is a parallel, **memory-bounded** pipeline executed by the Rust extens
     multi-threaded allocation from bloating resident memory.
 
     - **Download**: files come from `https://stars.renci.org/var/babel_outputs` via resumable,
-      range-request downloads; cached files are reused. When the `[aria2]` extra is installed, only
-      this stage of the from-scratch pipeline uses the bundled `aria2c` binary from that extra (the
-      prebuilt archive download above uses it too), with aria2's segmented HTTP downloads and
+      range-request downloads; cached files are reused. When the `[aria2]` extra is installed, both
+      this stage and the prebuilt archive download use the bundled `aria2c` binary, with aria2's
+      segmented HTTP downloads and
       retry/resume control files while suppressing aria2's own progress UI so Tablassert's progress
       bar stays clean.
       The progress detail remains file-level (`aria2c downloading`) rather than byte-level in that mode.
@@ -109,7 +114,7 @@ The build is a parallel, **memory-bounded** pipeline executed by the Rust extens
       assigns compact integer CURIE IDs via a dedup map keyed on `xxh3_128(curie)`, and
       accumulates postings mapping each normalized term to its (CURIE, source) pairs. Each worker drains its per-CURIE rows and
       term postings to bounded on-disk spill runs once its buffer fills, the term postings partitioned
-      per-shard at spill time (each `run_s{shard}_{id}.bin` holds only terms with
+      per-shard at spill time (each `run_s{shard}_{run_id:08}.bin` holds only terms with
       `xxh64(term) & (shards-1)` matching that shard), which keeps peak RAM flat regardless of input size
       and lets the write phase merge each shard independently. Dead terms (purely numeric, or generic
       labels like `none`/`nan`/`null`) are skipped, since they can never be queried.
@@ -121,11 +126,11 @@ The build is a parallel, **memory-bounded** pipeline executed by the Rust extens
       runs and inserting the merged term groups inline into that shard's redb file (one database per
       shard, since redb allows a single writer per file) in hash-sorted batches for near-sequential B-tree
       appends (each batch is appended through redb's end-of-table cursor API, the faster ascending
-      bulk-load path; the engine's ascending-key page optimization also lets a key-order-loaded shard
-      occupy about half as many pages, so current builds write ~50% smaller shard files at the same
+      bulk-load path; loading each shard in ascending key order also lets the engine pack its pages
+      densely, so current builds write smaller shard files at the same
       schema). Because every term's postings already live in its own shard's runs, each merge groups a
-      term completely with no cross-shard coordination; as the merge+insert is the bottleneck,
-      `shard_count` writers deliver ~Nx single-threaded write throughput.
+      term completely with no cross-shard coordination, and one writer per shard keeps the merge+insert
+      bottleneck off the critical path.
 
 ### Build Tunables (environment)
 
@@ -134,7 +139,7 @@ override only when targeting an unusual machine.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TABLASSERT_FULLMAP_EXCLUDE_PREFIXES` | *(empty)* | Comma-separated CURIE prefixes to drop at build time (e.g. `Publication`). Excluding prefixes you never resolve dramatically cuts build time, peak memory, and database size. InChIKey terms are retained unless excluded explicitly. |
+| `TABLASSERT_FULLMAP_EXCLUDE_PREFIXES` | *(empty)* | Comma-separated CURIE prefixes to drop at build time (e.g. `InChIKey`, `CAID`). Dropping prefixes you never resolve cuts build time, peak memory, and database size. InChIKey terms are retained unless excluded explicitly. |
 | `TABLASSERT_FULLMAP_CHUNK_BYTES` | `8388608` (8 MiB) | Byte budget per producer-to-worker line-chunk. Bounded by bytes (not line count) so chunk memory is fixed even for large synonym records. |
 | `TABLASSERT_FULLMAP_PRODUCERS` | `clamp(workers/4, 4, #files)` | Number of producer (decompressor) threads. Decompression far outpaces parallel processing, so a handful keeps all workers fed. |
 | `TABLASSERT_FULLMAP_LOCAL_SPILL_ENTRIES` | `1000000` | Per-worker term-posting buffer size before spilling a sorted run to disk. Lower values use less RAM but produce more run files. |
@@ -172,7 +177,7 @@ missing tag raises rather than silently reading incompatible data. Databases bui
 (the v3 to v4 move to sharded files, the v4 to v5 move to the redb 4 engine, and the v5 to v6 move to normalized level-one keys) requires rebuilding
 via `tablassert build-fullmap`.
 
-Readers open every fullmap file READ-ONLY with a SHARED file lock (redb >= 3 `ReadOnlyDatabase`), so any
+Readers open every fullmap file READ-ONLY with a SHARED file lock (redb 4 `ReadOnlyDatabase`), so any
 number of processes can run lookups against the same fullmap concurrently; only a `build-fullmap` rebuild
 (an exclusive-lock writer) briefly blocks readers. Each lookup pins one primary-plus-shards file
 generation, cached handles are validated against the file's `(dev, ino)` on every use, so a reader
@@ -221,7 +226,7 @@ Pass the fullmap path (file or base directory) as the `fullmap` argument to `res
 ## Inspecting a Fullmap
 
 `tablassert quick-map TERMS... -f <fullmap>` resolves one or more terms against a built database
-through the exact op chain a build runs per node column, printing one `rich` table per term with
+through the exact op chain a build runs per node column, printing one `rich` table per matched term with
 its ranked matches (`CURIE`, `PREFERRED_NAME`, `CATEGORY_NAME`, `TAXON_ID`, `SOURCE_NAME`,
 `NLP_LEVEL`, `PR`) and the normalized probe keys the term became. Its flags mirror the
 `NodeEncoding` config fields (`--taxon`, `--prioritize`, `--avoid`, `--exclude-prefixes`,

@@ -43,7 +43,9 @@ Filesystem path to the fullmap redb file, or a base directory containing it (res
 
 Optional NCBI Taxon ID for filtering results to a specific organism.
 
-Example: `"9606"` restricts **gene** matches to human-specific entries; non-gene categories (e.g., diseases, chemicals) are returned regardless of taxon. When `None`, no taxon filtering is applied and matches from all organisms are returned.
+Example: `"9606"` keeps matches recorded to human and matches carrying no taxon (`TAXON_ID` 0), which is
+why disease and chemical rows usually survive it, and drops matches recorded to any other taxon. When
+`None`, no taxon filtering is applied and matches from all organisms are returned.
 
 **`prioritize: Optional[list[Categories]]` (default: `None`)**
 
@@ -59,7 +61,7 @@ Example: `[Categories.GENE]` prevents gene mappings from appearing in the output
 
 **`column_context: bool` (default: `True`)**
 
-Controls category-frequency tie-breaking when multiple matches exist for a term. When `True`, the deduplication stage adds a category-frequency score (computed in Polars after the SQL query) and prefers the category that appears most frequently across all matched terms in the batch. When `False`, frequency-based tie-breaking is disabled.
+Controls category-frequency tie-breaking when multiple matches exist for a term. When `True`, the deduplication stage adds a `FREQUENCY` column scoring how often each category appears across all matched terms in the batch, computed in Polars over the fetched rows, and prefers the most frequent category. When `False`, frequency-based tie-breaking is disabled and the column is absent.
 
 This is useful when resolving a column of related entities (e.g., all genes): the shared context helps disambiguate terms that map to multiple categories.
 
@@ -164,7 +166,7 @@ The resolver requires a schema-v6 fullmap. Existing schema-v5 databases are reje
 
 - If the `fullmap` path does not resolve to a valid redb file, or the file's schema tag doesn't match the expected version, the Rust extension raises a `RuntimeError`.
 - If `entities` is empty, the function returns `[]`.
-- Unresolved entities are silently filtered from the output (logged at INFO level by default via `resolve()`).
+- Unresolved entities are filtered from the output and reported through `resolve()` logging.
 
 ## Integration
 

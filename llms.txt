@@ -24,7 +24,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## CLI and Runtime
 - [Fullmap Guide](docs/fullmap.md): entity-resolution database build pipeline and redb schema.
 - [CLI Entry Point](src/tablassert/cli_entry.py): console-script launcher (`main()`) and the `[cli]` runtime preflight.
-- [CLI Module](src/tablassert/cli.py): the six command implementations and the build pipeline stages.
+- [CLI Module](src/tablassert/cli.py): the five command implementations and the build pipeline stages.
 
 ## API Reference
 - [Entity Resolution](docs/api/fullmap.md): the lower-level `resolve()` and `quick_map()` API.
@@ -46,7 +46,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Coercion Helpers](src/tablassert/coerce.py): annotation and value coercion helpers.
 - [Enums Catalog](src/tablassert/enums.py): Tablassert-owned configuration vocabularies (`Tokens`, `Repositories`, `InformationResources`, `Contributions`, `Comparisons`, `Functions`, `Files`, `EncodingMethods`, `FillMethods`, `SourceStatuses`, `ProvisionMechanisms`, `DataFormats`, `IngestCategories`, `ContentCategories`, `ModelingCategories`).
 - [Error Types](src/tablassert/errors.py): coded exceptions and validation warnings.
-- [Extras Registry](src/tablassert/extras.py): the package -> extra mapping behind the missing-dependency errors and their install hints.
+- [Extras Registry](src/tablassert/extras.py): the package-to-extra mapping behind the missing-dependency errors and their install hints.
 - [Fullmap Module](src/tablassert/fullmap.py): embedded redb synonym resolution and ranking logic.
 - [YAML Ingestion](src/tablassert/ingests.py): `from_yaml()`, `to_sections()`, template/section merge behavior, YAML loading, and section expansion.
 - [InfoRes Registry](src/tablassert/infores_registry.py): bundled infores registry snapshot loader, KGX/RIG CURIE collection, and three-way registered/allowed/unregistered classification.

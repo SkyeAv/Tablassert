@@ -82,7 +82,8 @@ whole table or `method: column` to pull per-row notes from the source (see
 - **Mixed annotations**: `method: value` for constants (same every row), `method: column` for
   per-row values.
 - **Subject-predicate-object**: subject varies per row (column), predicate `correlated_with` is
-  fixed, and object `CHEBI:41774` is fixed, yielding `Lactobacillus rhamnosus --[correlated_with]--> 13C-tamoxifen`.
+  fixed, and object `CHEBI:41774` is fixed, yielding a `correlated_with` edge from `Lactobacillus
+  rhamnosus` to `13C-tamoxifen`.
 
 ??? note "Regex dialect constraint"
     Each `pattern` is handed to Polars `str.replace_all()` (Rust `regex` crate). **Backreferences

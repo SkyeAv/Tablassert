@@ -12,7 +12,7 @@ The single parent working directory. All runtime artifacts live beneath it.
 
 Intermediate parquet storage for compiled subgraphs (`.tablassert/store/`). Created on import.
 
-The log directory (`log.LOGASSERT`, `.tablassert/log/`) holding the loguru sink file `.tablassert/log/tablassert.log` when the `log` extra is installed, and the cached SapBERT model (`.tablassert/sapbert/`, `qc.MODEL`) are likewise derived from `BASE`.
+The log directory (`log.LOGASSERT`, `.tablassert/log/`) holding the loguru sink file `.tablassert/log/tablassert.log` when the `log` extra is installed, and the cached SapBERT model (`qc.MODEL`, `.tablassert/sapbert-babel/`) are likewise derived from `BASE`.
 
 ## mkhash()
 
@@ -64,11 +64,11 @@ def section_store_key(
 
 For a section with a local source, the key combines the section configuration digest with the source content digest and hashes the result into one 16-character xxh64 value. Callers may provide a precomputed `content_digest` to avoid rereading the file; otherwise `local` is passed to `file_content_hash`. If neither is provided, the function returns the section's plain `mkhash` value. The build pipeline uses the content-aware form for local sources, so changing one source invalidates the cached parquet for each section that reads it without invalidating sections backed by unchanged sources.
 
-The key formula is `mkhash(f"{mkhash(section)}:{content_digest}")`. Build-mode flags add their own filename suffixes (`.head`, `.release`, or `.qc`) after the key; they do not change the digest formula.
+The key formula is `mkhash(f"{mkhash(section)}:{content_digest}")`. Build-mode flags add their own filename suffixes (`.head`, `.release`, `.qc`, or `.linkouts`, concatenated when several are active) before the `.parquet` extension; they do not change the digest formula.
 
 ---
 
-## namespace_uuid()  *(Rust extension: `tablassert.rs`)*
+## namespace_uuid() *(Rust extension: `tablassert.rs`)*
 
 Generates deterministic UUIDs for KGX edge identifiers using UUID v3 (MD5-based namespacing). Provided by the Rust extension, not `tablassert.utils`.
 
@@ -86,7 +86,10 @@ Domain string used to create the namespace UUID. The default domain used interna
 
 **`values: list[str]`**
 
-The values to incorporate into the UUID. Empty entries are dropped; each surviving value is length-prefixed as `<byte-length>:<value>` and concatenated, then hashed within the domain namespace.
+The values to incorporate into the UUID. Every entry is used, empty strings included, and order is
+significant: each value is length-prefixed as `<byte-length>:<value>` and the parts are concatenated in
+the order given, then hashed within the domain namespace. Two different value lists therefore almost
+never derive the same id, and dropping an empty entry changes the result.
 
 ### Return Value
 
@@ -164,7 +167,8 @@ A graph that *expects* such collisions (e.g. one whose `uuid_fields` are the res
 so two rows with different raw mention spellings resolve to the same CURIE) can instead set
 `uuid_on_collision: merge` (requires `uuid_fields`). Divergent same-id records are then folded
 into one edge: list fields are unioned, deduplicated by content, and sorted (so the merged edge is
-identical regardless of row order), conflicting scalars keep the first record's value, and a
+identical regardless of row order), conflicting scalars keep the lexicographically smallest canonical
+value, and a
 build-log summary reports how many records merged and how many scalar conflicts were arbitrated.
 Merge mode buffers one full record per unique id until end-of-stream (the memory cost the default
 streaming path avoids), which is why it is opt-in. See

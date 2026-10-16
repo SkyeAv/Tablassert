@@ -109,15 +109,15 @@ Build the knowledge graph:
 tablassert build-kg graph.yaml
 ```
 
-Output is one JSON object per line: nodes with Biolink categories, edges with annotations.
+Output is one JSON object per line: nodes with Biolink categories, edges with annotations. The edge sample below is abridged; real records also carry provenance fields such as `knowledge_level`, `agent_type`, `sources`, and `original_subject`/`original_object`.
 
 ```json
-{"id":"HGNC:11998","name":"TP53","category":["biolink:Gene"],"taxon":"NCBITaxon:9606"}
-{"id":"MONDO:0008903","name":"lung cancer","category":["biolink:Disease"]}
+{"id":"HGNC:11998","name":"TP53","category":["biolink:Gene"],"in_taxon":["NCBITaxon:9606"],"provided_by":["infores:my-kg"]}
+{"id":"MONDO:0008903","name":"lung cancer","category":["biolink:Disease"],"in_taxon":["NCBITaxon:9606"],"provided_by":["infores:my-kg"]}
 ```
 
 ```json
-{"id":"2cfea591-0f8f-33af-a7df-03da531d3359","subject":"HGNC:11998","predicate":"biolink:associated_with","object":"MONDO:0008903","p_value":"1.0000e-03","statistical_significance_qualifier":"strongly_significant","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"gene-disease.csv","study_size":450,"has_study_results":[{"id":"row:2"}]}},"publications":["PMID:12345678"]}
+{"id":"8f41c2d7-9b3e-35c1-a4e8-6d2f9a0c5b71","subject":"HGNC:11998","predicate":"biolink:associated_with","object":"MONDO:0008903","p_value":"1.0000e-03","statistical_significance_qualifier":"very_strongly_significant","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"gene-disease.yaml SECTION 1","study_size":450,"has_study_results":[{"id":"row:2"}]}},"publications":["PMID:12345678"]}
 ```
 
 See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full walkthrough.
@@ -140,8 +140,10 @@ See the [Tutorial](https://skyeav.github.io/Tablassert/tutorial/) for the full w
 pip install tablassert
 ```
 
-Or with uv: `uv tool install "tablassert[cli]"`. The base install provides the Python API; `[cli]`
-provides the `tablassert` command. Other extras are opt-in:
+To use the Python API, install Tablassert into your project's environment with `pip install
+"tablassert"` (or `uv add tablassert`). To get the `tablassert` command as a standalone tool, use
+`uv tool install "tablassert[cli]"`; note that a tool install is isolated and does not expose the
+Python API to your project. Other extras are opt-in:
 
 | Extra | Adds | Install |
 | ----- | ---- | ------- |

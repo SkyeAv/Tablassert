@@ -4,7 +4,7 @@ The `qc` module validates entity-resolution mappings through a four-stage pipeli
 
 QC runtime support is optional. Install `tablassert[qc]` to enable it: the extra pulls `scikit-learn` and `sentence-transformers` (`torch` and `numpy` arrive transitively); `rapidfuzz` is a core dependency and is always available.
 
-`fullmap_audit()` checks the whole extra before it does any work and raises `QcRuntimeMissingError` naming every absent package and the install command. Checking up front matters because the two packages are needed at different stages (`scikit-learn` from the start, `sentence-transformers` only if Stage 4 is reached), so a half-installed extra would otherwise fail after the audit had already run. `build-kg --qc` performs the same check before the build begins, since the audit does not run until the very end of the build.
+`fullmap_audit()` checks the whole extra before it does any work and raises `QcRuntimeMissingError` naming every absent package and the install command. Checking up front matters because the two packages are needed at different stages (`scikit-learn` from the start, `sentence-transformers` only if Stage 4 is reached), so a half-installed extra would otherwise fail after the audit had already run. `build-kg --qc` performs the same check before the build begins, so a missing extra fails immediately instead of after resolution has already cost time.
 
 ## fullmap_audit()
 
@@ -81,32 +81,34 @@ The function applies four validation stages in sequence. Each stage progressivel
 **Fast path for high-confidence mappings.** A row passes if any of these hold:
 
 ```python
-original == preferred_name
+_qc_alias(original, aliases) == preferred_name
 ```
 
-- The pre-resolution text exactly equals the resolved preferred name.
+- The alias-resolved pre-resolution text equals the resolved preferred name. `aliases` maps a casefolded
+  source text to its preferred spelling, so a configured alias can pass on exact match.
 - The resolved CURIE matches an exempt prefix (`CHEBI`, `PR`, `UniProtKB`, `NCBIGene`, `UMLS`, `UNII`, `PUBCHEM`, `MONDO`).
 - The original text contains `:` (already looks like a CURIE).
 - The preferred name matches an exception prefix (`^LOC` or `^si:`).
-
-**Performance:** O(1) string comparison per row.
 
 #### Stage 2: Fuzzy Matching
 
 **Medium confidence using RapidFuzz (batched via `rapidfuzz.process.cpdist`).**
 
-Two fuzzy matching algorithms:
-1. **Ratio:** Overall string similarity
-2. **Partial token sort ratio:** Combined token/subsequence matching
+Three scorers run over each unique pending pair, batched through `rapidfuzz.process.cpdist`:
+1. **Ratio:** `fuzz.ratio`, overall string similarity
+2. **Partial token sort ratio:** `fuzz.partial_token_sort_ratio`, subsequence matching
+3. **Token set ratio:** `fuzz.token_set_ratio`, duplicate-tolerant token overlap
 
-**Thresholds:** `fuzz.ratio` >= 70 OR `fuzz.partial_token_sort_ratio` >= 80
+A pair passes if any scorer clears its threshold. `fuzz.ratio` is compared against
+`fuzzy_ratio_threshold` (default 70.0); the two token scorers share `fuzzy_partial_threshold`
+(default 80.0). Both thresholds are graph-configurable through `qc_fuzzy_ratio_threshold` and
+`qc_fuzzy_partial_threshold`.
 
 ```python
-fuzz.ratio(original, preferred) >= 70
-or fuzz.partial_token_sort_ratio(original, preferred) >= 80
+fuzz.ratio(original, preferred) >= fuzzy_ratio_threshold
+or fuzz.partial_token_sort_ratio(original, preferred) >= fuzzy_partial_threshold
+or fuzz.token_set_ratio(original, preferred) >= fuzzy_partial_threshold
 ```
-
-**Performance:** O(n) string operations, batched.
 
 #### Stage 3: Abbreviation Expansion
 
@@ -117,8 +119,6 @@ _is_abbrev(original, preferred_name) or _is_abbrev(preferred_name, original)
 ```
 
 The matcher scans the short form right-to-left against the long form (case-insensitively); the first character of the short form must land on a word boundary of the long form. This rescues the class both fuzzy matching and embedding similarity can miss, the `AML` / `acute myeloid leukemia` pair.
-
-**Performance:** O(n) character scans per row, no model inference.
 
 #### Stage 4: SapBERT Semantic Similarity
 
@@ -134,7 +134,8 @@ similarity = cosine_similarity(embeddings[:n], embeddings[n:]).diagonal()
 return similarity >= qc.SIMILARITY_THRESHOLD  # 0.5
 ```
 
-**Performance:** Expensive (transformer inference); the model is loaded once and cached.
+The model is loaded once and cached for the lifetime of the process, so transformer inference is the
+costly stage of the cascade.
 
 ### SapBERT Model
 
@@ -178,15 +179,18 @@ validated = fullmap_audit(
 
 ### Pipeline Flow
 
+The cascade runs on unique `(original, preferred)` pairs, deduplicated before scoring, so the counts
+below are pairs rather than source rows. Illustrative counts:
+
 ```
-Input: 1000 rows with entity mappings
+Input:  1000 unique pairs with entity mappings
 
 Stage 1 (Exact): 700 pass, 300 pending
 Stage 2 (Fuzzy): 250 pass, 50 pending
 Stage 3 (Abbreviation): 10 pass, 40 pending
 Stage 4 (SapBERT): 30 pass, 10 rejected
 
-Output: 990 rows (700 + 250 + 10 + 30)
+Output: 990 pairs pass (700 + 250 + 10 + 30)
 ```
 
 ### Confidence Levels

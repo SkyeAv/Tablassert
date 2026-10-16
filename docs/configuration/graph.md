@@ -34,15 +34,15 @@ The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation
 | `uuid_fields` | List[str] | Edge fields that constitute edge identity. Only these feed the derived edge `id` (see [Stable edge ids](#stable-edge-ids)) |
 | `uuid_domain` | String | Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise |
 | `uuid_on_collision` | `error` \| `merge` | What to do when two different edges derive one id. `error` (default) aborts; `merge` folds them into one edge. Requires `uuid_fields` (see [Merging collisions instead](#merging-collisions-instead)) |
-| `qc_similarity_threshold` | Float 0-1 | SapBERT cosine threshold used by QC |
-| `qc_fuzzy_ratio_threshold` | Float 0-100 | RapidFuzz ratio threshold used by QC |
-| `qc_fuzzy_partial_threshold` | Float 0-100 | RapidFuzz partial/token-set threshold used by QC |
-| `qc_aliases` | Mapping[String, String] | Source-text aliases applied before QC similarity stages |
+| `qc_similarity_threshold` | Float 0-1 | SapBERT cosine threshold used by QC (default 0.5) |
+| `qc_fuzzy_ratio_threshold` | Float 0-100 | RapidFuzz ratio threshold used by QC (default 70) |
+| `qc_fuzzy_partial_threshold` | Float 0-100 | RapidFuzz partial/token-set threshold used by QC (default 80) |
+| `qc_aliases` | Mapping[String, String] | Source-text aliases applied before QC similarity stages (default empty) |
 
 ## Stable edge ids
 
 Every edge gets a deterministic `id`: a UUID v3 derived from the edge itself. By default it is
-derived from the **whole record**, which makes it maximally brittle: a corrected `p_value`, a new
+derived from the **whole record**, which makes it change on any field edit: a corrected `p_value`, a new
 `supporting_text` entry, a reordered source row, or a Biolink release that renames a slot all mint a
 brand-new id. Downstream Translator consumers then see a new edge where they should see the same
 edge with updated attributes.
@@ -75,7 +75,7 @@ Leave out anything that is an observation *about* the edge rather than the edge'
 
 **Then build, and let the failure tell you what is missing.** That list is a starting point, not an
 answer: whether it is a key depends on your data, and the only way to find out is to run it. On a
-real 1.27M-edge graph the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
+real 1.27M-edge MultiomicsKG 3.0.0 build, the set above left 2,476 collisions (0.2% of edges): pairs whose subject,
 predicate, object, publication and row were identical, differing only in the NLP level recorded in
 `supporting_text` because two raw strings had resolved onto the same CURIE. Adding
 `supporting_text` made it a key.
@@ -85,7 +85,7 @@ offending edge, so each round is mechanical.
 
 ### What it buys
 
-On that same 1.27M-edge graph, re-analysing the statistics (new `p_value` and `effect_size` on
+On that same MultiomicsKG 3.0.0 build, re-analysing the statistics (new `p_value` and `effect_size` on
 every row) and rebuilding:
 
 | | edge ids that changed |
@@ -127,18 +127,18 @@ uuid_on_collision: merge
 
 Under `merge`, a divergent same-id record is folded into the first record that claimed the id:
 
-- **list fields** (`publications`, `sources`, `source_record_urls`, `supporting_text`, `category`,
-  `upstream_resource_ids`, `has_supporting_studies`, ...) are unioned, deduplicated, and **sorted**,
+- **list fields** (`publications`, `sources`, `supporting_text`, `category`,
+  `has_supporting_studies`, ...) are unioned, deduplicated, and **sorted**,
   so the merged edge is identical regardless of which row arrived first. Object entries such as
   `sources[]` dedup by content; key order alone never keeps two copies.
 - **scalar fields** keep the lexicographically smallest canonical value; each conflict is counted and reported in a
   build-log summary.
-- fields only the later record carries are copied over: first-wins arbitrates *conflicts*, not
-  additions.
-- **one scalar is exempt from first-wins:** when the merged record carries the build-internal
+- fields only the later record carries are copied over: the lexicographic-minimum rule arbitrates
+  *conflicts*, not additions.
+- **one scalar is exempt from that rule:** when the merged record carries the build-internal
   `supporting_case_ids` list (the case IDs behind a `number_of_cases` count), the merged count
   becomes the length of the unioned list, so a case ID shared by both records counts once where
-  first-wins would under-report and summing would double-count. The superseded divergence is not
+  the minimum rule would under-report and summing would double-count. The superseded divergence is not
   reported as a scalar conflict, and the carrier list is stripped from every edge before write in
   both modes, so it never ships in the final NDJSON.
 
@@ -171,20 +171,20 @@ tell your consumers.
 
 ### The `rig:` section
 
-The `rig:` section carries every human-authored RIG fact. Its shape mirrors the released [RIG schema](https://github.com/biolink/resource-ingest-guide-schema), so the generated `.RIG.yaml` is always schema-shaped. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and **validates the complete document before writing anything**, so a build never leaves behind an invalid or incomplete RIG.
+The `rig:` section carries every human-authored RIG fact. Its shape follows the released [RIG schema](https://github.com/biolink/resource-ingest-guide-schema), with two deliberate differences: the `artifact_base_url` and `artifact_base_path` keys below are Tablassert-only config consumed by the generator (never written to the `.RIG.yaml`), and a few fields differ in requiredness from the upstream schema and template, which disagree with each other on `source_status`; Tablassert requires `provenance_info`, `source_status`, and `ingest_info.scope`, and treats `ingest_info.relevant_files` as optional because the generator pre-fills the generated-artifact entries. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and **validates the complete document before writing anything**, so a build never leaves behind an invalid or incomplete RIG.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `rig.name` | String | No | RIG display name; defaults to `<name> v<version> Resource Ingest Guide` |
 | `rig.source_info` | Object | Yes | Information about the source being ingested (see below) |
 | `rig.ingest_info` | Object | Yes | Rationale and scope of the ingest (see below) |
-| `rig.target_info` | Object | No | Target-level `future_considerations` and `additional_notes` (edge/node type summaries are always generated) |
+| `rig.target_info` | Object | No | Target-level `future_considerations` (each with a `category`: `spoq_pattern`, `predicates`, `qualifiers`, `edge_properties`, `node_properties`, or `other`) and `additional_notes`; edge/node type summaries are always generated |
 | `rig.ui_explanation` | String | No | Per-edge-type UI explanation **prefix**; the built-in Tablassert explanation is always appended after it |
-| `rig.source_files` | List[String] | No | Upstream source file names/URLs listed verbatim as `source_files` on every generated `edge_type_info` entry; never scraped from edge `source_record_urls` |
+| `rig.source_files` | List[String] | No | Upstream source file names/URLs, sorted and deduplicated, written as `source_files` on every generated `edge_type_info` entry; never scraped from edge `source_record_urls` |
 | `rig.provenance_info` | Object | Yes | Contributor statements and provenance artifacts |
 | `rig.supporting_data_source_info` | List[Object] | No | Upstream data sources for data-derived graphs (each needs `infores_id`, `terms_of_use_info`, and `relevant_files`) |
-| `rig.artifact_base_url` | String | Yes | Public URL prefix for the generated KGX artifacts; each `.nodes.ndjson`/`.edges.ndjson` name is appended to build RIG `relevant_files` locations |
-| `rig.artifact_base_path` | Path | Yes | Output directory the generated artifacts (and the RIG) are written into; created when missing |
+| `rig.artifact_base_url` | String | Yes | Public URL prefix for the generated KGX artifacts; each `.nodes.ndjson`/`.edges.ndjson` name is appended to build RIG `relevant_files` locations. Tablassert-only config key, not a RIG schema slot, and never written to the `.RIG.yaml` |
+| `rig.artifact_base_path` | Path | Yes | Output directory the generated artifacts (and the RIG) are written into; created when missing. Tablassert-only config key, not a RIG schema slot, and never written to the `.RIG.yaml` |
 
 #### `rig.source_info`
 
@@ -195,12 +195,14 @@ The `rig:` section carries every human-authored RIG fact. Its shape mirrors the 
 | `description` | String | No | What the source contains and how its knowledge is produced |
 | `citations` | List[String] | No | PMIDs, DOIs, URLs, or free-text citations |
 | `terms_of_use_info` | Object | Yes | At least one of `terms_of_use_url`, `terms_of_use_description`, `license_name`, `license_url` must carry a real assessment |
-| `data_access_locations` | List[String] | Yes | Where the upstream source data is accessed; each entry must contain an http(s) or file URL |
+| `data_access_locations` | List[String] | Yes | Where the upstream source data is accessed; at least one entry required, each containing an http(s) or file URL |
 | `data_provision_mechanisms` | List[Enum] | No | `file_download`, `api_endpoint`, `database_dump`, `other` |
 | `data_formats` | List[Enum] | No | `tsv`, `csv`, `xml`, `json`, `yaml`, `obo`, `protobuff`, `kgx`, `mysql`, `postgresql`, `sqlite`, `other` |
 | `data_versioning_and_releases` | String | No | How the source versions/releases its data |
 | `source_status` | Enum | Yes | `maintained_regular_updates`, `maintained_as_needed_updates`, `not_maintained`, `unknown` |
 | `additional_notes` | List[String] | No | Anything not captured by dedicated fields |
+
+`source_status` is required here because Tablassert follows the translator-ingests template, which marks it required; the released LinkML schema leaves it optional.
 
 #### `rig.ingest_info`
 
@@ -241,7 +243,7 @@ Before the `.RIG.yaml` is written, the build audits the assembled document and f
 - edge/node summaries disagree with the observed graph (categories, predicates, KL/AT values, infores CURIEs);
 - a configured upstream `relevant_files` entry matches no table source file or URL.
 
-This is what makes every emitted RIG PR-worthy by construction: placeholders and silent gaps fail the build instead of shipping.
+Every emitted RIG passes this audit before it is written: placeholders and silent gaps fail the build instead of shipping.
 
 ## Minimal Example
 
@@ -328,6 +330,7 @@ When you run `tablassert build-kg graph.yaml`:
    - Validate with the QC audit when `build-kg --qc` is passed
 5. **Build subgraphs** - Compile each section's resolved data into a parquet file
 6. **Compile graph** - Aggregate all subgraph parquets, export `{name}_{version}.nodes.ndjson` / `.edges.ndjson` into `rig.artifact_base_path`, summarize the final graph, audit the RIG document, and write `{name}_{version}.RIG.yaml`
+7. **Study graph** (`--qc` only) - Run the QC audit over the compiled graph
 
 ## Output Files
 
