@@ -1030,6 +1030,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Qualifiers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-required-qualifier-dense-column-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: required qualifier (dense column, default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1680,6 +1697,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Qualifiers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-required-qualifier-dense-column-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: required qualifier (dense column, default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1826,7 +1860,7 @@
 </code></pre></div>
 <h3 id="merge-behavior-fastmerge">Merge Behavior (fastmerge)<a class="headerlink" href="#merge-behavior-fastmerge" title="Permanent link">&para;</a></h3>
 <p>Sections inherit from template and override specific fields:</p>
-<p><strong>Dictionaries:</strong> Recursive merge, section overrides template keys
+<p><strong>Dictionaries:</strong> Recursive merge, section overrides template keys</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">template</span><span class="p">:</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">}</span>
@@ -1835,8 +1869,8 @@
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">sections</span><span class="p">:</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">associated_with</span><span class="w">  </span><span class="c1"># Overrides, subject stays &quot;A&quot;</span>
-</code></pre></div></p>
-<p><strong>Lists:</strong> Concatenation (extends)
+</code></pre></div>
+<p><strong>Lists:</strong> Concatenation (extends)</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">template</span><span class="p">:</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">subject</span><span class="p">:</span>
@@ -1846,8 +1880,8 @@
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">      </span><span class="nt">subject</span><span class="p">:</span>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">        </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Protein</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Result: [Gene, Protein]</span>
-</code></pre></div></p>
-<p><strong>Scalars:</strong> Section replaces template
+</code></pre></div>
+<p><strong>Scalars:</strong> Section replaces template</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">template</span><span class="p">:</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">related_to</span>
@@ -1855,7 +1889,7 @@
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">sections</span><span class="p">:</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">      </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">treats</span><span class="w">  </span><span class="c1"># Replaces the template predicate</span>
-</code></pre></div></p>
+</code></pre></div>
 <h2 id="configuration-schema">Configuration Schema<a class="headerlink" href="#configuration-schema" title="Permanent link">&para;</a></h2>
 <h3 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h3>
 <p>Defines the data file location and format.</p>
@@ -1914,7 +1948,7 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">source</span><span class="p">:</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">excel</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/mydata.xlsx</span>
@@ -1922,7 +1956,7 @@
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/data.xlsx</span>
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">sheet</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Sheet1&quot;</span>
 <a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Start at the second physical row, read to end</span>
-</code></pre></div></p>
+</code></pre></div>
 <blockquote>
 <p><strong>Specify <code>kind</code> explicitly.</strong> Tablassert selects the reader purely from the declared <code>kind</code>: <code>excel</code> reads a workbook (<code>sheet</code>), <code>text</code> scans delimited text (<code>delimiter</code>), <code>parquet</code> scans a parquet file (columns renamed positionally); the file on disk is never inspected to infer its format. Because <code>kind</code> carries a default, a source whose <code>kind</code> is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating <code>kind</code> explicitly makes a mis-declared source fail fast.</p>
 </blockquote>
@@ -1981,7 +2015,7 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">source</span><span class="p">:</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/mydata.tsv</span>
@@ -1989,7 +2023,7 @@
 <a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/data.tsv</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">delimiter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\t&quot;</span>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span>
-</code></pre></div></p>
+</code></pre></div>
 <h4 id="parquet-source">Parquet Source<a class="headerlink" href="#parquet-source" title="Permanent link">&para;</a></h4>
 <p>Reads a columnar <code>.parquet</code> file. Parquet is self-describing (typed columns, real headers, no
 sheets or delimiters), so the source adds no format-specific fields. Columns are addressed
@@ -2046,14 +2080,14 @@ as-is.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">source</span><span class="p">:</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">parquet</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/mydata.parquet</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">url</span><span class="p">:</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/data.parquet</span>
 <a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span>
-</code></pre></div></p>
+</code></pre></div>
 <h4 id="reindexing-conditional-filtering">Reindexing (Conditional Filtering)<a class="headerlink" href="#reindexing-conditional-filtering" title="Permanent link">&para;</a></h4>
 <p>Filter rows based on column values.</p>
 <table>
@@ -2086,10 +2120,10 @@ as-is.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">reindex</span><span class="p">:</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">column</span><span class="p">:</span><span class="w"> </span><span class="nv">C</span><span class="p p-Indicator">,</span><span class="nt"> comparison</span><span class="p">:</span><span class="w"> </span><span class="nv">lt</span><span class="p p-Indicator">,</span><span class="nt"> comparator</span><span class="p">:</span><span class="w"> </span><span class="nv">0.05</span><span class="p p-Indicator">}</span><span class="w">  </span><span class="c1"># Keep rows where column C &lt; 0.05</span>
-</code></pre></div></p>
+</code></pre></div>
 <h3 id="statement-triple-definition">Statement (Triple Definition)<a class="headerlink" href="#statement-triple-definition" title="Permanent link">&para;</a></h3>
 <p>Defines subject-predicate-object relationships.</p>
 <table>
@@ -2134,7 +2168,7 @@ as-is.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">subject</span><span class="p">:</span>
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
@@ -2147,8 +2181,8 @@ as-is.</p>
 <a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">  </span><span class="nt">category_override</span><span class="p">:</span>
 <a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">    </span><span class="nt">Disease</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EntityToDiseaseAssociation</span>
 <a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">    </span><span class="nt">PhenotypicFeature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">EntityToPhenotypicFeatureAssociation</span>
-</code></pre></div></p>
-<p><strong>Example:</strong>
+</code></pre></div>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">statement</span><span class="p">:</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">subject</span><span class="p">:</span>
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
@@ -2159,7 +2193,7 @@ as-is.</p>
 <a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
 <a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">B</span>
 <a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">    </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Disease</span><span class="p p-Indicator">]</span>
-</code></pre></div></p>
+</code></pre></div>
 <h3 id="nodeencoding">NodeEncoding<a class="headerlink" href="#nodeencoding" title="Permanent link">&para;</a></h3>
 <p>Defines how to extract and resolve entities.</p>
 <table>
@@ -2313,10 +2347,12 @@ as-is.</p>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
 <a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">taxon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9606</span><span class="w">  </span><span class="c1"># Only human genes (Homo sapiens)</span>
 </code></pre></div>
-<p>Common taxon IDs:
-- <code>9606</code> - Homo sapiens (human)
-- <code>10090</code> - Mus musculus (mouse)
-- <code>7227</code> - Drosophila melanogaster (fruit fly)</p>
+<p>Common taxon IDs:</p>
+<ul>
+<li><code>9606</code> - Homo sapiens (human)</li>
+<li><code>10090</code> - Mus musculus (mouse)</li>
+<li><code>7227</code> - Drosophila melanogaster (fruit fly)</li>
+</ul>
 <h4 id="category-prioritization">Category Prioritization<a class="headerlink" href="#category-prioritization" title="Permanent link">&para;</a></h4>
 <p><strong><code>prioritize: list[category]</code></strong> - Prefer specific Biolink categories</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nt">subject</span><span class="p">:</span>
@@ -2373,14 +2409,16 @@ as-is.</p>
 <p>Example: with <code>method: column</code>, <code>encoding: A</code>, <code>remove: ["^NA "]</code> over a cell <code>"NA BRCA1"</code>, <code>original_subject</code> is <code>"NA BRCA1"</code> while <code>subject_pre_resolution</code> is <code>"BRCA1"</code>. Annotations never emit either column.</p>
 <h4 id="null-handling">Null Handling<a class="headerlink" href="#null-handling" title="Permanent link">&para;</a></h4>
 <p><strong><code>fill: string</code></strong> - Fill null values using a strategy</p>
-<p>Available strategies:
-- <code>"forward"</code> - Fill nulls with previous non-null value
-- <code>"backward"</code> - Fill nulls with next non-null value
-- <code>"min"</code> - Fill with column minimum
-- <code>"max"</code> - Fill with column maximum
-- <code>"mean"</code> - Fill with column mean
-- <code>"zero"</code> - Fill with 0
-- <code>"one"</code> - Fill with 1</p>
+<p>Available strategies:</p>
+<ul>
+<li><code>"forward"</code> - Fill nulls with previous non-null value</li>
+<li><code>"backward"</code> - Fill nulls with next non-null value</li>
+<li><code>"min"</code> - Fill with column minimum</li>
+<li><code>"max"</code> - Fill with column maximum</li>
+<li><code>"mean"</code> - Fill with column mean</li>
+<li><code>"zero"</code> - Fill with 0</li>
+<li><code>"one"</code> - Fill with 1</li>
+</ul>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">subject</span><span class="p">:</span>
 <a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
 <a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
@@ -2440,10 +2478,10 @@ still emitted on resolved nodes.</p>
 </table>
 <p>A qualifier inherits the full NodeEncoding surface, so it accepts the resolution filters <code>exclude_prefixes</code> and <code>exclude_regex</code> with the same matching rules subject/object encodings use: they filter the resolved CURIEs of the qualifiers that go through entity resolution (CURIE-ranged qualifiers; enum-ranged ones pass through verbatim). What differs is the consequence when filtering removes every candidate. A strict qualifier (<code>nullable: false</code>, the default) drops the row like an unresolved subject/object, while a <code>nullable: true</code> qualifier keeps the edge and omits the qualifier key for that row. See <a href="#resolution-filters">Resolution Filters</a>.</p>
 <p><strong>Enum-ranged qualifiers are validated at build time.</strong> Some qualifiers (e.g. <code>object_direction_qualifier</code>, <code>subject_part_qualifier</code>, <code>association_basis_qualifier</code>) have a closed Biolink vocabulary instead of a CURIE range. Their values pass through unresolved, and the build audits every non-null value against the vocabulary after the column's full encoding chain: a <code>method: column</code> cell holding an off-vocabulary token, or a <code>method: value</code> literal mutated into one by <code>fill</code>/<code>regex</code>/<code>prefix</code>/<code>suffix</code>, fails the build with <code>qualifier-vocabulary-violation</code>, naming the offending and permitted values. Matching is exact (<code>increased</code>, not <code>Increased</code>); null and blank cells are exempt (they are stripped from the output), so <code>nullable: true</code> qualifiers keep working unchanged.</p>
-<p><strong>Example: required qualifier (dense column, default)</strong>
+<h4 id="example-required-qualifier-dense-column-default">Example: required qualifier (dense column, default)<a class="headerlink" href="#example-required-qualifier-dense-column-default" title="Permanent link">&para;</a></h4>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="nt">qualifiers</span><span class="p">:</span>
 <a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">qualifier</span><span class="p">:</span><span class="w"> </span><span class="nv">anatomical_context_qualifier</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">value</span><span class="p p-Indicator">,</span><span class="nt"> encoding</span><span class="p">:</span><span class="w"> </span><span class="nv">UBERON</span><span class="p p-Indicator">:</span><span class="nv">0000061</span><span class="p p-Indicator">}</span>
-</code></pre></div></p>
+</code></pre></div>
 <p><strong>Example: optional qualifier (sparse column, <code>nullable: true</code>)</strong></p>
 <p>A qualifier is a node encoding resolved through the fullmap alongside subject/object,
 so by default a blank or unresolved qualifier cell drops the whole edge. That is the
@@ -2499,13 +2537,13 @@ them (the null value is stripped from the edge):</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="nt">provenance</span><span class="p">:</span>
 <a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="w">  </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PMC</span>
 <a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span><span class="nt">publication</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;PMC11708054&quot;</span>
 <a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="w">  </span><span class="nt">knowledge_level</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">statistical_association</span>
 <a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a><span class="w">  </span><span class="nt">agent_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data_analysis_pipeline</span>
-</code></pre></div></p>
+</code></pre></div>
 <blockquote>
 <p><strong>Default provenance trio.</strong> When omitted, <code>repo</code> / <code>knowledge_level</code> / <code>agent_type</code> default to <code>PMC</code> / <code>statistical_association</code> / <code>data_analysis_pipeline</code>, so every produced edge is asserted as a <em>statistical association</em> generated by an automated <em>data analysis pipeline</em> under the PubMed Central namespace. That is a sensible default for GWAS/omics tables mined from a pipeline, but it is a claim about your data's semantics: if your rows are manually curated assertions, predictions, or observations, override <code>knowledge_level</code> and <code>agent_type</code> (and <code>repo</code> / <code>publication</code>) so the emitted Biolink KL/AT provenance is accurate.</p>
 </blockquote>
@@ -2661,7 +2699,7 @@ them (the null value is stripped from the edge):</p>
 </tbody>
 </table>
 <p>Multivalued Biolink slots such as <code>has_evidence</code> or <code>regulatory_approvals</code>, whose consumers iterate the value, must emit a real JSON array rather than a scalar. <a href="#split_by"><code>split_by</code></a> is the multivalued encoding: point it at a column whose cells join multiple values, set it to the separator the cells actually use, and each cell's delimited text splits into a per-row array. A single-value column needs no <code>split_by</code>; the scalar is wrapped into a one-element array.</p>
-<p><strong>Example:</strong>
+<p><strong>Example:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="nt">annotations</span><span class="p">:</span>
 <a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">annotation</span><span class="p">:</span><span class="w"> </span><span class="nv">p_value</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">column</span><span class="p p-Indicator">,</span><span class="nt"> encoding</span><span class="p">:</span><span class="w"> </span><span class="nv">C</span><span class="p p-Indicator">}</span><span class="w">                 </span><span class="c1"># Read from column C</span>
 <a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">annotation</span><span class="p">:</span><span class="w"> </span><span class="nv">adjusted_p_value</span><span class="p p-Indicator">,</span><span class="nt"> method</span><span class="p">:</span><span class="w"> </span><span class="nv">column</span><span class="p p-Indicator">,</span><span class="nt"> encoding</span><span class="p">:</span><span class="w"> </span><span class="nv">D</span><span class="p p-Indicator">}</span><span class="w">        </span><span class="c1"># A real Association slot, emitted on the edge</span>
@@ -2673,7 +2711,7 @@ them (the null value is stripped from the edge):</p>
 <a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">annotation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">log2fc_relative_to_vehicle_control</span>
 <a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a><span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">value</span>
 <a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a><span class="w">    </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Values</span><span class="nv"> </span><span class="s">are</span><span class="nv"> </span><span class="s">log2</span><span class="nv"> </span><span class="s">fold-change</span><span class="nv"> </span><span class="s">relative</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">vehicle</span><span class="nv"> </span><span class="s">control;</span><span class="nv"> </span><span class="s">n=3</span><span class="nv"> </span><span class="s">biological</span><span class="nv"> </span><span class="s">replicates</span><span class="nv"> </span><span class="s">per</span><span class="nv"> </span><span class="s">arm&quot;</span>
-</code></pre></div></p>
+</code></pre></div>
 <h4 id="allow-list-and-auto-folding">Allow-list and auto-folding<a class="headerlink" href="#allow-list-and-auto-folding" title="Permanent link">&para;</a></h4>
 <p>Annotation names fall into three groups at build time:</p>
 <ul>

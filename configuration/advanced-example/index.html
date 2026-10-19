@@ -1312,7 +1312,7 @@ whole table or <code>method: column</code> to pull per-row notes from the source
   headerless source (organism names, Spearman rho, p-value).</li>
 <li><strong>Regex pipeline</strong>: the subject runs three substitutions in order: strip <code>.*g__</code> so
   <code>d__Bacteria;p__Firmicutes;g__Lactobacillus</code> becomes <code>Lactobacillus</code>, replace <code>;s__</code> with a
-  space so <code>Lactobacillus;s__rhamnosus</code> becomes <code>Lactobacillus rhamnosus</code>, and expand <code>sp</code> to <code>sp.</code>.</li>
+  space so <code>Lactobacillus;s__rhamnosus</code> becomes <code>Lactobacillus rhamnosus</code>, and expand <code>sp</code> to <code>"sp. "</code> (trailing space matters).</li>
 <li><strong>Taxonomic filtering</strong>: <code>prioritize: [OrganismTaxon]</code> + <code>avoid: [Gene]</code> stop "Lactobacillus"
   resolving to a similarly-named gene.</li>
 <li><strong>Mixed annotations</strong>: <code>method: value</code> for constants (same every row), <code>method: column</code> for
@@ -1330,10 +1330,10 @@ transformations as a chain of simple substitutions, or capture leftover context 
 <code>miscellaneous_notes</code> annotation. See <a href="../table/#text-transformations">Text Transformations</a>.</p>
 </details>
 <h2 id="output-example">Output Example<a class="headerlink" href="#output-example" title="Permanent link">&para;</a></h2>
-<p><strong>Nodes:</strong>
+<p><strong>Nodes:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;NCBITaxon:47715&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;Lactobacillus rhamnosus&quot;</span><span class="p">,</span><span class="nt">&quot;category&quot;</span><span class="p">:[</span><span class="s2">&quot;biolink:OrganismTaxon&quot;</span><span class="p">]}</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;CHEBI:41774&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;13C-tamoxifen&quot;</span><span class="p">,</span><span class="nt">&quot;category&quot;</span><span class="p">:[</span><span class="s2">&quot;biolink:ChemicalEntity&quot;</span><span class="p">]}</span>
-</code></pre></div></p>
+</code></pre></div>
 <p><strong>Edges:</strong> Allow-listed annotation columns (<code>p_value</code>, <code>effect_size</code>, <code>effect_type</code>) stay as
 top-level edge fields (<code>p_value</code> in controlled scientific-notation string form, <code>effect_size</code> as a real
 JSON number since biolink-model 4.4.4). Study metadata (<code>study_size</code>, here declared as a constant)

@@ -1508,16 +1508,20 @@
 <h3 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h3>
 <p><strong><code>lf: pl.LazyFrame</code></strong></p>
 <p>Input LazyFrame containing entity resolution results.</p>
-<p>Expected columns:
-- <code>{col}_pre_resolution</code> - Original (pre-resolution) text string
-- <code>{col}</code> - Resolved CURIE
-- <code>{col}_name</code> - Preferred entity name</p>
+<p>Expected columns:</p>
+<ul>
+<li><code>{col}_pre_resolution</code> - Original (pre-resolution) text string</li>
+<li><code>{col}</code> - Resolved CURIE</li>
+<li><code>{col}_name</code> - Preferred entity name</li>
+</ul>
 <p><strong><code>col: str</code></strong></p>
 <p>Base column name for entity resolution.</p>
-<p>Example: If <code>col="subject"</code>, looks for:
-- <code>"subject_pre_resolution"</code>
-- <code>"subject"</code>
-- <code>"subject_name"</code></p>
+<p>Example: If <code>col="subject"</code>, looks for:</p>
+<ul>
+<li><code>"subject_pre_resolution"</code></li>
+<li><code>"subject"</code></li>
+<li><code>"subject_name"</code></li>
+</ul>
 <p><strong><code>out: str</code> (default: <code>"passed"</code>)</strong></p>
 <p>Name of the boolean column indicating validation status (used internally).</p>
 <p>Rows with <code>out=True</code> passed QC, <code>out=False</code> failed.</p>
@@ -1545,10 +1549,12 @@
 </ul>
 <h4 id="stage-2-fuzzy-matching">Stage 2: Fuzzy Matching<a class="headerlink" href="#stage-2-fuzzy-matching" title="Permanent link">&para;</a></h4>
 <p><strong>Medium confidence using RapidFuzz (batched via <code>rapidfuzz.process.cpdist</code>).</strong></p>
-<p>Three scorers run over each unique pending pair, batched through <code>rapidfuzz.process.cpdist</code>:
-1. <strong>Ratio:</strong> <code>fuzz.ratio</code>, overall string similarity
-2. <strong>Partial token sort ratio:</strong> <code>fuzz.partial_token_sort_ratio</code>, subsequence matching
-3. <strong>Token set ratio:</strong> <code>fuzz.token_set_ratio</code>, duplicate-tolerant token overlap</p>
+<p>Three scorers run over each unique pending pair, batched through <code>rapidfuzz.process.cpdist</code>:</p>
+<ol>
+<li><strong>Ratio:</strong> <code>fuzz.ratio</code>, overall string similarity</li>
+<li><strong>Partial token sort ratio:</strong> <code>fuzz.partial_token_sort_ratio</code>, subsequence matching</li>
+<li><strong>Token set ratio:</strong> <code>fuzz.token_set_ratio</code>, duplicate-tolerant token overlap</li>
+</ol>
 <p>A pair passes if any scorer clears its threshold. <code>fuzz.ratio</code> is compared against
 <code>fuzzy_ratio_threshold</code> (default 70.0); the two token scorers share <code>fuzzy_partial_threshold</code>
 (default 80.0). Both thresholds are graph-configurable through <code>qc_fuzzy_ratio_threshold</code> and

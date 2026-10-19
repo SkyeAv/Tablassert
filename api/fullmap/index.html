@@ -1539,9 +1539,11 @@ dropped as well.</p>
 <p>Controls category-frequency tie-breaking when multiple matches exist for a term. When <code>True</code>, the query result adds a category frequency score and prefers more frequent category hits; distinct CURIEs that remain tied are all returned.</p>
 <p><strong><code>tag: str</code> (default: <code>"_two"</code>)</strong></p>
 <p>Suffix appended to <code>col</code> to locate the <code>level_two</code> output column.</p>
-<p><code>resolve()</code> expects the LazyFrame to already have two NLP columns applied upstream:
-- <code>col</code>: the canonical <code>level_one</code> output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)
-- <code>col + tag</code>: the <code>level_two</code> output (non-word characters removed via <code>\W+</code>)</p>
+<p><code>resolve()</code> expects the LazyFrame to already have two NLP columns applied upstream:</p>
+<ul>
+<li><code>col</code>: the canonical <code>level_one</code> output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)</li>
+<li><code>col + tag</code>: the <code>level_two</code> output (non-word characters removed via <code>\W+</code>)</li>
+</ul>
 <p>The default <code>"_two"</code> matches <code>level_two</code>'s default tag.</p>
 <h3 id="return-value">Return Value<a class="headerlink" href="#return-value" title="Permanent link">&para;</a></h3>
 <p>Returns a Polars LazyFrame with these columns added:</p>
@@ -1675,17 +1677,21 @@ dropped as well.</p>
 </code></pre></div>
 <h3 id="nlp-processing-levels">NLP Processing Levels<a class="headerlink" href="#nlp-processing-levels" title="Permanent link">&para;</a></h3>
 <p><code>resolve()</code> requires that <code>level_one</code> and <code>level_two</code> have been applied to the LazyFrame before calling it. Level one is the canonical key used by the fullmap build and query paths:</p>
-<p><strong><code>level_one</code> output</strong> (column: <code>col</code>):
-- Cleans surrounding matching quotes and whitespace, then applies Unicode lowercase.
-- Splits on whitespace, stems only tokens made entirely of ASCII letters with the English Porter2 stemmer, and passes digit-bearing, punctuation-bearing, and non-ASCII tokens through unchanged after lowercasing.
-- Removes duplicate tokens, sorts the remaining tokens by their UTF-8 byte values, and joins them with one ASCII space.
-- Preserves nulls in Python LazyFrame columns; empty and whitespace-only values become the empty string.
-- Is queried first; preferred-name ranking compares these normalized forms, so a fullmap database built with different level-one keys cannot be reused.</p>
+<p><strong><code>level_one</code> output</strong> (column: <code>col</code>):</p>
+<ul>
+<li>Cleans surrounding matching quotes and whitespace, then applies Unicode lowercase.</li>
+<li>Splits on whitespace, stems only tokens made entirely of ASCII letters with the English Porter2 stemmer, and passes digit-bearing, punctuation-bearing, and non-ASCII tokens through unchanged after lowercasing.</li>
+<li>Removes duplicate tokens, sorts the remaining tokens by their UTF-8 byte values, and joins them with one ASCII space.</li>
+<li>Preserves nulls in Python LazyFrame columns; empty and whitespace-only values become the empty string.</li>
+<li>Is queried first; preferred-name ranking compares these normalized forms, so a fullmap database built with different level-one keys cannot be reused.</li>
+</ul>
 <p>Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.</p>
-<p><strong><code>level_two</code> output</strong> (column: <code>col + "_two"</code>):
-- All non-word characters (<code>\W+</code>) removed from the <code>level_one</code> result
-- Used as fallback when <code>level_one</code> produces no match
-- Preferred for disease names and free text</p>
+<p><strong><code>level_two</code> output</strong> (column: <code>col + "_two"</code>):</p>
+<ul>
+<li>All non-word characters (<code>\W+</code>) removed from the <code>level_one</code> result</li>
+<li>Used as fallback when <code>level_one</code> produces no match</li>
+<li>Preferred for disease names and free text</li>
+</ul>
 <p>Rows without a valid CURIE are filtered from the returned frame.</p>
 <h3 id="provenance-tracking">Provenance Tracking<a class="headerlink" href="#provenance-tracking" title="Permanent link">&para;</a></h3>
 <p>Every resolved entity carries its source database (<code>SOURCE_NAME</code>), source version (<code>SOURCE_VERSION</code>, the

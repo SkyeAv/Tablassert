@@ -1352,12 +1352,14 @@ below matches it exactly:</p>
 <p>The shipped fixture reads the CSV from <code>docs/examples/tutorial-data.csv</code> (repo-root-relative). If you
 saved your own <code>tutorial-data.csv</code> in Step 1, set <code>source.local: ./tutorial-data.csv</code> instead.</p>
 </div>
-<p><strong>What this does:</strong>
-- <strong>source</strong>: Reads the CSV, skipping the header row (<code>row_slice</code> starts at 1)
-- <strong>statement</strong>: Creates edges where genes (subject) are <code>associated_with</code> diseases (object)
-- <strong>subject/object</strong>: Uses <code>column</code> method to read from columns A (gene symbol) and B (disease name)
-- <strong>prioritize</strong>: Tells entity resolution to prefer Gene/Disease categories
-- <strong>annotations</strong>: Adds p-value (column C) as an edge attribute and study size (column D) as metadata on the inlined supporting study</p>
+<p><strong>What this does:</strong></p>
+<ul>
+<li><strong>source</strong>: Reads the CSV, skipping the header row (<code>row_slice</code> starts at 1)</li>
+<li><strong>statement</strong>: Creates edges where genes (subject) are <code>associated_with</code> diseases (object)</li>
+<li><strong>subject/object</strong>: Uses <code>column</code> method to read from columns A (gene symbol) and B (disease name)</li>
+<li><strong>prioritize</strong>: Tells entity resolution to prefer Gene/Disease categories</li>
+<li><strong>annotations</strong>: Adds p-value (column C) as an edge attribute and study size (column D) as metadata on the inlined supporting study</li>
+</ul>
 <h2 id="step-3-create-graph-configuration">Step 3: Create Graph Configuration<a class="headerlink" href="#step-3-create-graph-configuration" title="Permanent link">&para;</a></h2>
 <p>Create <code>tutorial-graph.yaml</code>. The shipped, test-validated version lives at
 <code>docs/examples/tutorial-graph.yaml</code>; the listing below matches it exactly:</p>
@@ -1391,46 +1393,50 @@ saved your own <code>tutorial-data.csv</code> in Step 1, set <code>source.local:
 <a href="#prerequisites">Prerequisites</a> makes <code>./fullmap</code> correct), and adjust <code>tables</code> if your table
 config lives elsewhere. The <code>rig:</code> section is required; see the
 <a href="../configuration/graph/">Graph configuration reference</a> for every field.</p>
-<p><strong>What this does:</strong>
-- <strong>name/version</strong>: Output files will be <code>TUTORIAL_KG_1.0.0.nodes.ndjson</code>, <code>TUTORIAL_KG_1.0.0.edges.ndjson</code>, and <code>TUTORIAL_KG_1.0.0.RIG.yaml</code> (written into <code>rig.artifact_base_path</code>, here <code>./tutorial-output/</code>)
-- <strong>rig</strong>: Resource Ingest Guide metadata (source info, utility/scope, provenance, artifact bases) emitted as the <code>.RIG.yaml</code>
-- <strong>tables</strong>: List of table configurations to process
-- <strong>fullmap</strong>: Path to the fullmap redb file (or base directory) for entity resolution</p>
+<p><strong>What this does:</strong></p>
+<ul>
+<li><strong>name/version</strong>: Output files will be <code>TUTORIAL_KG_1.0.0.nodes.ndjson</code>, <code>TUTORIAL_KG_1.0.0.edges.ndjson</code>, and <code>TUTORIAL_KG_1.0.0.RIG.yaml</code> (written into <code>rig.artifact_base_path</code>, here <code>./tutorial-output/</code>)</li>
+<li><strong>rig</strong>: Resource Ingest Guide metadata (source info, utility/scope, provenance, artifact bases) emitted as the <code>.RIG.yaml</code></li>
+<li><strong>tables</strong>: List of table configurations to process</li>
+<li><strong>fullmap</strong>: Path to the fullmap redb file (or base directory) for entity resolution</li>
+</ul>
 <h2 id="step-4-run-tablassert">Step 4: Run Tablassert<a class="headerlink" href="#step-4-run-tablassert" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>tutorial-graph.yaml
 </code></pre></div>
 <p>To also run the quality-control audit stage, add <code>--qc</code>; add <code>--log</code> for verbose per-section logging when the <code>[log]</code> extra is installed:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>tablassert<span class="w"> </span>build-kg<span class="w"> </span>tutorial-graph.yaml<span class="w"> </span>--qc<span class="w"> </span>--log
 </code></pre></div>
-<p><strong>What happens:</strong>
-1. Loads graph configuration
-2. For each table config:
-   - Reads the source file from disk
-   - Applies row slicing
-   - Resolves entities (genes and diseases)
-   - Validates with the QC pipeline when <code>--qc</code> is passed (exact match, fuzzy match, abbreviation expansion, then SapBERT)
-   - Creates subgraph parquet file
-3. Aggregates all subgraphs
-4. Exports NDJSON files and the RIG</p>
+<p><strong>What happens:</strong></p>
+<ol>
+<li>Loads graph configuration</li>
+<li>For each table config:</li>
+<li>Reads the source file from disk</li>
+<li>Applies row slicing</li>
+<li>Resolves entities (genes and diseases)</li>
+<li>Validates with the QC pipeline when <code>--qc</code> is passed (exact match, fuzzy match, abbreviation expansion, then SapBERT)</li>
+<li>Creates subgraph parquet file</li>
+<li>Aggregates all subgraphs</li>
+<li>Exports NDJSON files and the RIG</li>
+</ol>
 <h2 id="step-5-examine-output">Step 5: Examine Output<a class="headerlink" href="#step-5-examine-output" title="Permanent link">&para;</a></h2>
 <p><strong>Nodes file:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>head<span class="w"> </span>-n<span class="w"> </span><span class="m">3</span><span class="w"> </span>tutorial-output/TUTORIAL_KG_1.0.0.nodes.ndjson
 </code></pre></div>
-<p>Example output:
+<p>Example output:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;HGNC:11998&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;TP53&quot;</span><span class="p">,</span><span class="nt">&quot;category&quot;</span><span class="p">:[</span><span class="s2">&quot;biolink:Gene&quot;</span><span class="p">],</span><span class="nt">&quot;in_taxon&quot;</span><span class="p">:[</span><span class="s2">&quot;NCBITaxon:9606&quot;</span><span class="p">],</span><span class="nt">&quot;provided_by&quot;</span><span class="p">:[</span><span class="s2">&quot;infores:tutorial-kg&quot;</span><span class="p">]}</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;MONDO:0008903&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;lung cancer&quot;</span><span class="p">,</span><span class="nt">&quot;category&quot;</span><span class="p">:[</span><span class="s2">&quot;biolink:Disease&quot;</span><span class="p">],</span><span class="nt">&quot;in_taxon&quot;</span><span class="p">:[</span><span class="s2">&quot;NCBITaxon:9606&quot;</span><span class="p">],</span><span class="nt">&quot;provided_by&quot;</span><span class="p">:[</span><span class="s2">&quot;infores:tutorial-kg&quot;</span><span class="p">]}</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;HGNC:1100&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;BRCA1&quot;</span><span class="p">,</span><span class="nt">&quot;category&quot;</span><span class="p">:[</span><span class="s2">&quot;biolink:Gene&quot;</span><span class="p">],</span><span class="nt">&quot;in_taxon&quot;</span><span class="p">:[</span><span class="s2">&quot;NCBITaxon:9606&quot;</span><span class="p">],</span><span class="nt">&quot;provided_by&quot;</span><span class="p">:[</span><span class="s2">&quot;infores:tutorial-kg&quot;</span><span class="p">]}</span>
-</code></pre></div></p>
+</code></pre></div>
 <p><strong>Edges file:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>head<span class="w"> </span>-n<span class="w"> </span><span class="m">2</span><span class="w"> </span>tutorial-output/TUTORIAL_KG_1.0.0.edges.ndjson
 </code></pre></div>
 <p>Example output (p-values are emitted as controlled scientific-notation strings and the derived
 significance band as a bare enum token; the study size is <code>Study.study_size</code> metadata on the
 inlined supporting study, anchored to the source row by the <code>row:&lt;N&gt;</code> StudyResult; records are
-abridged here, omitting provenance fields such as <code>knowledge_level</code>, <code>agent_type</code>, and <code>sources</code>):
+abridged here, omitting provenance fields such as <code>knowledge_level</code>, <code>agent_type</code>, and <code>sources</code>):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;2cfea591-0f8f-33af-a7df-03da531d3359&quot;</span><span class="p">,</span><span class="nt">&quot;subject&quot;</span><span class="p">:</span><span class="s2">&quot;HGNC:11998&quot;</span><span class="p">,</span><span class="nt">&quot;predicate&quot;</span><span class="p">:</span><span class="s2">&quot;biolink:associated_with&quot;</span><span class="p">,</span><span class="nt">&quot;object&quot;</span><span class="p">:</span><span class="s2">&quot;MONDO:0008903&quot;</span><span class="p">,</span><span class="nt">&quot;p_value&quot;</span><span class="p">:</span><span class="s2">&quot;1.0000e-03&quot;</span><span class="p">,</span><span class="nt">&quot;statistical_significance_qualifier&quot;</span><span class="p">:</span><span class="s2">&quot;very_strongly_significant&quot;</span><span class="p">,</span><span class="nt">&quot;has_supporting_studies&quot;</span><span class="p">:{</span><span class="nt">&quot;PMID:12345678&quot;</span><span class="p">:{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;PMID:12345678&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;tutorial-table.yaml SECTION 1&quot;</span><span class="p">,</span><span class="nt">&quot;study_size&quot;</span><span class="p">:</span><span class="mi">450</span><span class="p">,</span><span class="nt">&quot;has_study_results&quot;</span><span class="p">:[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;row:2&quot;</span><span class="p">}]}},</span><span class="nt">&quot;publications&quot;</span><span class="p">:[</span><span class="s2">&quot;PMID:12345678&quot;</span><span class="p">]}</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="p">{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;7b1c9d02-5e8a-3f3b-9c1d-2a6e8f0b4d7c&quot;</span><span class="p">,</span><span class="nt">&quot;subject&quot;</span><span class="p">:</span><span class="s2">&quot;HGNC:1100&quot;</span><span class="p">,</span><span class="nt">&quot;predicate&quot;</span><span class="p">:</span><span class="s2">&quot;biolink:associated_with&quot;</span><span class="p">,</span><span class="nt">&quot;object&quot;</span><span class="p">:</span><span class="s2">&quot;MONDO:0005041&quot;</span><span class="p">,</span><span class="nt">&quot;p_value&quot;</span><span class="p">:</span><span class="s2">&quot;1.0000e-04&quot;</span><span class="p">,</span><span class="nt">&quot;statistical_significance_qualifier&quot;</span><span class="p">:</span><span class="s2">&quot;very_strongly_significant&quot;</span><span class="p">,</span><span class="nt">&quot;has_supporting_studies&quot;</span><span class="p">:{</span><span class="nt">&quot;PMID:12345678&quot;</span><span class="p">:{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;PMID:12345678&quot;</span><span class="p">,</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="s2">&quot;tutorial-table.yaml SECTION 1&quot;</span><span class="p">,</span><span class="nt">&quot;study_size&quot;</span><span class="p">:</span><span class="mi">1200</span><span class="p">,</span><span class="nt">&quot;has_study_results&quot;</span><span class="p">:[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="s2">&quot;row:3&quot;</span><span class="p">}]}},</span><span class="nt">&quot;publications&quot;</span><span class="p">:[</span><span class="s2">&quot;PMID:12345678&quot;</span><span class="p">]}</span>
-</code></pre></div></p>
+</code></pre></div>
 <p><strong>RIG file:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>cat<span class="w"> </span>tutorial-output/TUTORIAL_KG_1.0.0.RIG.yaml
 </code></pre></div>
