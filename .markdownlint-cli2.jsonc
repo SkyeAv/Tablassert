@@ -6,7 +6,8 @@
 // Scope deliberately includes top-level *.md, docs/, and .github/ templates, and excludes
 // machine-generated/internal trees: .git, node_modules, .venv, site (mkdocs output),
 // target (Rust build), __pycache__, .ralph (agent state), plans/ + PLAN.md (agent-generated
-// planning artifacts), tests/ (fixture data), .tablassert (runtime artifacts).
+// planning artifacts), .paperdraft (local clone of the JOSS paperdraft compiler sources),
+// tests/ (fixture data), .tablassert (runtime artifacts).
 {
   "config": {
     "default": true,
@@ -45,6 +46,7 @@
     ".ralph/**",
     "plans/**",
     "PLAN.md",
+    ".paperdraft/**",
     "tests/**",
     ".tablassert/**"
   ]
