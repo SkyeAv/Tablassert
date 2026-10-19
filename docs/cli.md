@@ -39,6 +39,7 @@ Use this to obtain the embedded `fullmap.redb` entity-resolution database. Every
 command installs is filtered by the built-in **top-100 experimental-taxon allowlist**; there is no
 flag for it. By default it first tries to **download a prebuilt database** published for this
 Tablassert version; `--force` skips that and builds from RENCI BABEL exports instead (download class
+
 + synonym files, then build a single redb).
 
 ```bash
@@ -369,6 +370,6 @@ once a model release drops the requirement.
 
 ## Next Steps
 
-- **[Tutorial](tutorial.md)**: complete example walkthrough
-- **[Configuration Guide](configuration/graph.md)**: YAML configuration reference
-- **[Fullmap](fullmap.md)**: entity-resolution database build and schema
++ **[Tutorial](tutorial.md)**: complete example walkthrough
++ **[Configuration Guide](configuration/graph.md)**: YAML configuration reference
++ **[Fullmap](fullmap.md)**: entity-resolution database build and schema

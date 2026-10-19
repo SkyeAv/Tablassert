@@ -10,6 +10,7 @@ assignees: ""
 <!-- Briefly describe the bug -->
 
 ## Steps to Reproduce
+
 1. <!-- First step -->
 2. <!-- Second step -->
 3. <!-- Third step -->
@@ -24,6 +25,7 @@ assignees: ""
 <!-- What actually happens -->
 
 ## Environment
+
 - OS: <!-- e.g., macOS 14.2 -->
 - Python version: <!-- e.g., 3.11 -->
 - Rust version: <!-- e.g., 1.75 -->

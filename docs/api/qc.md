@@ -35,6 +35,7 @@ def fullmap_audit(
 Input LazyFrame containing entity resolution results.
 
 Expected columns:
+
 - `{col}_pre_resolution` - Original (pre-resolution) text string
 - `{col}` - Resolved CURIE
 - `{col}_name` - Preferred entity name
@@ -44,6 +45,7 @@ Expected columns:
 Base column name for entity resolution.
 
 Example: If `col="subject"`, looks for:
+
 - `"subject_pre_resolution"`
 - `"subject"`
 - `"subject_name"`
@@ -95,6 +97,7 @@ _qc_alias(original, aliases) == preferred_name
 **Medium confidence using RapidFuzz (batched via `rapidfuzz.process.cpdist`).**
 
 Three scorers run over each unique pending pair, batched through `rapidfuzz.process.cpdist`:
+
 1. **Ratio:** `fuzz.ratio`, overall string similarity
 2. **Partial token sort ratio:** `fuzz.partial_token_sort_ratio`, subsequence matching
 3. **Token set ratio:** `fuzz.token_set_ratio`, duplicate-tolerant token overlap
@@ -182,7 +185,7 @@ validated = fullmap_audit(
 The cascade runs on unique `(original, preferred)` pairs, deduplicated before scoring, so the counts
 below are pairs rather than source rows. Illustrative counts:
 
-```
+```text
 Input:  1000 unique pairs with entity mappings
 
 Stage 1 (Exact): 700 pass, 300 pending
@@ -196,7 +199,7 @@ Output: 990 pairs pass (700 + 250 + 10 + 30)
 ### Confidence Levels
 
 | Stage | Method | Confidence | Use Case |
-|-------|--------|-----------|----------|
+| ------- | -------- | ----------- | ---------- |
 | 1 | Exact match / rule-based | Highest | Standardized IDs, acronyms, CURIE-like inputs |
 | 2 | Fuzzy | Medium | Typos, word reordering |
 | 3 | Abbreviation expansion | High | Abbreviation / full-name pairs |

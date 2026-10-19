@@ -43,6 +43,7 @@ sections:
 Sections inherit from template and override specific fields:
 
 **Dictionaries:** Recursive merge, section overrides template keys
+
 ```yaml
 template:
   statement:
@@ -55,6 +56,7 @@ sections:
 ```
 
 **Lists:** Concatenation (extends)
+
 ```yaml
 template:
   statement:
@@ -68,6 +70,7 @@ sections:
 ```
 
 **Scalars:** Section replaces template
+
 ```yaml
 template:
   statement:
@@ -87,7 +90,7 @@ Defines the data file location and format.
 #### Excel Source
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `kind` | String | No | Source kind. Model default is `"excel"`, but specify it explicitly in configs. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
@@ -97,6 +100,7 @@ Defines the data file location and format.
 | `reindex` | List[Reindex] | No | Conditional row filtering |
 
 **Example:**
+
 ```yaml
 source:
   kind: excel
@@ -112,7 +116,7 @@ source:
 #### Text Source (CSV/TSV)
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `kind` | String | No | Source kind. Model default is `"text"`, but specify it explicitly in configs. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
@@ -122,6 +126,7 @@ source:
 | `reindex` | List[Reindex] | No | Conditional filtering |
 
 **Example:**
+
 ```yaml
 source:
   kind: text
@@ -143,7 +148,7 @@ and the file's own header names are never referenced from configs. Column types 
 as-is.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `kind` | String | No | Source kind. Model default is `"parquet"`, but specify it explicitly in configs. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
@@ -152,6 +157,7 @@ as-is.
 | `reindex` | List[Reindex] | No | Conditional row filtering |
 
 **Example:**
+
 ```yaml
 source:
   kind: parquet
@@ -166,12 +172,13 @@ source:
 Filter rows based on column values.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `column` | String | Yes | Source column letters to evaluate; constrained to `^[A-Z]{1,3}$` (`A`-`ZZZ`). |
 | `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`. |
 | `comparator` | String\|Int\|Float | Yes | Value to compare against. Must be a string for `"eq"`/`"ne"`, or a number for `"lt"`/`"le"`/`"gt"`/`"ge"`. |
 
 **Example:**
+
 ```yaml
 reindex:
   - {column: C, comparison: lt, comparator: 0.05}  # Keep rows where column C < 0.05
@@ -182,7 +189,7 @@ reindex:
 Defines subject-predicate-object relationships.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `subject` | NodeEncoding | Yes | Subject entity configuration |
 | `predicate` | String | No | Biolink predicate. Defaults to `"related_to"`. Three DAKP prevention predicates are deliberate local extensions ahead of Biolink support (see `biolink.PREDICATE_OVERRIDES`): `prevents`, `applied_to_prevent`, `contraindicated_in_the_prevention_of`. |
 | `object` | NodeEncoding | Yes | Object entity configuration |
@@ -190,6 +197,7 @@ Defines subject-predicate-object relationships.
 | `category_override` | Map[Categories, EdgeCategories] | No | Pin the association class per resolved object category (bare names, no `biolink:` prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose `predicate` slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. `Disease` and `PhenotypicFeature` both derive to `ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`, but only `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` declare slots like `regulatory_approvals` and `number_of_cases`. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on the disease side (`population_context_qualifier` needed a grant only until biolink-model 4.4.6 declared it natively on both pinned classes). Deliberately ungranted: `species_context_qualifier` (disabled, never emittable) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable: attached to no class, so a grant could never validate). |
 
 **Example:**
+
 ```yaml
 statement:
   subject:
@@ -206,6 +214,7 @@ statement:
 ```
 
 **Example:**
+
 ```yaml
 statement:
   subject:
@@ -224,7 +233,7 @@ statement:
 Defines how to extract and resolve entities.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `method` | String | No | `"value"` (literal) or `"column"` (source column letters). Defaults to `"value"`. |
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
 | `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human); defaults to `9606` (Homo sapiens), set null to disable |
@@ -285,7 +294,7 @@ Single-value cells need no `split_by` at all: `prune_to_class` wraps a scalar bo
 **`split_by` and `explode_by` are the same split, with different destinations.** Both read a delimited cell through one shared primitive, with items trimmed, blanks dropped (so `"a;b;"` and `"a;;b"` yield two items, not three), and a null cell left null; they then differ only in what they do with the items:
 
 | | Destination | Use for |
-|---|---|---|
+| --- | --- | --- |
 | `explode_by` | one **row** per item | node encodings: each item is its own entity, producing its own edge |
 | `split_by` | one **array** on the row | annotations: the items are one multivalued slot on a single edge |
 
@@ -303,6 +312,7 @@ subject:
 ```
 
 Common taxon IDs:
+
 - `9606` - Homo sapiens (human)
 - `10090` - Mus musculus (mouse)
 - `7227` - Drosophila melanogaster (fruit fly)
@@ -393,6 +403,7 @@ Example: with `method: column`, `encoding: A`, `remove: ["^NA "]` over a cell `"
 **`fill: string`** - Fill null values using a strategy
 
 Available strategies:
+
 - `"forward"` - Fill nulls with previous non-null value
 - `"backward"` - Fill nulls with next non-null value
 - `"min"` - Fill with column minimum
@@ -443,7 +454,7 @@ node taxon metadata nor accepted as a qualifier or annotation. Taxon metadata is
 still emitted on resolved nodes.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `qualifier` | String | Yes | Biolink qualifier from the `Qualifiers` enum (e.g., `"anatomical_context_qualifier"`). Each qualifier key may be declared at most once per statement (`qualifier-duplicated`). |
 | `nullable` | Boolean | No | Default `false`. When `true`, a blank or unresolvable `method: column` cell **keeps the edge** and omits the qualifier for that row; when `false` (the default) such a row is dropped, exactly like an unresolved subject/object. Only valid with `method: column`; a literal qualifier can never be null (`qualifier-nullable-literal`). |
 | (inherits NodeEncoding) | | | All NodeEncoding fields available |
@@ -452,7 +463,8 @@ A qualifier inherits the full NodeEncoding surface, so it accepts the resolution
 
 **Enum-ranged qualifiers are validated at build time.** Some qualifiers (e.g. `object_direction_qualifier`, `subject_part_qualifier`, `association_basis_qualifier`) have a closed Biolink vocabulary instead of a CURIE range. Their values pass through unresolved, and the build audits every non-null value against the vocabulary after the column's full encoding chain: a `method: column` cell holding an off-vocabulary token, or a `method: value` literal mutated into one by `fill`/`regex`/`prefix`/`suffix`, fails the build with `qualifier-vocabulary-violation`, naming the offending and permitted values. Matching is exact (`increased`, not `Increased`); null and blank cells are exempt (they are stripped from the output), so `nullable: true` qualifiers keep working unchanged.
 
-**Example: required qualifier (dense column, default)**
+#### Example: required qualifier (dense column, default)
+
 ```yaml
 qualifiers:
   - {qualifier: anatomical_context_qualifier, method: value, encoding: UBERON:0000061}
@@ -478,7 +490,7 @@ qualifiers:
 Required metadata about data source.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `repo` | String | No | Repository. Defaults to `"PMC"`; allowed values are `"PMC"`, `"PMID"`. |
 | `publication` | String | Yes, unless `override` is set | Repository-local identifier emitted as a CURIE. For `repo: PMC` the value **must** start with `PMC` followed by digits (e.g., `"PMC11708054"`, `"PMC123"`) and is emitted under the `PMCID:` namespace as `PMCID:PMC...`; for `repo: PMID` it is emitted as `PMID:<publication>` (e.g., `"11708054"` becomes `PMID:11708054`). |
 | `knowledge_level` | String | No | Biolink KL/AT knowledge level of produced edges. Defaults to `"statistical_association"`; allowed values are the `KnowledgeLevels` enum (e.g., `knowledge_assertion`, `logical_entailment`, `prediction`, `statistical_association`, `text_co_occurrence`, `observation`, `not_provided`). |
@@ -486,6 +498,7 @@ Required metadata about data source.
 | `override` | Object | No | Manual provenance for non-PMC/PMID sources. When set, it replaces repo/publication-derived provenance and `publication` must be omitted. |
 
 **Example:**
+
 ```yaml
 provenance:
   repo: PMC
@@ -514,7 +527,7 @@ provenance:
 Override fields:
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `sources` | List[Object] | No | Explicit retrieval-`sources` entry templates replacing the derived primary/upstream emission entirely. Mutually exclusive with `upstream_resource_ids` and `upstream_source_record_urls` (the template subsumes both). See [Explicit sources template](#explicit-sources-template). |
 | `upstream_resource_ids` | List[String] | No | Manual upstream source infores CURIEs replacing the repo-derived `PMC`/`PMID` source map, the sanctioned place for manual infores. Each entry must start with `infores:`. |
 | `upstream_source_record_urls` | Map[String, List[URL]] | No | Per-upstream source record URLs keyed by infores CURIE; every key must appear in `upstream_resource_ids`. When set, the section's `source.url` values serve the RIG only and are NOT emitted on the primary `sources` entry; each listed upstream supporting entry carries its own `source_record_urls` instead. |
@@ -546,7 +559,7 @@ provenance:
 Entry fields:
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `resource_id` | String | Yes | Infores CURIE of this entry (its sole identifier on output). Must start with `infores:`, and must be unique within the template. |
 | `resource_role` | String | Yes | One of the Biolink `ResourceRoleEnum` values: `primary_knowledge_source`, `aggregator_knowledge_source`, or `supporting_data_source`. Anything else fails KGX validation downstream, so it is rejected at config time. |
 | `upstream_resource_ids` | List[String] | No | Upstream infores CURIEs carried by this entry; each must start with `infores:`. |
@@ -564,7 +577,7 @@ Validation rules (all reported with error code `override-bad-sources`):
 Optional edge attributes (statistical metadata, notes, etc.).
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `annotation` | String | Yes | Attribute name (e.g., `"p_value"`, `"effect_size"`). Lowercased and trimmed of leading/trailing whitespace at parse time; underscores are preserved (use snake_case). |
 | `split_by` | String | No | Separator splitting each cell of a `method: column` encoding into a real JSON array. See [`split_by`](#split_by). |
 | (inherits Encoding) | | | All Encoding fields available (method, encoding, regex, etc.) |
@@ -572,6 +585,7 @@ Optional edge attributes (statistical metadata, notes, etc.).
 Multivalued Biolink slots such as `has_evidence` or `regulatory_approvals`, whose consumers iterate the value, must emit a real JSON array rather than a scalar. [`split_by`](#split_by) is the multivalued encoding: point it at a column whose cells join multiple values, set it to the separator the cells actually use, and each cell's delimited text splits into a per-row array. A single-value column needs no `split_by`; the scalar is wrapped into a one-element array.
 
 **Example:**
+
 ```yaml
 annotations:
   - {annotation: p_value, method: column, encoding: C}                 # Read from column C
@@ -629,7 +643,7 @@ Before the allow-list sweep runs, tablassert renames statistical columns to thei
 **Losing candidates are dropped, for every target.** A loser is another spelling of the value that already reached the canonical slot, and anything left on the frame would be folded into `supporting_text`, emitting the same measurement twice, once as a typed Biolink slot and once as free text. This has a cost worth knowing: if a table's headers are genuinely *different* statistics that all recognize onto one slot (`beta` beside `odds ratio`, or a two-analysis header set like `p_value_analysis1` / `p_value_analysis2`), **only the winner survives**. Give such columns names the table below does not recognize when every one of them must reach the edge.
 
 | Recognized as | Canonical name | Typical source spellings |
-|---|---|---|
+| --- | --- | --- |
 | P value (raw) | `p_value` | `p value`, `p-value`, `pvalue`, `P`, `gwas p`, `raw_p`, `pvalue1` |
 | Adjusted P value | `adjusted_p_value` | `padj`, `p.adj`, `adj.P.Val`, `adjusted_p_value`, `adj_p_value`, `corrected_p_value`, `p_adjust`, `FDR`, `Bonferroni`, `Holm`, `q value` |
 | Negative-log P value | `p_value` / `adjusted_p_value`, un-logged | `-log10(p)`, `negative log p value`, `neg log10 q value`, `neg-log10-pvalue` |

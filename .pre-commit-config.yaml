@@ -19,6 +19,17 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  # markdownlint-cli2 (Markdown structure rules + custom unicode rule) and html-validate
+  # (HTML inside markdown, ```html fences only) — the whole-repo gates re-run both with the
+  # same pins in the `markdown-lint` job in .github/workflows/ci.yml; keep the pins in sync.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.3
+    hooks:
+      - id: markdownlint-cli2
+        args: [--fix]
+        # File scope comes from the globs/ignores in .markdownlint-cli2.jsonc (same policy as
+        # ruff above: config decides, so new top-level trees cannot escape the gate).
+        pass_filenames: false
   - repo: local
     hooks:
       - id: cargo-fmt
@@ -35,6 +46,21 @@ repos:
         entry: uv lock --check
         language: system
         files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+      # No official pre-commit mirror exists for html-validate, hence a local node hook.
+      # The third-party html-validate-markdown transformer lints ONLY ```html code fences:
+      # html-validate's built-in markdown transformer does not escape "<" inside inline code
+      # spans, so prose like `(?<=...)` or `<name>_<version>` (this repo's placeholder
+      # convention) is parsed as start tags and fails with unsuppressible parse errors.
+      # Fence-scoped validation has zero false positives and still gates real HTML blocks.
+      - id: html-validate
+        name: html-validate
+        entry: html-validate "**/*.md"
+        language: node
+        additional_dependencies:
+          # Keep in sync with the npx pins in .github/workflows/ci.yml (markdown-lint job).
+          - html-validate@11.16.4
+          - html-validate-markdown@6.0.0
         pass_filenames: false
       - id: pyright
         name: pyright

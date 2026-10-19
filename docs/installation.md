@@ -32,7 +32,7 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 #### Optional Extras
 
 | Extra | Description | Includes |
-|---|---|---|
+| --- | --- | --- |
 | `cli` | `tablassert` command and rich terminal progress | `cyclopts`, `rich` |
 | `rt` | Runtime-compatible Polars build | `polars[rtcompat]` |
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
@@ -68,7 +68,7 @@ exception: `build-fullmap`'s `[aria2]` check is a downloader probe that picks a 
 fails, not a failure report):
 
 | Command | Checked | When |
-|---|---|---|
+| --- | --- | --- |
 | `tablassert` | `[cli]` | Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error |
 | `build-kg --qc` | `[qc]` | Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass |
 | `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |

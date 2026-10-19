@@ -35,6 +35,22 @@ jobs:
           version-file: uv.lock
           args: format --check
 
+  # Markdown gates, standalone like ruff above (node is preinstalled on ubuntu runners, so no
+  # setup step). Same two checks the pre-commit hooks run; pins must stay in sync with
+  # .pre-commit-config.yaml (markdownlint-cli2 rev and the html-validate additional_dependencies).
+  # File scope: markdownlint-cli2 reads its globs/ignores from .markdownlint-cli2.jsonc;
+  # html-validate validates ONLY ```html fences inside markdown (see the pre-commit comment for
+  # why) via the transform in .htmlvalidate.json.
+  markdown-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: markdownlint-cli2
+        run: npx -y markdownlint-cli2@0.23.3
+      - name: html-validate (```html fences in markdown)
+        run: npx -y -p html-validate@11.16.4 -p html-validate-markdown@6.0.0 html-validate "**/*.md"
+
   python-type:
     runs-on: ubuntu-latest
     steps:

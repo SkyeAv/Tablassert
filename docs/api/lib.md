@@ -76,7 +76,7 @@ Returns a `list[dict[str, Any]]`: one dictionary per resolved entity. The list i
 Each dictionary contains the following keys (where `{col}` is the value of the `col` parameter):
 
 | Key | Description | Example Value |
-|-----|-------------|---------------|
+| ----- | ------------- | --------------- |
 | `original_{col}` | Original input text before normalization | `"TP53"` |
 | `{col}` | CURIE identifier | `"HGNC:11998"` |
 | `{col}_name` | Preferred entity name | `"TP53"` |
@@ -144,7 +144,7 @@ for row in result:
 ### Comparison With resolve()
 
 | Aspect | `resolve_many()` | `resolve()` |
-|--------|-------------------|-------------|
+| -------- | ------------------- | ------------- |
 | **Module** | `tablassert.lib` | `tablassert.fullmap` |
 | **Input** | Plain iterable of strings | Pre-normalized `pl.LazyFrame` |
 | **NLP** | Applied automatically | Must be applied upstream |
