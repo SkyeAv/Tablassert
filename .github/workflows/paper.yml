@@ -51,7 +51,7 @@ jobs:
         run: docker build -f /tmp/whedon/paperdraft.Dockerfile -t paperdraft /tmp/whedon
       # paperdraft writes paper.pdf next to paper.md (fail-if-warnings: on), so an
       # unresolvable citation or latex warning fails the job.
-      - name: Compile PDF
+      - name: Compile the JOSS paper PDF (test build, fails on warnings)
         run: docker run --rm -v "$PWD/paper:/paper" -w /paper paperdraft paper.md
       - name: Upload PDF preview
         uses: actions/upload-artifact@v4
