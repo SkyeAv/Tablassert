@@ -1,0 +1,51 @@
+// markdownlint-cli2 configuration — the single source of truth for markdown lint scope.
+// Both .pre-commit-config.yaml (markdownlint-cli2 hook) and .github/workflows/ci.yml
+// (markdown-lint job, `npx markdownlint-cli2`) read THIS file: the globs/ignores below and
+// the version pins must stay in sync with those two files.
+//
+// Scope deliberately includes top-level *.md, docs/, and .github/ templates, and excludes
+// machine-generated/internal trees: .git, node_modules, .venv, site (mkdocs output),
+// target (Rust build), __pycache__, .ralph (agent state), plans/ + PLAN.md (agent-generated
+// planning artifacts), tests/ (fixture data), .tablassert (runtime artifacts).
+{
+  "config": {
+    "default": true,
+    // MD013 (line-length) is off because no line-length convention exists (CHANGELOG prose
+    // runs to 2500+ chars); wrapping 1300 lines of history is churn without value.
+    // MD033 is off because inline HTML is allowed on purpose (docs/fullmap.md,
+    // docs/configuration/table.md use <details>/<summary>/<kbd>/...); its well-formedness is
+    // validated by html-validate instead (.htmlvalidate.json).
+    "MD013": false,
+    "MD033": false,
+    // CHANGELOG legitimately repeats "### Added"/"### Fixed" under each release heading.
+    "MD024": {
+      "siblings_only": true
+    },
+    // mkdocs admonitions (!!! / ???) require 4-space-indented paragraphs, and multi-paragraph
+    // admonitions (blank line between them) parse as indented code blocks under plain GFM —
+    // MD046 cannot distinguish them. The repo's own typography gate (tests/test_docs_style.py)
+    // additionally bans HTML comments in docs prose, so per-line markdownlint-disable comments
+    // are not an option either. The repo uses fenced code blocks everywhere else regardless.
+    "MD046": false,
+    // Every table must use "| cell | cell |" (single-space padding) — the dominant existing
+    // style; --fix normalizes the few inconsistent tables to it.
+    "MD060": {
+      "style": "compact"
+    }
+  },
+  "customRules": ["./.markdownlint/no-unicode-chars.cjs"],
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/.venv/**",
+    "**/site/**",
+    "**/target/**",
+    "**/__pycache__/**",
+    ".ralph/**",
+    "plans/**",
+    "PLAN.md",
+    "tests/**",
+    ".tablassert/**"
+  ]
+}

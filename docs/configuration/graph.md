@@ -18,7 +18,7 @@ QC auditing and verbose logging are controlled at build time via the `build-kg -
 ### Required Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `name` | String | Knowledge graph name (used in output filenames and the RIG) |
 | `version` | String | Knowledge graph version (used in output filenames) |
 | `tables` | List[Path] | Paths to table configuration YAML files |
@@ -30,7 +30,7 @@ The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation
 ### Optional Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `uuid_fields` | List[str] | Edge fields that constitute edge identity. Only these feed the derived edge `id` (see [Stable edge ids](#stable-edge-ids)) |
 | `uuid_domain` | String | Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise |
 | `uuid_on_collision` | `error` \| `merge` | What to do when two different edges derive one id. `error` (default) aborts; `merge` folds them into one edge. Requires `uuid_fields` (see [Merging collisions instead](#merging-collisions-instead)) |
@@ -89,7 +89,7 @@ On that same MultiomicsKG 3.0.0 build, re-analysing the statistics (new `p_value
 every row) and rebuilding:
 
 | | edge ids that changed |
-|---|---|
+| --- | --- |
 | no `uuid_fields` (whole-record hash) | 930,081 of 1,265,355 (**73%**) |
 | `uuid_fields` declared | 0 of 1,265,355 (**none**) |
 
@@ -98,7 +98,7 @@ every row) and rebuilding:
 Narrowing what feeds the hash means two different edges can derive the same id. Tablassert refuses
 to ship duplicate edge ids, so that is a build failure, not a silent collapse:
 
-```
+```text
 uuid-fields-not-a-key: declared uuid_fields are not a key for this graph.
   id 83ade536-9b07-34ec-a2f9-abf0fb5b6a2f is claimed by 2 different edges.
   they differ in: effect_size, p_value
@@ -174,7 +174,7 @@ tell your consumers.
 The `rig:` section carries every human-authored RIG fact. Its shape follows the released [RIG schema](https://github.com/biolink/resource-ingest-guide-schema), with two deliberate differences: the `artifact_base_url` and `artifact_base_path` keys below are Tablassert-only config consumed by the generator (never written to the `.RIG.yaml`), and a few fields differ in requiredness from the upstream schema and template, which disagree with each other on `source_status`; Tablassert requires `provenance_info`, `source_status`, and `ingest_info.scope`, and treats `ingest_info.relevant_files` as optional because the generator pre-fills the generated-artifact entries. The generator derives only mechanical facts from the build (generated artifact file entries, observed edge/node type summaries) and **validates the complete document before writing anything**, so a build never leaves behind an invalid or incomplete RIG.
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `rig.name` | String | No | RIG display name; defaults to `<name> v<version> Resource Ingest Guide` |
 | `rig.source_info` | Object | Yes | Information about the source being ingested (see below) |
 | `rig.ingest_info` | Object | Yes | Rationale and scope of the ingest (see below) |
@@ -189,7 +189,7 @@ The `rig:` section carries every human-authored RIG fact. Its shape follows the 
 #### `rig.source_info`
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `infores_id` | `infores:` CURIE | Yes | Infores of the source this graph ingests; also emitted as the edge `primary_knowledge_source` and node `provided_by`. There is no implicit derivation from the graph name |
 | `name` | String | No | Human-readable source name |
 | `description` | String | No | What the source contains and how its knowledge is produced |
@@ -207,7 +207,7 @@ The `rig:` section carries every human-authored RIG fact. Its shape follows the 
 #### `rig.ingest_info`
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `ingest_categories` | List[Enum] | No | Defaults to `[translator_knowledge_creator]`; also `primary_knowledge_provider`, `aggregation_provider`, `aggregation_interpreter`, `supporting_data_provider`, `ontology_provider`, `node_property_only_provider`, `other` |
 | `utility` | String | Yes | Why the source is ingested and its utility for Translator use cases |
 | `scope` | String | Yes | High-level narrative of what is included and excluded |
@@ -222,7 +222,7 @@ The generator **prepends** two `relevant_files` entries and two `included_conten
 #### `rig.provenance_info`
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `contributions` | List[String] | Yes | Who contributed and how (e.g. `"Name - code author, data modeling"`) |
 | `artifacts` | List[String] | No | Links/descriptions of external provenance artifacts (tickets, surveys, repos) |
 

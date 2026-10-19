@@ -89,6 +89,7 @@ template:
     saved your own `tutorial-data.csv` in Step 1, set `source.local: ./tutorial-data.csv` instead.
 
 **What this does:**
+
 - **source**: Reads the CSV, skipping the header row (`row_slice` starts at 1)
 - **statement**: Creates edges where genes (subject) are `associated_with` diseases (object)
 - **subject/object**: Uses `column` method to read from columns A (gene symbol) and B (disease name)
@@ -134,6 +135,7 @@ config lives elsewhere. The `rig:` section is required; see the
 [Graph configuration reference](configuration/graph.md) for every field.
 
 **What this does:**
+
 - **name/version**: Output files will be `TUTORIAL_KG_1.0.0.nodes.ndjson`, `TUTORIAL_KG_1.0.0.edges.ndjson`, and `TUTORIAL_KG_1.0.0.RIG.yaml` (written into `rig.artifact_base_path`, here `./tutorial-output/`)
 - **rig**: Resource Ingest Guide metadata (source info, utility/scope, provenance, artifact bases) emitted as the `.RIG.yaml`
 - **tables**: List of table configurations to process
@@ -152,6 +154,7 @@ tablassert build-kg tutorial-graph.yaml --qc --log
 ```
 
 **What happens:**
+
 1. Loads graph configuration
 2. For each table config:
    - Reads the source file from disk
@@ -171,6 +174,7 @@ head -n 3 tutorial-output/TUTORIAL_KG_1.0.0.nodes.ndjson
 ```
 
 Example output:
+
 ```json
 {"id":"HGNC:11998","name":"TP53","category":["biolink:Gene"],"in_taxon":["NCBITaxon:9606"],"provided_by":["infores:tutorial-kg"]}
 {"id":"MONDO:0008903","name":"lung cancer","category":["biolink:Disease"],"in_taxon":["NCBITaxon:9606"],"provided_by":["infores:tutorial-kg"]}
@@ -187,6 +191,7 @@ Example output (p-values are emitted as controlled scientific-notation strings a
 significance band as a bare enum token; the study size is `Study.study_size` metadata on the
 inlined supporting study, anchored to the source row by the `row:<N>` StudyResult; records are
 abridged here, omitting provenance fields such as `knowledge_level`, `agent_type`, and `sources`):
+
 ```json
 {"id":"2cfea591-0f8f-33af-a7df-03da531d3359","subject":"HGNC:11998","predicate":"biolink:associated_with","object":"MONDO:0008903","p_value":"1.0000e-03","statistical_significance_qualifier":"very_strongly_significant","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"tutorial-table.yaml SECTION 1","study_size":450,"has_study_results":[{"id":"row:2"}]}},"publications":["PMID:12345678"]}
 {"id":"7b1c9d02-5e8a-3f3b-9c1d-2a6e8f0b4d7c","subject":"HGNC:1100","predicate":"biolink:associated_with","object":"MONDO:0005041","p_value":"1.0000e-04","statistical_significance_qualifier":"very_strongly_significant","has_supporting_studies":{"PMID:12345678":{"id":"PMID:12345678","name":"tutorial-table.yaml SECTION 1","study_size":1200,"has_study_results":[{"id":"row:3"}]}},"publications":["PMID:12345678"]}

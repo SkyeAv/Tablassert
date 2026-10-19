@@ -24,19 +24,19 @@ expectations.
 
 ## Documentation Sections
 
-**Start**
+### Start
 
 - **[Installation](installation.md)**: install methods, extras, and development setup
 - **[Tutorial](tutorial.md)**: build your first knowledge graph from a CSV, step by step
 - **[Use Case Gallery](examples.md)**: real-world configuration patterns to copy and adapt
 
-**How-to guides**
+### How-to guides
 
 - **[CLI Reference](cli.md)**: every command and flag: `build-kg`, `build-fullmap`, `validate`,
   `validate-kgx`, `quick-map`
 - **[Fullmap](fullmap.md)**: obtain and build the entity-resolution database
 
-**Reference**
+### Reference
 
 - **[Configuration](configuration/graph.md)**: graph-level schema, the required `rig:` section, and stable edge ids
 - **[Table Configuration](configuration/table.md)**: sources, statements, entity-resolution rules, provenance, annotations
@@ -46,7 +46,7 @@ expectations.
 - **[Quality Control](api/qc.md)**: the four-stage `fullmap_audit()` pipeline
 - **[Utilities](api/utils.md)**: hashing, store keys, and deterministic edge UUIDs
 
-**Contribute**
+### Contribute
 
 - **[Development](development.md)**: dev environment setup, the daily loop, and the docs gate
 - **[Changelog](changelog.md)**: release history

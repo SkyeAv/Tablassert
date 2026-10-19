@@ -91,6 +91,7 @@ Controls category-frequency tie-breaking when multiple matches exist for a term.
 Suffix appended to `col` to locate the `level_two` output column.
 
 `resolve()` expects the LazyFrame to already have two NLP columns applied upstream:
+
 - `col`: the canonical `level_one` output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)
 - `col + tag`: the `level_two` output (non-word characters removed via `\W+`)
 
@@ -101,7 +102,7 @@ The default `"_two"` matches `level_two`'s default tag.
 Returns a Polars LazyFrame with these columns added:
 
 | Column | Description | Example |
-|--------|-------------|---------|
+| -------- | ------------- | --------- |
 | `{col}` | CURIE identifier | `"HGNC:11998"` |
 | `{col}_name` | Preferred entity name | `"TP53"` |
 | `{col}_category` | Biolink category | `"biolink:Gene"` |
@@ -196,6 +197,7 @@ print(result.select(["gene", "gene_name", "gene_category"]))
 `resolve()` requires that `level_one` and `level_two` have been applied to the LazyFrame before calling it. Level one is the canonical key used by the fullmap build and query paths:
 
 **`level_one` output** (column: `col`):
+
 - Cleans surrounding matching quotes and whitespace, then applies Unicode lowercase.
 - Splits on whitespace, stems only tokens made entirely of ASCII letters with the English Porter2 stemmer, and passes digit-bearing, punctuation-bearing, and non-ASCII tokens through unchanged after lowercasing.
 - Removes duplicate tokens, sorts the remaining tokens by their UTF-8 byte values, and joins them with one ASCII space.
@@ -205,6 +207,7 @@ print(result.select(["gene", "gene_name", "gene_category"]))
 Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.
 
 **`level_two` output** (column: `col + "_two"`):
+
 - All non-word characters (`\W+`) removed from the `level_one` result
 - Used as fallback when `level_one` produces no match
 - Preferred for disease names and free text

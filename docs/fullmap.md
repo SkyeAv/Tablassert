@@ -138,7 +138,7 @@ Advanced tuning for the build's memory/speed trade-offs. Defaults are safe for a
 override only when targeting an unusual machine.
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| ---------- | --------- | ------------- |
 | `TABLASSERT_FULLMAP_EXCLUDE_PREFIXES` | *(empty)* | Comma-separated CURIE prefixes to drop at build time (e.g. `InChIKey`, `CAID`). Dropping prefixes you never resolve cuts build time, peak memory, and database size. InChIKey terms are retained unless excluded explicitly. |
 | `TABLASSERT_FULLMAP_CHUNK_BYTES` | `8388608` (8 MiB) | Byte budget per producer-to-worker line-chunk. Bounded by bytes (not line count) so chunk memory is fixed even for large synonym records. |
 | `TABLASSERT_FULLMAP_PRODUCERS` | `clamp(workers/4, 4, #files)` | Number of producer (decompressor) threads. Decompression far outpaces parallel processing, so a handful keeps all workers fed. |
@@ -158,7 +158,7 @@ still honors the count recorded in an existing database's `meta` table). Togethe
 they hold six tables (see `rust/src/fullmap.rs`):
 
 | Table | Description |
-|-------|-------------|
+| ------- | ------------- |
 | `records` | Normalized term (xxhash `u64`) mapped to a serialized list of resolution postings (CURIE id, source id). Hash-partitioned across the shard files (`fullmap.s0..s<N-1>.redb`) by `xxh64(term) & (shards-1)`; a term lives in exactly one shard. |
 | `prefixes` | Maps a compact `u16` id to its CURIE prefix string (primary file) |
 | `categories` | Maps a compact `u16` id to its Biolink category string (primary file) |

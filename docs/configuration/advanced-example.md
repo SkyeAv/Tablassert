@@ -76,7 +76,7 @@ whole table or `method: column` to pull per-row notes from the source (see
   headerless source (organism names, Spearman rho, p-value).
 - **Regex pipeline**: the subject runs three substitutions in order: strip `.*g__` so
   `d__Bacteria;p__Firmicutes;g__Lactobacillus` becomes `Lactobacillus`, replace `;s__` with a
-  space so `Lactobacillus;s__rhamnosus` becomes `Lactobacillus rhamnosus`, and expand `sp` to `sp. `.
+  space so `Lactobacillus;s__rhamnosus` becomes `Lactobacillus rhamnosus`, and expand `sp` to `"sp. "` (trailing space matters).
 - **Taxonomic filtering**: `prioritize: [OrganismTaxon]` + `avoid: [Gene]` stop "Lactobacillus"
   resolving to a similarly-named gene.
 - **Mixed annotations**: `method: value` for constants (same every row), `method: column` for
@@ -95,6 +95,7 @@ whole table or `method: column` to pull per-row notes from the source (see
 ## Output Example
 
 **Nodes:**
+
 ```json
 {"id":"NCBITaxon:47715","name":"Lactobacillus rhamnosus","category":["biolink:OrganismTaxon"]}
 {"id":"CHEBI:41774","name":"13C-tamoxifen","category":["biolink:ChemicalEntity"]}

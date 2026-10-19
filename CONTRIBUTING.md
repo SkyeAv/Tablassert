@@ -48,7 +48,7 @@ Use `make build` when you need a release-mode extension for local performance ch
 The `Makefile` is intentionally small and mirrors the underlying commands:
 
 | Target | Runs |
-|---|---|
+| --- | --- |
 | `make setup` | `uv sync --group dev --extra cli --extra qc --extra log` and debug `maturin develop` |
 | `make dev` | Debug editable extension build |
 | `make build` | Release editable extension build |
