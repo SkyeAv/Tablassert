@@ -4,8 +4,9 @@ Mirrors tests/test_docs_style.py: plain functions over explicit file paths, no f
 standard-library imports only (the pre-commit hook runs this file alone, so it must stay
 import-light). Enforces the structural requirements Whedon compilation and JOSS review
 impose so collaborators get fast local feedback: front matter carries title, authors
-with ORCIDs, and tags; every [@key] citation resolves to a paper.bib entry and every
-entry is cited; the abstract and body stay inside JOSS word budgets.
+with ORCIDs, and tags; the body carries every JOSS-required section (JOSS paper-format
+guidance, 2026); every [@key] citation resolves to a paper.bib entry and every entry is
+cited; the abstract and body stay inside the official JOSS word budgets.
 """
 
 import re
@@ -18,8 +19,21 @@ PAPER_BIB = REPO_ROOT / "paper" / "paper.bib"
 # Exact non-ASCII characters permitted in the paper, mapped to their source.
 ALLOWED_NON_ASCII = {"ê": "Gwênlyn Glusman, author name in CITATION.cff"}
 
+# JOSS guidance: "The paper should be between 750-1750 words" (body, excluding
+# references); the leading unheaded abstract paragraph is capped separately.
+BODY_WORD_LIMIT = 1750
 ABSTRACT_WORD_LIMIT = 250
-BODY_WORD_LIMIT = 1000
+
+REQUIRED_SECTIONS = (
+    "Summary",
+    "Statement of need",
+    "State of the field",
+    "Software design",
+    "Research impact statement",
+    "AI usage disclosure",
+    "Acknowledgements",
+    "References",
+)
 
 _BIB_ENTRY = re.compile(r"^@\w+\s*\{([^,\s]+),", re.MULTILINE)
 _CITED_GROUP = re.compile(r"\[@([^\]]*)\]")
@@ -76,10 +90,14 @@ def _strip_fences(body: str) -> str:
     return "\n".join(lines)
 
 
-def _before_heading(body: str) -> str:
-    """Return the text before the first markdown heading (the abstract paragraphs)."""
-    match = re.search(r"^#+\s", body, re.MULTILINE)
-    return body[: match.start()] if match else body
+def _section(body: str, title: str) -> str:
+    """Return the prose of one top-level section, excluding its heading."""
+    match = re.search(rf"^#+\s+{re.escape(title)}\s*$", body, re.MULTILINE)
+    if match is None:
+        return ""
+    rest = body[match.end() :]
+    nxt = re.search(r"^#+\s", rest, re.MULTILINE)
+    return rest[: nxt.start()] if nxt else rest
 
 
 def _before_references(body: str) -> str:
@@ -117,6 +135,13 @@ def test_front_matter_complete() -> None:
         assert any(_ORCID.search(line) for line in block), f"every author needs an ORCID: {block}"
 
 
+def test_required_sections_present() -> None:
+    _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
+    headings = {match.group(1).strip() for match in re.finditer(r"^#+\s+(.+?)\s*$", body, re.MULTILINE)}
+    missing = [section for section in REQUIRED_SECTIONS if section not in headings]
+    assert not missing, f"paper.md is missing JOSS-required sections: {missing}"
+
+
 def test_citations_resolve() -> None:
     text = PAPER_MD.read_text(encoding="utf-8")
     bib = _bib_keys(PAPER_BIB.read_text(encoding="utf-8"))
@@ -133,9 +158,9 @@ def test_no_uncited_entries() -> None:
 
 def test_abstract_within_budget() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
-    abstract = _before_heading(_strip_fences(body))
+    abstract = _section(_strip_fences(body), "Summary")
     words = len(abstract.split())
-    assert words > 0, "paper.md needs abstract paragraphs before the first heading"
+    assert words > 0, "paper.md needs a Summary section with abstract paragraphs"
     assert words <= ABSTRACT_WORD_LIMIT, f"abstract is {words} words (max {ABSTRACT_WORD_LIMIT})"
 
 
@@ -143,7 +168,7 @@ def test_body_within_budget() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
     prose = _before_references(_strip_fences(body))
     words = len(prose.split())
-    assert words > 0, "paper.md has no body text"
+    assert words >= 750, f"body is {words} words (JOSS minimum 750)"
     assert words <= BODY_WORD_LIMIT, f"body is {words} words (max {BODY_WORD_LIMIT})"
 
 
