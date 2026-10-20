@@ -12,17 +12,27 @@ requirements, so the review focuses on the paper itself:
 
 - A clear **statement of need**: what problem Tablassert solves and for whom.
 - **State of the field**: how the prevailing practice (hand-written per-source Translator
-  ingests) falls short and what alternatives exist.
+  ingests) falls short, what alternatives exist (Koza, KGX, hosted name resolution), and the
+  build-versus-contribute justification for a new package.
+- **Software design** and a **research impact statement**: the design trade-offs and the
+  realized uses (MicrobiomeKG, DAKP, KRAKEN, pending Translator integration).
+- An **AI usage disclosure** naming any generative tools used for the software,
+  documentation, or manuscript, with versions and how outputs were verified.
 - An **archive**: the tagged release gets a Zenodo DOI at acceptance; keep
   `CITATION.cff` and this paper's author list in sync.
-- The paper's body stays under roughly 1000 words excluding references; the abstract under 250.
-  The `paper-check` gate enforces both locally.
+- The paper's body stays between 750 and 1750 words excluding references; the abstract
+  under 250. The `paper-check` gate enforces both locally.
+
+JOSS rules change; re-check the
+ [paper format page](https://joss.readthedocs.io/en/latest/paper.html) before submission.
 
 ## File map
 
 - `paper.md`: manuscript in JOSS (pandoc) format. YAML front matter carries title,
   authors, ORCIDs, tags, and the `bibliography: paper.bib` key that citeproc loads;
-  the body uses the sections JOSS expects.
+  the body uses the sections JOSS expects (Summary, Statement of need, State of the
+  field, Software design, Research impact statement, AI usage disclosure,
+  Acknowledgements, References).
 - `paper.bib`: BibTeX entries. Every `[@key]` citation in `paper.md` must resolve to an
   entry here, and every entry must be cited; `paper-check` enforces both directions.
   Note: pandoc's bibliography parser treats `%` comment lines loosely, so keep `]`, `@`,
@@ -36,8 +46,9 @@ requirements, so the review focuses on the paper itself:
 2. Verify the matching `paper.bib` entry: title, authors, year, DOI. Entries seeded with
    a `% TODO: verify` comment are unverified; check them against the publisher page or
    <https://doi.org> before submission.
-3. Add a figure by dropping the image into `figures/` and uncommenting the placeholder
-   image line in the Figures section; the `{width=100%}` attribute is Whedon syntax.
+3. Add a figure by dropping the image into `figures/` and referencing it from its own
+   paragraph with `![Caption text](figures/fig1.png)`; JOSS turns a captioned standalone
+   image into a numbered figure. There is no figure in the current draft.
 4. Run the local gates before committing:
 
 ```bash
@@ -63,8 +74,9 @@ pytest gate runs in the regular CI suite on every pull request.
 
 When the draft is ready:
 
-1. Remove every `TODO(collaborators)` marker from `paper.md` and every
-   `% TODO: verify` marker from `paper.bib`.
+1. Resolve every `TODO(collaborators)` marker in `paper.md` (AI usage disclosure,
+   Acknowledgements) and verify every remaining `paper.bib` entry against its publisher
+   page or <https://doi.org> before submission.
 2. Confirm `make paper-check` and `make paper-pdf` both pass.
 3. The submitting author creates an account at <https://joss.theoj.org>, then submits
    through the JOSS site, pointing at this repository and branch. The editor assigns

@@ -36,6 +36,18 @@
   },
   "customRules": ["./.markdownlint/no-unicode-chars.cjs"],
   "globs": ["**/*.md"],
+  // The JOSS paper template puts every required section (Summary, Statement of need,
+  // ...) at heading level 1 below the YAML front-matter title; multiple H1s are the
+  // expected format there, not a structure error.
+  "overrides": [
+    {
+      "filter": ["paper/paper.md"],
+      "config": {
+        "MD025": false
+      },
+      "combine": "merge"
+    }
+  ],
   "ignores": [
     "**/.git/**",
     "**/node_modules/**",

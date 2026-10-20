@@ -1,53 +1,59 @@
 % JOSS paper bibliography for Tablassert.
-% Every entry below is a seed: collaborators MUST verify title, authors, year, and DOI
-% before submission. Entries are keyed to the bracketed citations in paper.md; the
-% tests/test_paper.py gate refuses uncited entries, so delete any entry you drop.
+% Every published entry below was verified against its primary registry (Crossref,
+% arXiv, bioRxiv) or its upstream CITATION.cff / release metadata in October 2026.
+% Large author lists use the first verified authors plus "and others"; the full
+% lists live in the registry records. The tests/test_paper.py gate refuses
+% uncited entries, so delete any entry you drop.
 
-% TODO: verify DOI and author list.
 @article{biolink-model,
-  author  = {Unni, Dileep R. and Moxon, Sierra A. T. and Bada, Michael and Brush, Matthew H. and Champieux, Rebecca and Clare, Sarah E. and Dionizio, William and Foster, Benjamin J. and Haendel, Melissa A. and Harris, Nomi L. and Kemmer, Daniel B. and Kim, Hyeongsik and Koehler, Sean and Mungall, Christopher J. and Overton, Trish N. and Shefchek, Kent A. and Sinclair, Holly and Vasilevsky, Nicole and Wei, Qi and Wright, Anita M. and McMurry, Julie A.},
+  author  = {Unni, Deepak R. and Moxon, Sierra A. T. and Bada, Michael and Brush, Matthew H. and Bruskiewich, Richard and Caufield, J. Harry and others},
   title   = {{Biolink Model}: A universal schema for knowledge graphs in clinical, biomedical, and translational science},
-  journal = {NAR Genomics and Bioinformatics},
+  journal = {Clinical and Translational Science},
   year    = {2022},
-  volume  = {4},
-  number  = {1},
-  pages   = {lqac014},
-  doi     = {10.1093/nargab/lqac014}
+  volume  = {15},
+  number  = {8},
+  pages   = {1848--1855},
+  doi     = {10.1111/cts.13302}
 }
 
-% TODO: verify DOI, venue, and author list.
-@article{kgx,
-  author = {Mungall, Christopher J. and Koehler, Sean and Shefchek, Kent and Brush, Matthew and Duncan, William and T. Whetzel, Philip and Wang, Kent and Waagmeester, Andra and Beggs, Luke and Zheng, Jie and Haendel, Melissa A. and McMurry, Julie A.},
-  title  = {The {Knowledge Graph Exchange} ({KGX}) toolkit simplifies the exchange of heterogeneous biological knowledge as graphs},
-  year   = {2022},
-  doi    = {10.1101/2022.09.22.508916}
-}
-
-% TODO: verify this is the citation the Translator program endorses; alternatives include
-% the 2024 "on the road to translation" review in J Biomed Inform.
 @article{translator,
-  author  = {Aecker, Logan and Baran, Mihai and Bi, Cong and Callahan, Tiffany J. and Cui, Yaphet and Czigler, Anna and Dancik, Gregory M. and Davies, Will and Dearborn, Jen and Eckert, Jesse and Flack, Jeffrey and Gao, Jianfu and Guzman, AnaMara and Hadlock, Christopher T. and Ho, Wen Jan and Jagodnik, Kenneth and Kutchma, William and Lenalas, Charles and Levovitz, Shannon and Liu, Hang and Marbach, David and Morris, Chase and Morrison, Dylan and Ouyang, Kenna and Parr, Karamarie and Patri, Lucas and Pillai, Sanjay and Price, Michael and Rajpal, Alok and Richardson, Richard A. and Servilla, Kelsy and Simeon, Brian and Spranger, Tori and Swanson, Kalpana and Tessier, Darcy and Unni, Dileep and Valdez, Jhon and Wang, Quanhu and Wood-Charlson, Elisha P. and Erdmann, Alexander A.},
-  title   = {The Biomedical Data Translator: {An} evolving translational knowledge network connecting data and discoveries to advance diagnosis and treatment},
-  journal = {Journal of Biomedical Informatics},
-  year    = {2024},
-  volume  = {155},
-  pages   = {104688},
-  doi     = {10.1016/j.jbi.2024.104688}
+  author  = {Fecho, Karamarie and Glusman, Gw{\^e}nlyn and Baranzini, Sergio E. and Bizon, Chris and Brush, Matthew and Byrd, William and others and {The Biomedical Data Translator Consortium}},
+  title   = {Announcing the {Biomedical Data Translator}: Initial Public Release},
+  journal = {Clinical and Translational Science},
+  year    = {2025},
+  volume  = {18},
+  number  = {7},
+  pages   = {e70284},
+  doi     = {10.1111/cts.70284}
 }
 
-% TODO: verify: Babel's canonical citation may be a preprint or the NAR database issue entry.
 @article{babel,
-  author  = {Torre, Damiano and Lachapelle, Julien and Karam, Nicole and Cheng, Hua and Unni, Dileep R. and Shefchek, Kent A. and Whetzel, Philip T. and Mungall, Christopher J. and Haendel, Melissa A. and McMurry, Julie A.},
-  title   = {Babel: {An} open ecosystem of open biomedical data and tools for making them interoperable},
-  journal = {NAR Genomics and Bioinformatics},
-  year    = {2023},
-  volume  = {5},
-  number  = {1},
-  pages   = {lqad098},
-  doi     = {10.1093/nargab/lqad098}
+  author  = {Morris, Evan and Vaidya, Gaurav and Owen, Phil and Reilly, Jason and Fecho, Karamarie and Wang, Patrick and Kebede, Yaphet and Carter, E. Kathleen and Bizon, Chris},
+  title   = {The ``I'' in {FAIR}: Translating from Interoperability in Principle to Interoperation in Practice},
+  journal = {arXiv preprint arXiv:2601.10008},
+  year    = {2026},
+  doi     = {10.48550/arXiv.2601.10008}
 }
 
-% TODO: verify page numbers.
+@article{microbiomekg,
+  author  = {Goetz, Skye L. and Glen, Amy K. and Glusman, Gw{\^e}nlyn},
+  title   = {{MicrobiomeKG}: bridging microbiome research and host health through knowledge graphs},
+  journal = {Frontiers in Systems Biology},
+  year    = {2025},
+  volume  = {5},
+  pages   = {1544432},
+  doi     = {10.3389/fsysb.2025.1544432}
+}
+
+@article{kraken,
+  author  = {Glen, Amy K. and Witherington, Drew and Leslie, Trent and Baumgartner, Andrew and Fernando, Ashen and Vemuri, Bhargav and others},
+  title   = {{KRAKEN}: A provenance-tracked knowledge graph for multiomic and wellness research},
+  journal = {bioRxiv},
+  year    = {2026},
+  note    = {Preprint, version 2, October 9, 2026},
+  doi     = {10.64898/2026.08.18.745544}
+}
+
 @inproceedings{sapbert,
   author    = {Liu, Fangyu and Shareghi, Ehsan and Meng, Zaiqiao and Basaldella, Marco and Collier, Nigel},
   title     = {{Self-Alignment Pretraining} for Biomedical Entity Representations},
@@ -57,12 +63,49 @@
   doi       = {10.18653/v1/2021.naacl-main.334}
 }
 
-% Verified against CITATION.cff; DOI live as of October 2026.
-@article{microbiomekg,
-  author  = {Glen, Amy K. and Goetz, Skye Lane and Glusman, Gw{\^e}nlyn},
-  title   = {{MicrobiomeKG}: bridging microbiome research and host health through knowledge graphs},
-  journal = {Frontiers in Systems Biology},
-  year    = {2025},
-  volume  = {5},
-  doi     = {10.3389/fsysb.2025.1544432}
+@misc{kgx,
+  author       = {{KGX contributors}},
+  title        = {{KGX}: Knowledge Graph Exchange},
+  year         = {2026},
+  note         = {Version 2.7.0, released May 28, 2026},
+  howpublished = {\url{https://github.com/biolink/kgx}}
+}
+
+@misc{koza,
+  author       = {Schaper, Kevin and Ships, Glass and Shefchek, Kent and Moxon, Sierra and Mungall, Chris},
+  title        = {Koza: data transformation framework for {LinkML} data models},
+  year         = {2026},
+  note         = {Version 2.6.4, released October 2, 2026},
+  howpublished = {\url{https://github.com/monarch-initiative/koza}}
+}
+
+@misc{redb,
+  author       = {Berner, Christopher},
+  title        = {redb: An embedded key-value database in pure {Rust}},
+  year         = {2026},
+  note         = {Version 4.4.0, released October 13, 2026},
+  howpublished = {\url{https://github.com/cberner/redb}}
+}
+
+@misc{dakp,
+  author       = {Glusman, Gw{\^e}nlyn and Goetz, Skye Lane},
+  title        = {{DAKP}: Drug Approvals Knowledge Provider},
+  year         = {2026},
+  note         = {Version 1.24.1, released October 14, 2026},
+  howpublished = {\url{https://github.com/glusman-team/dakp}}
+}
+
+@misc{drug-approvals,
+  author       = {Goetz, Skye Lane},
+  title        = {Drug Approvals Knowledge Provider ({DAKP}) dataset, version 1.24.1},
+  year         = {2026},
+  howpublished = {\url{https://huggingface.co/datasets/SkyeAv/drug-approvals-kp}}
+}
+
+@misc{ingests,
+  author       = {Goetz, Skye Lane},
+  title        = {Add a {Tablassert} passthrough ingest kind for upstream {KGX} sources},
+  year         = {2026},
+  howpublished = {Pull request 543, NCATSTranslator/translator-ingests (under review)},
+  url          = {https://github.com/NCATSTranslator/translator-ingests/pull/543}
 }
