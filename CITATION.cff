@@ -12,16 +12,16 @@ authors:
     email: sgoetz@isbscience.org
     affiliation: Institute for Systems Biology
     orcid: "https://orcid.org/0009-0007-8373-2352"
-  - given-names: "Gwênlyn"
-    family-names: Glusman
-    email: gglusman@isbscience.org
-    affiliation: Institute for Systems Biology
-    orcid: "https://orcid.org/0000-0001-8060-5955"
   - given-names: Jared C.
     family-names: Roach
     email: jroach@isbscience.org
     affiliation: Institute for Systems Biology
     orcid: "https://orcid.org/0000-0003-4524-0107"
+  - given-names: "Gwênlyn"
+    family-names: Glusman
+    email: gglusman@isbscience.org
+    affiliation: Institute for Systems Biology
+    orcid: "https://orcid.org/0000-0001-8060-5955"
 references:
   - type: article
     title: "MicrobiomeKG: bridging microbiome research and host health through knowledge graphs"
