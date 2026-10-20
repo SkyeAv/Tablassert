@@ -32,7 +32,9 @@ JOSS rules change; re-check the
   authors, ORCIDs, tags, and the `bibliography: paper.bib` key that citeproc loads;
   the body uses the sections JOSS expects (Summary, Statement of need, State of the
   field, Software design, Research impact statement, AI usage disclosure,
-  Acknowledgements, References).
+  Acknowledgements, References). Author `affiliation:` values are INDICES into the
+  separate `affiliations:` list (the JOSS convention); putting an institution string
+  there silently collapses the rendered author block to the last author.
 - `paper.bib`: BibTeX entries. Every `[@key]` citation in `paper.md` must resolve to an
   entry here, and every entry must be cited; `paper-check` enforces both directions.
   Note: pandoc's bibliography parser treats `%` comment lines loosely, so keep `]`, `@`,

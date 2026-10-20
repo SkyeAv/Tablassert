@@ -8,14 +8,17 @@ tags:
   - bioinformatics
 authors:
   - name: Skye Lane Goetz
-    affiliation: Institute for Systems Biology
+    affiliation: 1
     orcid: 0009-0007-8373-2352
-  - name: Gwênlyn Glusman
-    affiliation: Institute for Systems Biology
-    orcid: 0000-0001-8060-5955
   - name: Jared C. Roach
-    affiliation: Institute for Systems Biology
+    affiliation: 1
     orcid: 0000-0003-4524-0107
+  - name: Gwênlyn Glusman
+    affiliation: 1
+    orcid: 0000-0001-8060-5955
+affiliations:
+  - index: 1
+    name: Institute for Systems Biology
 date: 20 October 2026
 lang: en-US
 bibliography: paper.bib
