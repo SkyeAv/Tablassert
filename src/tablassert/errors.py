@@ -56,6 +56,7 @@ TablassertErrorCodes = Literal[
     "config-rows-and-row-slice-conflict",
     "comparison-bad-comparator-type",
     "comparison-nonnumeric-comparator",
+    "comparison-regex-requires-eq-ne",
     "encoding-bad-excel-column",
     "regex-bad-pattern",
     "regex-bad-replacement",
