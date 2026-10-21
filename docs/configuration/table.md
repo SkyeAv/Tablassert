@@ -175,7 +175,8 @@ Filter rows based on column values.
 | ------- | ------ | ---------- | ------------- |
 | `column` | String | Yes | Source column letters to evaluate; constrained to `^[A-Z]{1,3}$` (`A`-`ZZZ`). |
 | `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`. |
-| `comparator` | String\|Int\|Float | Yes | Value to compare against. Must be a string for `"eq"`/`"ne"`, or a number for `"lt"`/`"le"`/`"gt"`/`"ge"`. |
+| `comparator` | String\|Int\|Float | Yes | Value to compare against. Must be a string for `"eq"`/`"ne"`, or a number for `"lt"`/`"le"`/`"gt"`/`"ge"`. With `regex: true` it is a pattern instead of a literal, so it must be a string. |
+| `regex` | Boolean | No | Treat `comparator` as a Polars-compatible regular expression searched in the cell instead of a literal value: `"eq"` keeps rows whose cell matches, `"ne"` keeps rows that do not. Case-sensitive and unanchored (anchor with `^`/`$` to pin a whole cell), the cell is compared as text, and a null cell never matches, so blank rows drop under either operator. Only valid with `"eq"`/`"ne"` (`comparison-regex-requires-eq-ne`); a pattern that is invalid, whitespace-only, or can match an empty cell (`^`, `()`, `.*`) is rejected at config time (`regex-bad-pattern`) because such a pattern matches every cell, so an `"ne"` filter would silently drop the whole table. Defaults to `false` (literal comparison), so existing configs are unchanged. |
 
 **Example:**
 
@@ -183,6 +184,21 @@ Filter rows based on column values.
 reindex:
   - {column: C, comparison: lt, comparator: 0.05}  # Keep rows where column C < 0.05
 ```
+
+**Regex comparators (`regex: true`).** One anchored pattern replaces a stack of literal `"ne"` filters for the same missing-value family:
+
+```yaml
+reindex:
+  - {column: A, comparison: ne, comparator: '^(?:n/?a|-{1,2}|not reported)$', regex: true}  # drop every placeholder spelling
+  - {column: B, comparison: eq, comparator: '^\d{4}$', regex: true}  # keep only cells that are exactly four digits
+  - {column: C, comparison: ne, comparator: "N/A"}  # literal comparison: `regex` defaults to false
+```
+
+- Matching is Polars `str.contains`, so it is **unanchored**: `n/?a` matches the `na` inside `bona fide` and drops that row. Write `^...$` to pin the whole cell.
+- The dialect is the Rust `regex` crate, the same constraints documented under [Text Transformations](#text-transformations): no backreferences, no lookarounds, groups and character classes fine, and inline flags such as `(?i)` work.
+- Cells are compared as text (the column is cast to String), so a typed `parquet` column matches its string form (`22.0` matches `^2\d?\.0$`). Use `"lt"`/`"le"`/`"gt"`/`"ge"` to compare numbers.
+- A null cell matches nothing, so blank rows drop under both `"eq"` and `"ne"`, exactly as the literal `"eq"`/`"ne"` filters already drop them.
+- Config-time guards: `regex: true` on an ordering comparison is rejected (`comparison-regex-requires-eq-ne`), and a pattern the Polars engine cannot compile, or one that can match an empty cell (`^`, `()`, `.*`, `x*`), is rejected (`regex-bad-pattern`) because both match every cell and an `"ne"` filter would then silently drop the whole table.
 
 ### Statement (Triple Definition)
 
