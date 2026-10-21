@@ -1091,12 +1091,16 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
 
     Notes:
         Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join
-        against a once-built key frame is the faster measured path at every tested size (1M rows
-        with 100k keys: 0.014s joined vs 0.036s filtered; with 10 keys: 2.4ms vs 2.9ms), and it is
-        the membership idiom already used in :mod:`tablassert.qc`.
+        against a once-built key frame is the faster measured path once the list is non-trivial
+        (1M rows, median of three collects: 100k keys 0.018s vs 0.029s filtered; 1k keys 0.003s vs
+        0.004s; a tie at ten keys), and it is the membership idiom already used in
+        :mod:`tablassert.qc`. No ``is_in`` fast path exists for tiny lists: it would propagate nulls
+        differently from antijoin, and the difference is milliseconds per million rows.
 
-        The casted key lives in a throwaway column so ``col`` itself is never rewritten: entity
-        resolution downstream still sees the cell exactly as the source produced it.
+        The string path joins straight on ``col``; only the cast path needs a throwaway helper
+        column, and it is dropped again before the op returns, so ``col`` itself is never
+        rewritten: entity resolution downstream still sees the cell exactly as the source produced
+        it (same dtype, same name, same order).
 
         Null semantics are join semantics, and they deliberately differ from ``ne``: a null cell
         never matches, so join drops it while antijoin KEEPS it. Non-string columns are cast with
@@ -1111,12 +1115,14 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
         raise TablassertError(f"`join`/`antijoin` reindex targets `{col}`, which the source does not have.", code="reindex-membership-column-missing")
 
     key_col: str = MEMBERSHIP_KEY_COLUMN
-    if isinstance(schema[col], pl.String):
-        left: pl.LazyFrame = df.with_columns(pl.col(col).alias(key_col))
-    else:
-        left = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
+    unique: list[str] = list(dict.fromkeys(keys))
     how: Literal["semi", "anti"] = "anti" if anti else "semi"
-    return left.join(pl.DataFrame({key_col: list(dict.fromkeys(keys))}).lazy(), on=key_col, how=how).drop(key_col)
+    if isinstance(schema[col], pl.String):
+        # Semi/anti joins emit only the left frame's columns, so joining straight on `col` keeps
+        # the schema untouched and skips an extra projection (measurable at ~1ms per 1M rows).
+        return df.join(pl.DataFrame({col: unique}).lazy(), on=col, how=how)
+    left: pl.LazyFrame = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
+    return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how).drop(key_col)
 
 
 def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
