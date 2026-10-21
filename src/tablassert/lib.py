@@ -1074,17 +1074,19 @@ MEMBERSHIP_KEY_COLUMN: str = "_reindex_membership_key"
 """Base name for the throwaway join key column on the cast branch; extended with underscores until
 it is unused if a source frame already carries it, and dropped again before the op returns."""
 
-MEMBERSHIP_UNCASTABLE_DTYPES: frozenset[str] = frozenset({"List", "Array", "Struct", "Object"})
+MEMBERSHIP_UNCASTABLE_DTYPES: frozenset[str] = frozenset({"List", "Array", "Struct", "Object", "Binary"})
 """polars dtype class NAMES whose cells have no single-string identity, so membership is refused.
 
 Matched by name because a module-level ``pl.List`` reference would resolve the lazy proxy and import
 polars at ``import tablassert.lib``, which is exactly what :mod:`tablassert._lazy` exists to avoid.
 Every parametrized variant reports its base name (``List(String)`` is named ``List``).
 
-A ``List``/``Array`` cell cannot be cast to ``String`` at all (``InvalidOperationError``) and a
-``Struct`` casts to a brace literal no identifier is spelled to match. Joining list cells on a
+A ``List``/``Array`` cell cannot be cast to ``String`` at all (``InvalidOperationError``), an
+``Object`` cell casts through python and never compares equal to an identifier, a ``Struct`` casts to
+a brace literal no identifier is spelled to match, and a ``Binary`` cell casts only when it happens to
+be valid UTF-8, so one list would match some rows and raise on the rest. Joining list cells on a
 separator instead would make a multi-value cell never match a single identifier, a silent wrong
-answer, so these raise a coded error.
+answer, so these dtypes raise a coded error.
 """
 
 
@@ -1121,7 +1123,8 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
     Raises:
         TablassertError: ``comparison-membership-empty`` for an empty list,
             ``reindex-membership-column-missing`` when the source lacks ``col``, and
-            ``reindex-membership-column-dtype-unsupported`` for nested cells.
+            ``reindex-membership-column-dtype-unsupported`` for cells with no single string form
+            (``List``, ``Array``, ``Struct``, ``Object``, ``Binary``).
 
     Notes:
         Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join

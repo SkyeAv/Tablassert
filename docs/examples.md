@@ -258,6 +258,9 @@ template:
 **Key techniques:**
 
 - **Reindex filtering** keeps only rows where column C (p-value) < 0.05 AND column D (sample size) >= 100; multiple reindex conditions are ANDed together.
+- **Comparison operators**: `lt` (less than), `ge` (greater or equal), `eq`, `ne`, `gt`, `le`, plus the membership pair `join`/`antijoin` in the next section.
+- **Regex comparator** (`regex: true` on an `eq`/`ne` entry) drops every placeholder gene cell in one filter (`N/A`, `n/a`, `--`, `unknown gene`) instead of one literal filter per spelling. The pattern is anchored with `^`/`$` because Polars matching is unanchored: unanchored `n/?a` would also drop `bona fide`.
+- **Backwards compatibility**: `regex` defaults to false, so an `eq`/`ne` entry without it still compares the cell to the literal `comparator`.
 
 ---
 
@@ -265,8 +268,8 @@ template:
 
 Split one association table into two sections by exact identifier membership: `join` keeps the rows
 whose cell is in the supplied list, `antijoin` keeps the rows that are not. **Use case:** a curated
-allow-list of entities that must be published, and the long tail of the same file kept separate
-from it, without writing one `eq` condition per identifier.
+allow-list of entities that must be published, and the rest of the same file kept separate from
+it, without writing one `eq` condition per identifier.
 
 **Data:** TSV with a gene CURIE column and a disease column
 
@@ -300,23 +303,24 @@ sections:
       reindex:
         - {column: A, comparison: join, comparator: ["HGNC:1100", "HGNC:11998"]}
 
-  # Section 2: everything except the retired genes.
+  # Section 2: every other gene. Same list, opposite operator, so the pair partitions the file.
   - source:
       reindex:
-        - {column: A, comparison: antijoin, comparator: ["HGNC:37133", "HGNC:35839"]}
+        - {column: A, comparison: antijoin, comparator: ["HGNC:1100", "HGNC:11998"]}
 ```
 
-**Key Points:**
+**Key techniques:**
 
 - **Same stage as every other filter:** membership runs on the raw cell before entity resolution, so
   the list must be spelled the way the column is written (here gene CURIEs in column A).
-- **Complementary sections:** the two sections above partition the file, so no edge is emitted twice,
-  and rows with an empty subject cell land in section 2 (antijoin keeps nulls; `join` drops them).
+- **Complementary lists:** `join` and `antijoin` over the *same* list partition the file, so each row
+  lands in exactly one section. Two different lists are not a partition, and a row in both is emitted
+  by both sections.
+- **Blank cells go with the tail:** a null or empty cell never matches, so `join` drops it while
+  `antijoin` keeps it. Those rows resolve to nothing and surface as `incomplete-edges` QC findings
+  under `build-kg --qc` rather than being filtered out silently.
 - **Column dtype:** a text source reads every column as a string, so no cast is involved. A typed
   parquet column is compared in its string form (`3` for the integer three, `"3.0"` for the float).
-- **Comparison operators**: `lt` (less than), `ge` (greater or equal), `eq`, `ne`, `gt`, `le`.
-- **Regex comparator** (`regex: true` on an `eq`/`ne` entry) drops every placeholder gene cell in one filter (`N/A`, `n/a`, `--`, `unknown gene`) instead of one literal filter per spelling. The pattern is anchored with `^`/`$` because Polars matching is unanchored: unanchored `n/?a` would also drop `bona fide`.
-- **Backwards compatibility**: `regex` defaults to false, so an `eq`/`ne` entry without it still compares the cell to the literal `comparator`.
 
 ---
 

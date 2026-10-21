@@ -175,7 +175,7 @@ Filter rows based on column values.
 | ------- | ------ | ---------- | ------------- |
 | `column` | String | Yes | Source column letters to evaluate; constrained to `^[A-Z]{1,3}$` (`A`-`ZZZ`). |
 | `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`, `"join"`, `"antijoin"`. |
-| `comparator` | String\|Int\|Float\|List[String] | Yes | Value to compare against. A string for `"eq"`/`"ne"`, a number for `"lt"`/`"le"`/`"gt"`/`"ge"`, or a non-empty list of identifiers for `"join"`/`"antijoin"`. With `regex: true` it is a pattern instead of a literal, so it must be a string. |
+| `comparator` | String\|Int\|Float\|List[String] | Yes | Value to compare against. A string for `"eq"`/`"ne"`, a number for `"lt"`/`"le"`/`"gt"`/`"ge"`, or a non-empty list of identifiers for `"join"`/`"antijoin"`. Membership members must be quoted strings: `comparator: [3, 4]` is rejected (`comparison-membership-member-not-a-string`) because membership tests the cell as text, so write `["3", "4"]`. With `regex: true` it is a pattern instead of a literal, so it must be a string. |
 | `regex` | Boolean | No | Treat `comparator` as a Polars-compatible regular expression searched in the cell instead of a literal value: `"eq"` keeps rows whose cell matches, `"ne"` keeps rows that do not. Case-sensitive and unanchored (anchor with `^`/`$` to pin a whole cell), the cell is compared as text, and a null cell never matches, so blank rows drop under either operator. Only valid with `"eq"`/`"ne"` (`comparison-regex-requires-eq-ne`); a pattern that is invalid, whitespace-only, or can match an empty cell (`^`, `()`, `.*`) is rejected at config time (`regex-bad-pattern`) because such a pattern matches every cell, so an `"ne"` filter would silently drop the whole table. Defaults to `false` (literal comparison), so existing configs are unchanged. |
 
 **Example:**
@@ -216,28 +216,38 @@ form and the column is not.
 Because the test is textual, a column the reader typed (a parquet `Int64`, a date, a boolean) is
 compared against its string form, and that form must be spelled as polars renders it. Measured
 forms: `3` for the integer `3`, `"3.0"` for the float `3.0`, `true` for a boolean, `2024-01-15` for
-a date, `2024-01-15 06:24:30.000000` for a datetime (a space and microsecond precision, not ISO `T`).
-A list cell (`List`, `Array`, `Struct`) has no single string form and is refused at build time with
-`reindex-membership-column-dtype-unsupported`. Matching is exact textual identity, never a pattern: `regex: true`
+a date, `06:24:30` for a time, `1.50` for a decimal (polars renders `Decimal` at the column's scale,
+so `Decimal("1.5")` in a scale-2 column reads `1.50`), and `2024-01-15 06:24:30.000000+00:00` for a
+datetime (a space and microsecond precision, not ISO `T`; timezone-aware cells render shifted to
+UTC with a `+00:00` offset). Quote the members of the list to match: membership is textual, so an
+unquoted number is rejected at config time
+(`comparison-membership-member-not-a-string`). A cell of a dtype with no usable single string form
+(`List`, `Array`, `Struct`, `Object`, or `Binary`) is refused at build time with
+`reindex-membership-column-dtype-unsupported`; `Binary` is refused because it casts only when it
+happens to be valid UTF-8, which would match some rows and raise on the rest.
+Matching is exact textual identity, never a pattern: `regex: true`
 on a membership entry is rejected at config time (`comparison-regex-requires-eq-ne`), so use the regex comparator
 above when a pattern rather than a fixed identifier set defines the rows you want.
 
 Null cells follow join rules, and that is the one place membership differs from `ne`: a null never
 matches, so `join` drops it while `antijoin` keeps it. An empty list, an unknown `column`, and a
-membership entry whose comparator is not a list are config or build errors rather than silent
-no-ops; a list that matches nothing is a valid empty filter and produces no rows without warning.
+membership entry whose comparator is not a list of quoted strings are config or build errors rather
+than silent no-ops; a list that matches nothing is a valid empty filter and produces no rows without
+warning.
 
-**Example:** two sections over one table, one keeping a gene allow-list and one dropping a deny-list.
+**Example:** one section that keeps a gene allow-list and drops one retired gene inside it. The two
+conditions are ANDed, the same way the scalar conditions above are.
 
 ```yaml
 reindex:
-  # Keep only the curated genes (column A holds gene CURIEs).
+  # Keep only the curated genes (column A holds gene CURIEs)...
   - {column: A, comparison: join, comparator: ["HGNC:1100", "HGNC:11998"]}
-
-reindex:
-  # Drop the retired genes, keeping every other row including empty cells.
+  # ...and drop the retired one even though it is on the allow-list.
   - {column: A, comparison: antijoin, comparator: ["HGNC:37133"]}
 ```
+
+To split one file into two complementary sections, use the same list under `join` in one section and
+under `antijoin` in the other; see [Identifier Allow-list and Deny-list](../examples.md#identifier-allow-list-and-deny-list).
 
 ### Statement (Triple Definition)
 

@@ -142,6 +142,44 @@ class Reindex(TablaBase):
         ),
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def membership_members_are_strings(cls, data: Any) -> Any:
+        """Reject an identifier list whose members are not strings, with a code rather than a field type error.
+
+        Args:
+            data: Raw config value for one ``Reindex`` entry.
+
+        Returns:
+            ``data`` unchanged when the entry is not a membership list, or when every member is a
+            string.
+
+        Raises:
+            TablassertValidationError: ``comparison-membership-member-not-a-string`` when a
+                ``join``/``antijoin`` list holds a non-string member.
+
+        Notes:
+            Without this guard the pydantic union rejects `comparator: [3, 4]` (the natural spelling
+            against an `Int64` column, whose string form is `3`) as a bare `string_type` field error
+            with no stable code and no docs URL, while every other failure in this family is coded.
+            The fix stays "quote the identifiers": membership is textual, so an unquoted number is a
+            config error rather than something to coerce silently.
+        """
+        if not isinstance(data, dict):
+            return data
+        comparison = data.get("comparison")
+        comparator = data.get("comparator")
+        if comparison not in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value) or not isinstance(comparator, list):
+            return data
+        for index, member in enumerate(comparator):
+            if not isinstance(member, str):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` identifier lists must hold quoted strings: member {index} is {type(member).__name__} ({member!r}). "
+                    f'Quote it (for example ["{member}"]) to match the cell as text.',
+                    code="comparison-membership-member-not-a-string",
+                )
+        return data
+
     @model_validator(mode="after")
     def comparison_datatypes(self: Self) -> Self:
         x: Comparisons = self.comparison

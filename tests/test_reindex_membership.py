@@ -304,10 +304,30 @@ def test_nested_column_raises_loudly() -> None:
     for dtype, frame in (
         (pl.List(pl.Int64), pl.LazyFrame({"column_1": [[1, 2]]})),
         (pl.Struct({"a": pl.Int64}), pl.LazyFrame({"column_1": [{"a": 1}]})),
+        (pl.Array(pl.Int64, 2), pl.LazyFrame({"column_1": pl.Series([[1, 2]], dtype=pl.Array(pl.Int64, 2))})),
+        (pl.Object, pl.LazyFrame({"column_1": pl.Series([object()], dtype=pl.Object)})),
+        (pl.Binary, pl.LazyFrame({"column_1": pl.Series([b"abc"], dtype=pl.Binary)})),
     ):
         assert frame.collect_schema()["column_1"] == dtype
         with pytest.raises(TablassertError, match="reindex-membership-column-dtype-unsupported"):
             lib.reindex_membership(frame, "column_1", ["1"])
+
+
+def test_string_columns_take_the_join_without_a_cast() -> None:
+    """The String fast path joins the identifier list directly; only typed columns get the helper.
+
+    WHY: the cast branch exists so a typed cell is compared in its string form. On an already-textual
+    column it is pure overhead (an extra projection plus a helper column that can collide with source
+    data), and nothing else in the suite can tell the two plans apart. `explain()` is the cheapest
+    observable that pins which branch ran.
+    """
+    text = lib.reindex_membership(_lf(column_1=["a", "b"]), "column_1", ["a"]).explain(optimized=False)
+    typed = lib.reindex_membership(_lf(column_1=[3, 4]), "column_1", ["3"]).explain(optimized=False)
+    assert lib.MEMBERSHIP_KEY_COLUMN not in text
+    assert lib.MEMBERSHIP_KEY_COLUMN in typed
+    # both still filter correctly
+    assert _values(lib.reindex_membership(_lf(column_1=["a", "b"]), "column_1", ["a"])) == ["a"]
+    assert _values(lib.reindex_membership(_lf(column_1=[3, 4]), "column_1", ["3"])) == [3]
 
 
 def test_helper_column_name_does_not_clobber_a_source_column() -> None:

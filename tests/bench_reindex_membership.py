@@ -63,8 +63,10 @@ pytestmark = pytest.mark.skipif(os.environ.get("TABLASSERT_BENCH") != "1", reaso
 _SEED = 42
 _ROWS: int = int(os.environ.get("TABLASSERT_BENCH_ROWS", "1_000_000"))
 _KEY_SIZES: tuple[int, ...] = (10, 1_000, 100_000)
-# The shipped join path may not be slower than the literal-list filter; the margin absorbs
-# scheduler noise on a shared box while still catching an order-of-magnitude regression.
+# Enforced invariant: the shipped join path costs **no more than twice** the literal-list filter's
+# median of three windows. It is not asserted to be strictly faster, because on short lists the two
+# tie inside measurement noise; the ceiling is what catches an order-of-magnitude regression (a
+# rebuild-per-row path, a lost hash join) without failing on a loaded box.
 _TOLERANCE: float = 2.0
 
 

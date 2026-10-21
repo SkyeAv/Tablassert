@@ -750,9 +750,17 @@ def test_reindex_antijoin_rejects_numeric_comparator() -> None:
 
 
 def test_reindex_join_rejects_non_string_members() -> None:
-    """Negative: identifier members must be strings, not numbers."""
-    with pytest.raises(ValidationError):
+    """Negative: identifier members must be strings, and the rejection carries its own code.
+
+    WHY: ``comparator: [3, 4]`` is the natural spelling against an ``Int64`` column whose string form
+    is ``3``, so it is the most likely membership mistake. Left to the field union it surfaces as a
+    bare ``string_type`` type error with no stable code and no docs URL, unlike every other failure in
+    this family, so a ``mode="before"`` validator names the member and tells the user to quote it.
+    """
+    with pytest.raises(ValidationError, match="comparison-membership-member-not-a-string"):
         Reindex(column="A", comparison="join", comparator=[1, 2])  # pyright: ignore
+    with pytest.raises(ValidationError, match="comparison-membership-member-not-a-string"):
+        Reindex(column="A", comparison="antijoin", comparator=["CHEBI:1", 2.5])  # pyright: ignore
 
 
 def test_reindex_scalar_rejects_list_comparator() -> None:
@@ -760,7 +768,8 @@ def test_reindex_scalar_rejects_list_comparator() -> None:
 
     WHY: widening ``comparator`` to ``list[str]`` must not let a scalar comparison silently take a
     set. A list of *strings* passes the field union, so the after-validator is the only guard.
-    (A list of non-strings never reaches it: the field union rejects it as a type error first.)
+    (A list of non-strings on a scalar entry never reaches it either: the field union rejects it as a
+    type error, and the membership validator only fires for ``join``/``antijoin``.)
     """
     with pytest.raises(ValidationError, match="comparison-bad-comparator-type"):
         Reindex(column="A", comparison="eq", comparator=["a"])  # pyright: ignore

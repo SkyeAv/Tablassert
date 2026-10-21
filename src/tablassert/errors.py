@@ -60,6 +60,7 @@ TablassertErrorCodes = Literal[
     # `comparator` field, the last two are op-level failures on the column being tested.
     "comparison-membership-comparator-required",
     "comparison-membership-empty",
+    "comparison-membership-member-not-a-string",
     "reindex-membership-column-missing",
     "reindex-membership-column-dtype-unsupported",
     "comparison-regex-requires-eq-ne",
