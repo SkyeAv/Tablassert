@@ -34,4 +34,8 @@
 *.opencode/
 # mkdocs build output
 site/
+# JOSS paper build output: paper.md/paper.bib/INSTRUCTIONS.md are tracked, the PDF is generated
+paper/*.pdf
+
 .ralph/
+.paperdraft/
