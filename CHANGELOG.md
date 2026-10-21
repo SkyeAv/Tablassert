@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.0.1 - 2026-10-21
+
+### Fixed
+
+- **`dedup_stream` failures no longer destroy the previously published graph.** The dedup pass unlinked the final artifact before running the native parser/writer, so any mid-run failure (a malformed NDJSON line, a `uuid-fields-not-a-key` collision under the default `uuid_on_collision=error`, or a native write error) truncated or destroyed the previously published graph; the stream now stages the deduplicated output in a sibling temporary directory (public basename preserved for collision diagnostics and fold reports), publishes the graph with a single `os.replace`, moves the advisory `.foldreport.json`, and deletes the input `*.tmp` only afterwards, so failures before replacement leave both the previous artifact and the input intact for diagnosis, and a suffixless input (where `p_out == p_in`) is rejected loudly instead of silently deleting the freshly published file. A fold-report replacement failure after the graph has been published remains possible; publishing the KGX and RIG as one set is tracked separately in #225. ([#226](https://github.com/SkyeAv/Tablassert/pull/226))
+- **Generic fullmap probe keys are blocked in their normalized forms.** `distinct()`'s generic-label blocklist was keyed to raw spellings (`expression`, `variable`, `exposure`, `not applicable`, `p_value`), but fullmap probe keys have been Porter2-stemmed and token-sorted since the schema v6 move, so none of those spellings ever matched and header literals like Expression / Variables / Exposure / P value flowed through resolution as generic UMLS entities (such as `UMLS:C0439855` and `UMLS:C0205147`); the excluded labels are now filtered through the same `level_one` + `level_two` pipeline that generates probe keys (computed once and cached), so raw, stemmed, and stripped forms of every existing entry all drop, no new words join the list (`control`, `status` stay a deliberate separate decision), and real terms, numeric probes, and empty probes behave exactly as before. ([#227](https://github.com/SkyeAv/Tablassert/pull/227))
+
+### Changed
+
+- **Markdown is linted in pre-commit and CI.** markdownlint-cli2 v0.23.3 (scope and ignores in `.markdownlint-cli2.jsonc`) plus a custom rule banning em/en dashes, unicode arrows, and unicode bullets with ASCII auto-fixes, and html-validate for HTML code fences, run as fast `--fix` pre-commit hooks and as the new standalone `markdown-lint` CI job with pins cross-referenced against the pre-commit config so local and CI cannot drift; roughly 740 existing violations were remediated in the same pass. ([#223](https://github.com/SkyeAv/Tablassert/pull/223))
+- **Jared Roach's email is added to the maintainer contact lists.** `jroach@isbscience.org` now appears in `CITATION.cff`, the README and docs contributor lists, and the `CODE_OF_CONDUCT.md` enforcement contacts, so the private security reports `CONTRIBUTING.md` routes to "the maintainers listed in `CITATION.cff`" can reach all three authors. ([#210](https://github.com/SkyeAv/Tablassert/pull/210))
+
 ## 22.0.0 - 2026-10-16
 
 ### Breaking Changes
