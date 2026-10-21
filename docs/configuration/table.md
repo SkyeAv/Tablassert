@@ -174,14 +174,52 @@ Filter rows based on column values.
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
 | `column` | String | Yes | Source column letters to evaluate; constrained to `^[A-Z]{1,3}$` (`A`-`ZZZ`). |
-| `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`. |
-| `comparator` | String\|Int\|Float | Yes | Value to compare against. Must be a string for `"eq"`/`"ne"`, or a number for `"lt"`/`"le"`/`"gt"`/`"ge"`. |
+| `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`, `"join"`, `"antijoin"`. |
+| `comparator` | String\|Int\|Float\|List[String] | Yes | Value to compare against. A string for `"eq"`/`"ne"`, a number for `"lt"`/`"le"`/`"gt"`/`"ge"`, or a non-empty list of identifiers for `"join"`/`"antijoin"`. |
 
 **Example:**
 
 ```yaml
 reindex:
   - {column: C, comparison: lt, comparator: 0.05}  # Keep rows where column C < 0.05
+```
+
+##### Membership Filtering (`join` / `antijoin`)
+
+The two membership comparisons test a column against a list of identifiers instead of a single
+value: `join` keeps the rows whose cell is in the list, `antijoin` keeps the rows that are not.
+Use them for a curated allow-list, or to split one table into a section that keeps a set of
+subjects and a section that drops it. Duplicate identifiers in the list are ignored, surviving rows
+keep their source order, and every column keeps the type the reader gave it.
+
+The comparison runs at the same stage as the other `reindex` conditions, before encoding, NLP
+normalization, and entity resolution, so it tests the cell exactly as the source file wrote it. A
+`join` list of `HGNC:1100` therefore matches a cell that already reads `HGNC:1100`, not a `BRCA1`
+symbol column: resolve first (a different section, or a `prefix` encoding) if the list is in CURIE
+form and the column is not.
+
+Because the test is textual, a column the reader typed (a parquet `Int64`, a date, a boolean) is
+compared against its string form, and that form must be spelled as polars renders it. Measured
+forms: `3` for the integer `3`, `"3.0"` for the float `3.0`, `true` for a boolean, `2024-01-15` for
+a date, `2024-01-15 06:24:30.000000` for a datetime (a space and microsecond precision, not ISO `T`).
+A list cell (`List`, `Array`, `Struct`) has no single string form and is refused at build time with
+`reindex-membership-column-dtype-unsupported`.
+
+Null cells follow join rules, and that is the one place membership differs from `ne`: a null never
+matches, so `join` drops it while `antijoin` keeps it. An empty list, an unknown `column`, and a
+membership entry whose comparator is not a list are config or build errors rather than silent
+no-ops; a list that matches nothing is a valid empty filter and produces no rows without warning.
+
+**Example:** two sections over one table, one keeping a gene allow-list and one dropping a deny-list.
+
+```yaml
+reindex:
+  # Keep only the curated genes (column A holds gene CURIEs).
+  - {column: A, comparison: join, comparator: ["HGNC:1100", "HGNC:11998"]}
+
+reindex:
+  # Drop the retired genes, keeping every other row including empty cells.
+  - {column: A, comparison: antijoin, comparator: ["HGNC:37133"]}
 ```
 
 ### Statement (Triple Definition)
@@ -237,7 +275,7 @@ Defines how to extract and resolve entities.
 | `method` | String | No | `"value"` (literal) or `"column"` (source column letters). Defaults to `"value"`. |
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
 | `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human); defaults to `9606` (Homo sapiens), set null to disable |
-| `taxon_from` | String | No | Per-row taxon scoping: name another resolved node column of the same statement (a CURIE-ranged qualifier key, or `subject`/`object`) whose resolved NCBITaxon CURIE scopes this column's entity resolution row by row, instead of the static `taxon`. The named column is resolved first; rows whose taxon cell is blank fall back to the `9606` default, and a non-null cell that does not resolve to an NCBITaxon CURIE fails the build (`taxon-from-not-ncbitaxon`). Mutually exclusive with an explicit `taxon` (`taxon-from-conflict`); an unknown, self-referencing, or cyclic target is rejected at config time (`taxon-from-unknown-column` / `taxon-from-self` / `taxon-from-cycle`). The source column itself usually wants `taxon: null` (see [Taxon Filtering](#taxon-filtering)) |
+| `taxon_from` | String | No | Per-row taxon scoping: name another resolved node column of the same statement (a CURIE-ranged qualifier key, or `subject`/`object`) whose resolved NCBITaxon CURIE scopes this column's entity resolution row by row, instead of the static `taxon`. The named column is resolved first; rows whose taxon cell is blank fall back to the `9606` default, and a non-null cell that does not resolve to an NCBITaxon CURIE fails the build (`taxon-from-not-ncbitaxon`). Mutually exclusive with an explicit `taxon` (`taxon-from-conflict`); an unknown, self-referencing, or cyclic target is rejected at config time (`taxon-from-unknown-column` / `taxon-from-self` / `taxon-from-cycle`). The source column itself usually wants `taxon: null` (see [Taxonomic Filtering](#taxonomic-filtering)) |
 | `prioritize` | List[String] | No | Preferred Biolink categories (must be valid `Categories` enum values such as `Gene`, `Protein`) |
 | `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
 | `exclude_prefixes` | List[String] | No | CURIE namespace prefixes excluded during entity resolution: the prefix is the text before the first `:` of a resolved CURIE, and every candidate whose prefix is listed is dropped. Matching is exact and case-sensitive (`OMIM` drops `OMIM:100100` but not `OMIMPS:100` or `omim:100100`). Optional; defaults to null (no prefix filtering). See [Resolution Filters](#resolution-filters). |

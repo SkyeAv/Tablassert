@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- **`source.reindex` can filter rows by identifier membership (`join` / `antijoin`).** A `reindex` entry whose `comparison` is `join` keeps the rows whose cell value is in the `comparator` list of identifiers, and `antijoin` keeps the rows that are not, so a curated allow-list or a deny-list is one condition instead of one `eq`/`ne` per identifier. Membership runs at the same stage as the existing comparisons, on the raw pre-resolution cell value, so the list is spelled the way the source column is written. Implementation is a polars semi/anti hash join against a deduplicated key frame (faster than a literal-list filter wherever a list is large enough to matter: about 1.6x at 100k identifiers over 1M rows, tied at ten), rows keep their source order via an explicit `maintain_order="left"`, and every column keeps the dtype the reader produced (a typed column is compared in its string form; list/struct columns are refused with `reindex-membership-column-dtype-unsupported`). Null cells follow join rules, which is the one deliberate difference from `ne`: `join` drops them, `antijoin` keeps them. An empty identifier list, a non-list comparator, and an unknown column are errors, not silent no-ops; the six existing comparisons are unchanged in both behaviour and compiled op shape, so stored run-cache prefixes stay valid.
+
 ## 22.1.0 - 2026-10-22
 
 ### Changed
