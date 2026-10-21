@@ -62,6 +62,7 @@ TablassertErrorCodes = Literal[
     "comparison-membership-empty",
     "reindex-membership-column-missing",
     "reindex-membership-column-dtype-unsupported",
+    "comparison-regex-requires-eq-ne",
     "encoding-bad-excel-column",
     "regex-bad-pattern",
     "regex-bad-replacement",

@@ -19,6 +19,7 @@ from typing import Any
 
 import polars as pl
 import pytest
+from pydantic import ValidationError
 
 from tablassert import lib
 from tablassert.errors import TablassertError
@@ -170,6 +171,69 @@ def test_reindex_op_rejects_membership_with_scalar_comparator() -> None:
     entry: Reindex = Reindex.model_construct(column="A", comparison="join", comparator="x")
     with pytest.raises(TablassertError, match="comparison-membership-comparator-required"):
         lib.reindex_op(entry)
+
+
+def test_reindex_op_routes_regex_entries() -> None:
+    """A `regex: true` entry still compiles to `reindex_regex`, including its negate flag.
+
+    WHY: `reindex_op` is the single dispatcher over all three filter families now, so the regex arm
+    main shipped (`eq` keeps matches, `ne` negates) has to survive the refactor with the same tuple
+    shape, or stored run-cache digests for regex configs would move.
+    """
+    keep = lib.reindex_op(Reindex(column="B", comparison="eq", comparator="^n/?a$", regex=True))  # pyright: ignore
+    drop = lib.reindex_op(Reindex(column="A", comparison="ne", comparator="^junk$", regex=True))  # pyright: ignore
+    assert keep == (lib.reindex_regex, ("column_2", "^n/?a$", False))
+    assert drop == (lib.reindex_regex, ("column_1", "^junk$", True))
+
+
+def test_membership_rejects_regex_comparator() -> None:
+    """Negative: `regex` is meaningless on a membership entry, which matches fixed strings.
+
+    WHY: main's validator rejected `regex` outside `eq`/`ne` from the numeric arm, and membership
+    short-circuits before that arm, so the rule had to be restated here or `join` + `regex: true`
+    would have configured a silently ignored pattern.
+    """
+    for comparison in ("join", "antijoin"):
+        with pytest.raises(ValidationError, match="comparison-regex-requires-eq-ne"):
+            Reindex(column="A", comparison=comparison, comparator=["x"], regex=True)  # pyright: ignore
+
+
+def test_tcode_compiles_all_three_filter_families() -> None:
+    """One section can mix a scalar, a regex and a membership condition, in that order.
+
+    WHY: the three arms are mutually exclusive `if`s in the dispatcher, so a mixed config is the only
+    shape that proves an earlier arm cannot swallow a later entry.
+    """
+    config: dict[str, Any] = {
+        "template": {
+            "source": {
+                "kind": "text",
+                "local": "./data.tsv",
+                "url": ["https://example.com/data.tsv"],
+                "delimiter": "\t",
+                "reindex": [
+                    {"column": "A", "comparison": "ne", "comparator": "NA"},
+                    {"column": "B", "comparison": "eq", "comparator": "^\\d{4}$", "regex": True},
+                    {"column": "C", "comparison": "antijoin", "comparator": ["mapk1"]},
+                ],
+            },
+            "statement": {
+                "subject": {"method": "column", "encoding": "A"},
+                "predicate": "associated_with",
+                "object": {"method": "column", "encoding": "B"},
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        }
+    }
+    section: dict[str, Any] = to_sections(config, Path("t.yaml"))[0]
+    tcode: lib.Tcode = lib.Tcode.model_validate({**section, "store": Path("out.parquet")})
+    cleaned: list[tuple[Any, tuple[Any, ...]]] = tcode.clean(tcode._source_ops())
+    filters: list[tuple[Any, tuple[Any, ...]]] = [op for op in cleaned if op[0] in (lib.reindex, lib.reindex_regex, lib.reindex_membership)]
+    assert filters == [
+        (lib.reindex, ("column_1", operator.ne, "NA", False)),
+        (lib.reindex_regex, ("column_2", "^\\d{4}$", False)),
+        (lib.reindex_membership, ("column_3", ["mapk1"], True)),
+    ]
 
 
 def test_tcode_emits_membership_op_in_source_position() -> None:

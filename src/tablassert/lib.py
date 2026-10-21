@@ -1174,22 +1174,52 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
     return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how, maintain_order="left").drop(key_col)
 
 
+def reindex_regex(df: pl.LazyFrame, col: str, pattern: str, negate: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by filtering rows on a polars regex match against a column.
+
+    Args:
+        df: Source LazyFrame.
+        col: Column to test.
+        pattern: Polars-compatible regex, matched unanchored and case-sensitively (write `^`/`$`
+            to pin a whole cell).
+        negate: When True keep the rows that do NOT match (the `ne` filter); when False keep the
+            matches (the `eq` filter).
+
+    Returns:
+        LazyFrame containing only rows whose predicate is true.
+
+    Notes:
+        The column is cast to String first, so a typed source (parquet, or a numeric column in a
+        text table) filters on its text form instead of raising polars' ``InvalidOperationError:
+        expected String type``. A null cell matches nothing and ``not_()`` leaves it null, so null
+        rows drop under both directions -- the same null rule literal `eq`/`ne` already have, since
+        a null comparison is never true.
+    """
+    match: pl.Expr = pl.col(col).cast(pl.String).str.contains(pattern)
+    return df.filter(match.not_() if negate else match)
+
+
 def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
     """Compile one ``Reindex`` config entry into its Tcode op tuple.
 
     Args:
-        entry: Validated ``Reindex`` model (a membership entry always carries a non-empty
-            ``list[str]`` comparator; scalar entries never do).
+        entry: Validated ``Reindex`` model. The validator guarantees the pairing: a membership entry
+            carries a non-empty ``list[str]`` comparator, ``regex`` only ever sits on ``eq``/``ne``,
+            and a scalar entry carries a scalar comparator.
 
     Returns:
         ``(callable, args)`` for the pipeline: :func:`reindex_membership` for ``join``/``antijoin``,
-        otherwise :func:`reindex` with the ``operator`` module callable and the same ``cast``
-        choice it has always used (numeric comparisons cast to Float64, ``eq``/``ne`` do not).
+        :func:`reindex_regex` for a ``regex`` entry, otherwise :func:`reindex` with the ``operator``
+        module callable and the same ``cast`` choice it has always used (numeric comparisons cast to
+        Float64, ``eq``/``ne`` do not).
 
     Notes:
-        ``Reindex.comparison`` carries the plain enum *value* at runtime because ``TablaBase``
-        sets ``use_enum_values=True``, so this branches on the strings, exactly as the inline
-        comprehension it replaces did.
+        Legacy entries keep emitting exactly the tuples they always did, so their run-cache op digests
+        do not move; membership is the only new shape.
+
+        ``Reindex.comparison`` carries the plain enum *value* at runtime because ``TablaBase`` sets
+        ``use_enum_values=True``, so this branches on the strings, exactly as the inline comprehension
+        it replaces did.
     """
     col: str = idxname(entry.column)
     comparison: str = entry.comparison
@@ -1200,6 +1230,10 @@ def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
                 code="comparison-membership-comparator-required",
             )
         return (reindex_membership, (col, entry.comparator, comparison == Comparisons.ANTIJOIN.value))
+    if entry.regex:
+        # models.Reindex rejects `regex` off eq/ne, so this arm never needs the numeric cast or an
+        # operator lookup.
+        return (reindex_regex, (col, entry.comparator, comparison == Comparisons.NE.value))
     if comparison in (Comparisons.NE.value, Comparisons.EQ.value):
         return (reindex, (col, getattr(operator, comparison), entry.comparator, False))
     return (reindex, (col, getattr(operator, comparison), entry.comparator))
@@ -1717,6 +1751,7 @@ PHASE_OF: dict[Callable, str] = {
     pick: "filter",
     reindex: "filter",
     reindex_membership: "filter",
+    reindex_regex: "filter",
     head: "filter",
     coerce_columns: "clean",
     clean_numeric: "clean",

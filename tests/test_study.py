@@ -134,8 +134,11 @@ def test_non_string_id_is_not_unidentified(tmp_path: Path) -> None:
     undeclared, isolated all collect string ids only) -- which is why a writer
     emitting one would be a separate bug to fix, not one to silently accept here.
     """
-    nodes: Path = _write_ndjson(tmp_path / "n.ndjson", _records({"id": 5, "name": "a"}, {"id": "A:1", "name": "b"}))
-    edges: Path = _write_ndjson(tmp_path / "e.ndjson", _records({"subject": "A:1", "predicate": "biolink:related_to", "object": "A:1"}))
+    nodes: Path = _write_ndjson(tmp_path / "n.ndjson", _records({"id": 5, "name": "a"}, {"id": "A:1", "name": "b"}, {"id": "A:2", "name": "c"}))
+    # Endpoints are distinct so the self-loop assertion stays out of this test's result: the
+    # id-based checks are the subject here, and a same-CURIE pair would add an unrelated
+    # violation to the ``== []`` assertion.
+    edges: Path = _write_ndjson(tmp_path / "e.ndjson", _records({"subject": "A:1", "predicate": "biolink:related_to", "object": "A:2"}))
     assert study.study_kgx(nodes, edges) == []
 
 
@@ -180,6 +183,107 @@ def test_incomplete_edges_clean_pass(tmp_path: Path) -> None:
     edges: Path = _write_ndjson(tmp_path / "e.ndjson", _records({"subject": "HGNC:5", "predicate": "biolink:related_to", "object": "HGNC:6"}))
     checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
     assert "incomplete-edges" not in checks
+
+
+def test_self_loop_edges(tmp_path: Path) -> None:
+    """An edge whose subject and object are one CURIE fails the study.
+
+    Why this matters: in a table-derived graph a self-referential edge is almost always a
+    resolution collapse (two differently worded cells landing on the same identifier, or one
+    cell wired into both statement slots), so it ships an assertion that states nothing and
+    that no consumer can use. The count is the number of offending edges and the examples
+    carry the collapsed CURIE with its per-CURIE total, so the author can go fix the mapping.
+    """
+    nodes, _ = _clean(tmp_path)
+    edges: Path = _write_ndjson(
+        tmp_path / "e.ndjson",
+        _records(
+            {"subject": "HGNC:5", "predicate": "biolink:regulates", "object": "HGNC:5"},
+            {"subject": "HGNC:5", "predicate": "biolink:correlated_with", "object": "HGNC:5"},
+            {"subject": "HGNC:6", "predicate": "biolink:related_to", "object": "HGNC:6"},
+        ),
+    )
+    checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
+    violation: study.StudyViolation = checks["self-loop-edges"]
+    assert violation.label == "edges"
+    assert violation.count == 3
+    assert violation.examples == ["HGNC:5 (2)", "HGNC:6 (1)"]
+    assert study.format_violations([violation]) == "edges: 3 edges whose subject and object are the same CURIE (e.g. HGNC:5 (2), HGNC:6 (1))"
+
+
+def test_distinct_subject_object_is_not_a_self_loop(tmp_path: Path) -> None:
+    """A normal two-endpoint edge must never trip the self-loop assertion.
+
+    The negative case for the check above: without it, an inverted comparison could report
+    every edge as self-referential and still look plausible, because the other assertions
+    pass on the same file.
+    """
+    nodes, edges = _clean(tmp_path)
+    checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
+    assert "self-loop-edges" not in checks
+
+
+def test_blank_edge_slots_are_not_self_loops(tmp_path: Path) -> None:
+    """Absent, null, and blank slots are incomplete-edges violations, not self-loops.
+
+    Two missing slots compare equal, so a naive ``subject == object`` would report one broken
+    edge under two assertions and tell the author a CURIE collapsed when nothing resolved at
+    all. Blank-versus-blank pairs must stay out of the self-loop tally.
+    """
+    nodes: Path = _write_ndjson(tmp_path / "n.ndjson", _records({"id": "A:1", "name": "a"}))
+    edges: Path = _write_ndjson(
+        tmp_path / "e.ndjson",
+        _records(
+            {"predicate": "biolink:related_to"},
+            {"subject": None, "predicate": "biolink:related_to", "object": None},
+            {"subject": "", "predicate": "biolink:related_to", "object": ""},
+            {"subject": " ", "predicate": "biolink:related_to", "object": " "},
+        ),
+    )
+    checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
+    assert "self-loop-edges" not in checks
+    assert checks["incomplete-edges"].count == 8
+
+
+def test_non_string_edge_slots_are_not_self_loops(tmp_path: Path) -> None:
+    """An equal pair of non-string slots is not a self-loop, matching the slot convention.
+
+    The assertion is about CURIEs, and no writer emits a non-string endpoint, so this shape
+    belongs to the malformed-record checks rather than the collapsed-mapping one.
+    """
+    nodes: Path = _write_ndjson(tmp_path / "n.ndjson", _records({"id": "A:1", "name": "a"}))
+    edges: Path = _write_ndjson(tmp_path / "e.ndjson", _records({"subject": 5, "predicate": "biolink:related_to", "object": 5}))
+    checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges))
+    assert "self-loop-edges" not in checks
+
+
+def test_self_loop_examples_capped(tmp_path: Path) -> None:
+    """Self-loop examples are capped while the count stays exact.
+
+    A collapsed column can self-loop thousands of times; the stderr summary has to stay
+    scannable without understating how many edges are affected.
+    """
+    nodes: Path = _write_ndjson(tmp_path / "n.ndjson", _records(*({"id": f"X:{i}", "name": f"n{i}"} for i in range(30))))
+    edges: Path = _write_ndjson(
+        tmp_path / "e.ndjson", _records(*({"subject": f"X:{i}", "predicate": "biolink:related_to", "object": f"X:{i}"} for i in range(30)))
+    )
+    checks: dict[str, study.StudyViolation] = _checks(study.study_kgx(nodes, edges, example_limit=10))
+    assert checks["self-loop-edges"].count == 30
+    assert len(checks["self-loop-edges"].examples) == 10
+
+
+def test_study_final_ndjson_exits_on_self_loop_edges(tmp_path: Path) -> None:
+    """A self-referential edge fails a real ``--qc`` build through the CLI stage.
+
+    Exercises the shipped artifact rather than the unit: the study is only a gate because
+    stage 7 turns violations into a non-zero exit, so files on disk -> assertion ->
+    SystemExit has to be proven end to end.
+    """
+    _write_ndjson(tmp_path / "g_1.nodes.ndjson", _records({"id": "HGNC:5", "name": "insulin"}))
+    _write_ndjson(tmp_path / "g_1.edges.ndjson", _records({"subject": "HGNC:5", "predicate": "biolink:regulates", "object": "HGNC:5"}))
+    with pytest.raises(SystemExit) as excinfo:
+        cli.study_final_ndjson("g", "1", tmp_path)
+    assert excinfo.value.code == 1
 
 
 def test_unnamed_examples_capped(tmp_path: Path) -> None:

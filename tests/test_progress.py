@@ -122,8 +122,8 @@ def test_dynamic_loop_never_overflows_when_a_phase_total_resets_to_zero() -> Non
 
 # code -> zero-arg callable that raises ValidationError (verbatim guard-test constructors, tests/test_models.py:285-363).
 TRIGGERS: dict[str, Callable[[], object]] = {
-    "comparison-bad-comparator-type": lambda: Reindex(column="A", comparison=Comparisons.EQ, comparator=5),
-    "comparison-nonnumeric-comparator": lambda: Reindex(column="A", comparison=Comparisons.GT, comparator="x"),
+    "comparison-bad-comparator-type": lambda: Reindex(column="A", comparison=Comparisons.EQ, comparator=5),  # pyright: ignore
+    "comparison-nonnumeric-comparator": lambda: Reindex(column="A", comparison=Comparisons.GT, comparator="x"),  # pyright: ignore
     "config-rows-and-row-slice-conflict": lambda: Text(
         local=Path("./t.tsv"), url=["https://example.com/t.tsv"], kind="text", rows=[1], row_slice=[1, 5]
     ),  # pyright: ignore

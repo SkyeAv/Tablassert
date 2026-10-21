@@ -131,6 +131,16 @@ class Reindex(TablaBase):
         ),
         examples=["N/A", 0, 1.5, ["CHEBI:41774", "CHEBI:48217"]],
     )
+    regex: bool = Field(
+        False,
+        description=(
+            "When true, `comparator` is a polars-compatible regex matched against the cell instead of a literal "
+            "value: `eq` keeps rows whose cell matches, `ne` keeps rows that do not. Matching is case-sensitive and "
+            "unanchored (add `^`/`$` to pin the whole cell), the column is compared as text, and a null cell never "
+            "matches, so null rows drop under both operators. Only valid with `eq`/`ne`; an invalid or empty pattern "
+            "is rejected at config time (`regex-bad-pattern`)."
+        ),
+    )
 
     @model_validator(mode="after")
     def comparison_datatypes(self: Self) -> Self:
@@ -138,6 +148,11 @@ class Reindex(TablaBase):
         y: str | int | float | list[str] = self.comparator
 
         if x == Comparisons.JOIN or x == Comparisons.ANTIJOIN:
+            if self.regex:
+                raise TablassertValidationError(
+                    "`regex` is only meaningful with the `eq`/`ne` comparisons; `join`/`antijoin` match identifiers by exact string identity against a list.",
+                    code="comparison-regex-requires-eq-ne",
+                )
             if not isinstance(y, list):
                 raise TablassertValidationError(
                     f"`join`/`antijoin` comparisons require a list of identifier strings, got {type(y).__name__}.",
@@ -152,7 +167,33 @@ class Reindex(TablaBase):
                 raise TablassertValidationError(
                     f"`eq`/`ne` comparisons require a str comparator, got {type(y).__name__}.", code="comparison-bad-comparator-type"
                 )
+            if self.regex:
+                # An empty-or-everything pattern compiles, but it matches EVERY cell, so a `ne` filter
+                # would silently drop the whole table. Reject whitespace-only spellings and any pattern
+                # that can match the empty string (`^`, `()`, `.*`, `x*`) with the same code the
+                # `exclude_regex` probe uses.
+                if not y.strip():
+                    raise TablassertValidationError(
+                        f"`comparator` must be a non-empty pattern when `regex` is true (an empty pattern matches every cell), got {y!r}.",
+                        code="regex-bad-pattern",
+                    )
+                try:
+                    pl.Series([""]).str.contains(y)
+                except Exception as e:
+                    raise TablassertValidationError(
+                        f"`comparator` must be a polars-compatible regex when `regex` is true, got {y!r}: {e}", code="regex-bad-pattern"
+                    ) from e
+                if pl.Series([""]).str.contains(y).item():
+                    raise TablassertValidationError(
+                        f"`comparator` must not match an empty cell when `regex` is true (it would match every cell, so an `ne` filter would drop the whole table), got {y!r}.",
+                        code="regex-bad-pattern",
+                    )
         else:
+            if self.regex:
+                raise TablassertValidationError(
+                    "`regex` is only meaningful with the `eq`/`ne` comparisons; ordering comparisons cast the column to Float64 and compare numerically.",
+                    code="comparison-regex-requires-eq-ne",
+                )
             if not isinstance(y, (int, float)):
                 raise TablassertValidationError(
                     f"Comparisons other than `eq`/`ne` require a float or int comparator, got {type(y).__name__}.",

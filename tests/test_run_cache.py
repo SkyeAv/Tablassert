@@ -267,7 +267,7 @@ def test_canonical_handles_all_supported_types() -> None:
     assert canonical(Comparisons.NE) == canonical("ne")
     assert canonical({"b": 1, "a": 2}) == canonical({"a": 2, "b": 1}) == "{'a': 2, 'b': 1}"
     # A real pydantic model from tablassert.models serializes via model_dump_json().
-    model: Reindex = Reindex(column="A", comparison=Comparisons.NE, comparator="N/A")
+    model: Reindex = Reindex(column="A", comparison=Comparisons.NE, comparator="N/A")  # pyright: ignore
     assert canonical(model) == model.model_dump_json()
     # Callables serialize by qualified identity.
     assert canonical(lib.csv) == "tablassert.lib.csv"

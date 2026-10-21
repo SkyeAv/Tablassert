@@ -260,6 +260,7 @@ OP_COST: dict[Callable, int] = {
     lib.reindex: 1,
     # Membership filter: one hash join against a small key frame, same single-predicate price.
     lib.reindex_membership: 1,
+    lib.reindex_regex: 1,
     # head samples min(HEAD_ROWS, height) rows, so it needs a height pass before slicing.
     lib.head: 2,
     # Encode: each is one lazy expression over a single column.

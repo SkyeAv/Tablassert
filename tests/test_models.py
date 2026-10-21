@@ -1104,7 +1104,7 @@ def test_reindex_eq_with_non_string_comparator_rejected() -> None:
     Catches a misconfigured row filter at config time instead of deep inside a multi-hour build.
     """
     with pytest.raises(ValidationError) as exc_info:
-        Reindex(column="A", comparison=Comparisons.EQ, comparator=5)
+        Reindex(column="A", comparison=Comparisons.EQ, comparator=5)  # pyright: ignore
     assert "comparison-bad-comparator-type" in str(exc_info.value)
 
 
@@ -1114,8 +1114,96 @@ def test_reindex_ordering_with_non_numeric_comparator_rejected() -> None:
     Catches a misconfigured row filter at config time instead of deep inside a multi-hour build.
     """
     with pytest.raises(ValidationError) as exc_info:
-        Reindex(column="A", comparison=Comparisons.GT, comparator="x")
+        Reindex(column="A", comparison=Comparisons.GT, comparator="x")  # pyright: ignore
     assert "comparison-nonnumeric-comparator" in str(exc_info.value)
+
+
+def test_reindex_regex_defaults_to_literal_comparison() -> None:
+    """`regex` defaults to False and round-trips, so every pre-existing config keeps literal `eq`/`ne`.
+
+    Why: the regex comparator is opt-in. A config that never names the key must validate, dump, and
+    later emit exactly the ops it emitted before the feature existed, or shipped TableConfigs would
+    silently change which rows survive a build.
+    """
+    ri: Reindex = Reindex(column="A", comparison=Comparisons.NE, comparator="N/A")  # pyright: ignore
+    assert ri.regex is False
+    assert ri.model_dump()["regex"] is False
+
+
+@pytest.mark.parametrize("comparison", [Comparisons.EQ, Comparisons.NE], ids=["eq", "ne"])
+def test_reindex_regex_accepts_polars_compatible_pattern(comparison: Comparisons) -> None:
+    """`eq`/`ne` accept a polars-compatible regex `comparator` when `regex` is true.
+
+    Why: this is the feature's happy path -- dropping whole families of junk cells
+    (``N/A``, ``n/a``, ``--``) without enumerating every spelling.
+    """
+    ri: Reindex = Reindex(column="A", comparison=comparison, comparator="^(?:n/?a|-{1,2})$", regex=True)
+    assert ri.regex is True
+    assert ri.comparator == "^(?:n/?a|-{1,2})$"
+
+
+@pytest.mark.parametrize("comparison", [Comparisons.LT, Comparisons.LE, Comparisons.GT, Comparisons.GE])
+def test_reindex_regex_with_ordering_comparison_rejected(comparison: Comparisons) -> None:
+    """Guard: `regex` is only meaningful with `eq`/`ne`.
+
+    Why: ordering comparisons cast the column to Float64 and compare numerically, so a regex
+    comparator there would be ignored. Failing at config time beats a filter that quietly does
+    something else. Also fires before the comparator-type guard, so a mixed-up config reports the
+    operator mismatch rather than a type complaint.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=comparison, comparator=5, regex=True)
+    assert "comparison-regex-requires-eq-ne" in str(exc_info.value)
+
+
+def test_reindex_regex_invalid_pattern_rejected() -> None:
+    """Guard: a regex `comparator` must compile in the polars regex engine.
+
+    Catches an uncompilable row filter at config time instead of mid-build, reusing the
+    `regex-bad-pattern` code from the `Regex.pattern` and `exclude_regex` probes.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.NE, comparator="(", regex=True)
+    assert "regex-bad-pattern" in str(exc_info.value)
+
+
+def test_reindex_regex_empty_comparator_rejected() -> None:
+    """Guard: an empty or whitespace-only regex `comparator` is rejected.
+
+    An empty pattern compiles, but polars ``str.contains("")`` matches EVERY cell, so a `ne`
+    filter would silently drop the whole table (data loss). Literal `ne` keeps its empty
+    comparator (see `test_reindex_valid`, the shipped TableConfig idiom), so the gate is
+    regex-mode only.
+    """
+    for bad in ("", "   "):
+        with pytest.raises(ValidationError) as exc_info:
+            Reindex(column="A", comparison=Comparisons.NE, comparator=bad, regex=True)  # pyright: ignore
+        assert "regex-bad-pattern" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("bad", ["^", "()", ".*", "x*"])
+def test_reindex_regex_every_cell_match_rejected(bad: str) -> None:
+    """Guard: a pattern that can match the empty string matches EVERY cell, so it is rejected.
+
+    Why: whitespace-only is only one spelling of the data-loss hole. `^`, `()`, `.*`, and `x*` all
+    compile cleanly and match every cell, so under `ne` each would silently drop the whole table;
+    the probe (``str.contains`` against an empty string) catches exactly that class without false
+    positives on anchored real patterns or on `\b`.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.NE, comparator=bad, regex=True)  # pyright: ignore
+    assert "regex-bad-pattern" in str(exc_info.value)
+
+
+def test_reindex_regex_still_requires_str_comparator() -> None:
+    """Guard: `regex` does not relax the `eq`/`ne` str-comparator rule.
+
+    Why: a number under `regex: true` has no textual meaning for a pattern probe, so the existing
+    `comparison-bad-comparator-type` code still owns that mistake.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.EQ, comparator=5, regex=True)
+    assert "comparison-bad-comparator-type" in str(exc_info.value)
 
 
 def test_source_with_both_rows_and_row_slice_rejected() -> None:
