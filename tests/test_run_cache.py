@@ -84,6 +84,52 @@ def _audit_ops(section_hash: str, config_file: str) -> list[tuple[Callable, tupl
     return [(fullmap_audit, ("subject", section_hash, config_file, "passed", True))]
 
 
+def _membership_ops(keys: list[str], anti: bool = False) -> list[tuple[Callable, tuple[Any, ...]]]:
+    """A single ``reindex_membership`` op, the shape ``lib.reindex_op`` emits for join/antijoin."""
+    return [(lib.reindex_membership, ("column_1", keys, anti))]
+
+
+def test_membership_digest_tracks_the_identifier_list() -> None:
+    """A join/antijoin identifier list is semantic: changing it must change the digest.
+
+    WHY: the cache serves a stored prefix by digest, so if the identifier list digested as a
+    constant (the way an unhashable ``set`` would) a config that swapped its keep-list would be
+    handed the previous list's rows out of the store. Also pins that ``list[str]`` is inside the
+    supported ``canonical`` type set rather than raising ``runcache-unserializable-arg``.
+    """
+    baseline: str = prefix_digest(_membership_ops(["a", "b"]))
+    assert baseline == prefix_digest(_membership_ops(["a", "b"]))
+    assert prefix_digest(_membership_ops(["a", "c"])) != baseline
+    assert prefix_digest(_membership_ops(["a", "b", "c"])) != baseline
+    assert prefix_digest(_membership_ops(["a", "b"], anti=True)) != baseline
+    assert prefix_digest(_membership_ops(["5"])) != prefix_digest(_membership_ops([5]))  # type: ignore[list-item]
+
+
+def test_membership_digest_is_order_sensitive_but_harmlessly() -> None:
+    """A reordered identifier list digests differently: a benign cache miss, never a wrong hit.
+
+    WHY pinned rather than fixed: two lists with the same members produce the same rows, so the
+    only cost of order sensitivity is one recompute. Collapsing order instead (by sorting inside
+    ``canonical``) would make genuinely ordered arguments collide elsewhere, so the asymmetry is
+    deliberate and documented here.
+    """
+    assert prefix_digest(_membership_ops(["a", "b"])) != prefix_digest(_membership_ops(["b", "a"]))
+
+
+def test_membership_op_priced_like_the_scalar_filter() -> None:
+    """``reindex_membership`` costs 1, the same as ``reindex``, so checkpoint choices are unchanged.
+
+    WHY: :data:`OP_COST` decides which prefixes are worth snapshotting. An unpriced op would fall
+    back to ``DEFAULT_OP_COST`` and silently move the checkpoint floor for every config that uses
+    the new comparison.
+    """
+    assert op_cost(lib.reindex_membership) == 1
+    assert op_cost(lib.reindex_membership) == op_cost(lib.reindex)
+    scalar: list[tuple[Callable, tuple[Any, ...]]] = _source_ops()
+    with_membership: list[tuple[Callable, tuple[Any, ...]]] = [*scalar, *_membership_ops(["a"])]
+    assert checkpoints(with_membership) == [*checkpoints(scalar), len(with_membership)]
+
+
 def test_prefix_digest_stable_across_identical_op_lists() -> None:
     """Two separately-built identical op lists must digest equal — the foundation every cache story rests on.
 
