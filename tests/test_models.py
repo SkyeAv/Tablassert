@@ -711,6 +711,63 @@ def test_reindex_numeric_comparator() -> None:
     assert ri.comparator == 0
 
 
+def test_reindex_join_valid() -> None:
+    """join reindex holds the identifier list verbatim.
+
+    WHY: the membership list is the whole point of the new comparison, so the field must accept
+    ``list[str]`` and the pipeline must see the plain enum *value* (``use_enum_values=True``), not
+    a ``Comparisons`` member; branching on the member would silently miss every config.
+    """
+    ri: Reindex = Reindex(column="A", comparison="join", comparator=["CHEBI:41774", "CHEBI:48217"])  # pyright: ignore
+    assert ri.comparison == "join"
+    assert isinstance(ri.comparison, str)
+    assert ri.comparator == ["CHEBI:41774", "CHEBI:48217"]
+
+
+def test_reindex_antijoin_valid() -> None:
+    """antijoin reindex constructs, including a single identifier and an empty-string member."""
+    ri: Reindex = Reindex(column="A", comparison="antijoin", comparator=[""])  # pyright: ignore
+    assert ri.comparison == "antijoin"
+    assert ri.comparator == [""]
+
+
+def test_reindex_join_rejects_scalar_comparator() -> None:
+    """Negative: join with a bare string instead of the identifier list."""
+    with pytest.raises(ValidationError, match="comparison-membership-comparator-required"):
+        Reindex(column="A", comparison="join", comparator="CHEBI:41774")  # pyright: ignore
+
+
+def test_reindex_join_rejects_empty_list() -> None:
+    """Negative: an empty identifier list would drop every row silently, so it is refused."""
+    with pytest.raises(ValidationError, match="comparison-membership-empty"):
+        Reindex(column="A", comparison="join", comparator=[])  # pyright: ignore
+
+
+def test_reindex_antijoin_rejects_numeric_comparator() -> None:
+    """Negative: antijoin with a numeric comparator (list is the only accepted shape)."""
+    with pytest.raises(ValidationError, match="comparison-membership-comparator-required"):
+        Reindex(column="A", comparison="antijoin", comparator=5)  # pyright: ignore
+
+
+def test_reindex_join_rejects_non_string_members() -> None:
+    """Negative: identifier members must be strings, not numbers."""
+    with pytest.raises(ValidationError):
+        Reindex(column="A", comparison="join", comparator=[1, 2])  # pyright: ignore
+
+
+def test_reindex_scalar_rejects_list_comparator() -> None:
+    """Negative: the six scalar comparisons still refuse a list (pre-existing codes unchanged).
+
+    WHY: widening ``comparator`` to ``list[str]`` must not let a scalar comparison silently take a
+    set. A list of *strings* passes the field union, so the after-validator is the only guard.
+    (A list of non-strings never reaches it: the field union rejects it as a type error first.)
+    """
+    with pytest.raises(ValidationError, match="comparison-bad-comparator-type"):
+        Reindex(column="A", comparison="eq", comparator=["a"])  # pyright: ignore
+    with pytest.raises(ValidationError, match="comparison-nonnumeric-comparator"):
+        Reindex(column="A", comparison="lt", comparator=["0.05"])  # pyright: ignore
+
+
 def test_provenance_valid() -> None:
     """provenance valid construction."""
     p: Provenance = Provenance(  # pyright: ignore

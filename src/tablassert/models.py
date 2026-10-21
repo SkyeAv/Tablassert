@@ -119,16 +119,35 @@ class TablaBase(BaseModel):
 class Reindex(TablaBase):
     column: str = Field(..., pattern=r"^[A-Z]{1,3}$", description="Source column letters used for row filtering.", examples=["A", "AA"])
     comparison: Comparisons = Field(
-        Comparisons.NE, description="Comparison operator used in reindex filtering.", examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT]
+        Comparisons.NE,
+        description="Comparison operator used in reindex filtering.",
+        examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT, Comparisons.JOIN, Comparisons.ANTIJOIN],
     )
-    comparator: str | int | float = Field(..., description="Right-side value compared against the selected column.", examples=["N/A", 0, 1.5])
+    comparator: str | int | float | list[str] = Field(
+        ...,
+        description=(
+            "Right-side value compared against the selected column. For `join`/`antijoin` this is the list of "
+            "identifiers matched exactly against the raw (pre-resolution) cell value."
+        ),
+        examples=["N/A", 0, 1.5, ["CHEBI:41774", "CHEBI:48217"]],
+    )
 
     @model_validator(mode="after")
     def comparison_datatypes(self: Self) -> Self:
         x: Comparisons = self.comparison
-        y: str | int | float = self.comparator
+        y: str | int | float | list[str] = self.comparator
 
-        if x == Comparisons.NE or x == Comparisons.EQ:
+        if x == Comparisons.JOIN or x == Comparisons.ANTIJOIN:
+            if not isinstance(y, list):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` comparisons require a list of identifier strings, got {type(y).__name__}.",
+                    code="comparison-membership-comparator-required",
+                )
+            if not y:
+                raise TablassertValidationError(
+                    "`join`/`antijoin` comparators must hold at least one identifier.", code="comparison-membership-empty"
+                )
+        elif x == Comparisons.NE or x == Comparisons.EQ:
             if not isinstance(y, str):
                 raise TablassertValidationError(
                     f"`eq`/`ne` comparisons require a str comparator, got {type(y).__name__}.", code="comparison-bad-comparator-type"
