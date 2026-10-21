@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- **`species_context_qualifier` is re-enabled as a declarable, CURIE-ranged qualifier.** Biolink Model declares the slot on the root `association` class (range `organism taxon`, NCBITaxon CURIE values such as `NCBITaxon:9606`), so every association class can hold it: configs may now declare it under `statement.qualifiers` or through annotations, its values resolve through fullmap exactly like other CURIE-ranged qualifiers (a CURIE cell resolves back to itself; species text resolves to the NCBITaxon clique), and it is accepted in `graph.uuid_fields` so graphs can pin edge identity to the species context. `DISABLED_EDGE_FIELDS` is now empty; no auto-derivation returns (the old node-taxonomy `derive_species_context` op stays gone), so the field appears on an edge only when a config declares it, and resolved nodes still carry their own taxon metadata.
+
 ## 22.0.1 - 2026-10-21
 
 ### Fixed

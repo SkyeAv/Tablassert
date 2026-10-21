@@ -402,8 +402,13 @@ def test_allowed_edge_fields_includes_subclass_only_slots() -> None:
 
 
 def test_disabled_edge_fields_are_never_emittable() -> None:
-    """Tablassert-disabled fields stay excluded even if a future Biolink model attaches them."""
-    assert "species_context_qualifier" in DISABLED_EDGE_FIELDS
+    """No field is currently disabled; the policy mechanism stays disjoint from the allow-list.
+
+    species_context_qualifier is the one entry this set ever held. It is a declarable,
+    root-``association``-declared qualifier now, so "not disabled" means an empty policy
+    set plus the disjointness invariant that constrains any future re-entry.
+    """
+    assert not DISABLED_EDGE_FIELDS
     assert DISABLED_EDGE_FIELDS.isdisjoint(ALLOWED_EDGE_FIELDS)
 
 
@@ -421,7 +426,8 @@ def test_class_field_overrides_track_the_installed_model() -> None:
     DAKP's sparse qualifier slots still absent from the pinned classes
     (``temporal_context_qualifier`` on both, and ``sex_qualifier`` on the disease
     side only). Deliberately excluded from the grants: ``species_context_qualifier``
-    (disabled) plus ``temporal_interval_qualifier`` and ``severity_qualifier``
+    (needs none: the root ``association`` class declares the slot, so every pinned
+    class inherits it) plus ``temporal_interval_qualifier`` and ``severity_qualifier``
     (unsatisfiable -- a grant could never validate).
     """
     assert {

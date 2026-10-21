@@ -850,17 +850,24 @@ def test_tcode_collect_does_not_schedule_species_context_derivation(fixtures_pat
     assert "derive_species_context" not in [op[0].__name__ for op in collected]
 
 
-def test_disabled_species_context_is_dropped_before_study_or_supporting_text() -> None:
-    """Legacy/direct frames cannot relocate the disabled field into study text or supporting text."""
+def test_species_context_stays_an_edge_field_not_study_or_supporting_text() -> None:
+    """The re-enabled species qualifier stays a plain edge field end to end.
+
+    It must never relocate into the inlined Study (it is not study metadata) nor be
+    folded into supporting_text (it is an allow-listed edge field), because a species
+    qualifier that left the edge would let cross-species edges silently merge.
+    """
     lf: pl.LazyFrame = pl.DataFrame({"subject": ["A"], "species_context_qualifier": ["NCBITaxon:9606"]}).lazy()
 
     study_frame: pl.DataFrame = lib.inline_supporting_study(lf, "study", None).collect()
     folded_frame: pl.DataFrame = fold_unknown_to_supporting_text(lf).collect()
 
-    assert "species_context_qualifier" not in study_frame.columns
-    assert "species_context_qualifier" not in json.dumps(study_frame.to_dicts())
-    assert "species_context_qualifier" not in folded_frame.columns
-    assert "species_context_qualifier" not in json.dumps(folded_frame.to_dicts())
+    assert study_frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    studies: list[object] = study_frame["has_supporting_studies"].to_list() if "has_supporting_studies" in study_frame.columns else []
+    assert "NCBITaxon:9606" not in json.dumps(studies)
+    assert folded_frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    supporting: list[object] = folded_frame["supporting_text"].to_list() if "supporting_text" in folded_frame.columns else []
+    assert "NCBITaxon:9606" not in json.dumps(supporting)
 
 
 def test_tcode_collect_emits_primary_sources_entry_with_explicit_infores(fixtures_path: Path) -> None:
@@ -3644,8 +3651,14 @@ def test_compile_subgraph_e2e_head_caps_rows_to_five(monkeypatch: Any, tmp_path:
     assert diseases <= {f"disease{i}" for i in range(1, 9)}
 
 
-def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
-    """Species context is absent from section, study, and final edge output."""
+def test_compile_subgraph_and_graph_e2e_emits_species_context_qualifier(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
+    """A declared species qualifier resolves through fullmap and lands on the edge only.
+
+    The value resolves like any CURIE-ranged qualifier (here "Homo sapiens" through the
+    fake fullmap's NCBITaxon clique), never mints a node, never rides the inlined Study,
+    and the pre-resolution snapshot is stripped from final edges. This is the shape the
+    DAKP species-context edges depend on.
+    """
     monkeypatch.chdir(tmp_path)
     rows: dict[str, list[dict[str, object]]] = {
         "brca1": [fake_fullmap_row("brca1", "HGNC:1100", "BRCA1", "Gene", 9606)],
@@ -3661,11 +3674,11 @@ def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatc
             "statement": {
                 "subject": {"method": "value", "encoding": "BRCA1"},
                 "object": {"method": "value", "encoding": "Disease X"},
-                "qualifiers": [],
+                "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "A"}],
             },
             "provenance": {"repo": "PMC", "publication": "PMC0000000"},
         },
-        ["ignored"],
+        ["Homo sapiens"],
     )
     data: Any = from_yaml(table_path)
     store: Path = tmp_path / "qualifier.parquet"
@@ -3673,14 +3686,15 @@ def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatc
 
     subgraph: Path = lib.compile_subgraph(tcode_model.collect(tmp_path / "fullmap.redb"))  # pyright: ignore
     frame: pl.DataFrame = pl.read_parquet(subgraph)
-    assert "species_context_qualifier" not in frame.columns
-    assert "species_context_qualifier" not in json.dumps(frame["has_supporting_studies"].to_list())
+    assert frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    studies: list[object] = frame["has_supporting_studies"].to_list() if "has_supporting_studies" in frame.columns else []
+    assert "species_context_qualifier" not in json.dumps(studies)
 
     lib.compile_graph([subgraph], "qual", "1.0.0", rig_factory(tmp_path, infores_id="infores:qual-kg"))
     edges: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "qual_1.0.0.edges.ndjson").read_text().splitlines()]
     nodes: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "qual_1.0.0.nodes.ndjson").read_text().splitlines()]
 
-    assert "species_context_qualifier" not in json.dumps(edges[0])
+    assert edges[0]["species_context_qualifier"] == "NCBITaxon:9606"
     assert all("species_context_qualifier_pre_resolution" not in edge for edge in edges)
     assert {node["id"] for node in nodes} == {"HGNC:1100", "MONDO:0000001"}
     assert "NCBITaxon:9606" not in {node["id"] for node in nodes}

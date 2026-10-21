@@ -352,18 +352,43 @@ def test_node_encoding_explicit_null_disables_taxon() -> None:
     assert node.taxon is None
 
 
-def test_qualifier_rejects_disabled_species_context_qualifier() -> None:
-    """species_context_qualifier is disabled and cannot be manually declared."""
-    with pytest.raises(ValidationError) as exc_info:
-        models.Qualifier(qualifier="species_context_qualifier", method="value", encoding="Homo sapiens")  # pyright: ignore
-    assert "field-disabled" in str(exc_info.value)
+def test_qualifier_accepts_species_context_qualifier() -> None:
+    """species_context_qualifier is a declarable CURIE-ranged qualifier (no auto-derivation).
+
+    Biolink Model 4.4.6 declares the slot on the root ``association`` class (range
+    ``organism taxon``, NCBITaxon CURIE values), so every association class can hold
+    it. Values resolve through fullmap like any other CURIE-ranged qualifier: a CURIE
+    cell (e.g. NCBITaxon:9606) resolves back to itself, species text (e.g. "dogs")
+    resolves to the NCBITaxon clique.
+    """
+    qualifier: models.Qualifier = models.Qualifier(qualifier="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
+    assert qualifier.resolved
 
 
-def test_annotation_rejects_disabled_species_context_qualifier() -> None:
-    """The disabled field cannot re-enter through the generic annotation entry point."""
-    with pytest.raises(ValidationError) as exc_info:
-        Annotation(annotation="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
-    assert "field-disabled" in str(exc_info.value)
+def test_annotation_accepts_species_context_qualifier() -> None:
+    """The re-enabled field also enters through the generic annotation entry point."""
+    annotation: Annotation = Annotation(annotation="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
+    assert annotation.annotation == "species_context_qualifier"
+
+
+def test_graph_uuid_fields_accept_species_context_qualifier(rig_factory: Any) -> None:
+    """species_context_qualifier is an emittable edge field, so it may pin edge identity.
+
+    This is the DAKP no-cross-species-fold contract: edges differing only in their
+    species context must derive distinct ids instead of merging, which requires the
+    field to be legal in uuid_fields.
+    """
+    graph: Graph = Graph.model_validate(
+        {
+            "name": "TEST",
+            "version": "1.0.0",
+            "tables": [Path("./table.yaml")],
+            "fullmap": Path("./fullmap"),
+            "rig": rig_factory(),
+            "uuid_fields": ["subject", "predicate", "object", "species_context_qualifier"],
+        }
+    )
+    assert graph.uuid_fields == ["subject", "predicate", "object", "species_context_qualifier"]
 
 
 def test_qualifier_nullable_defaults_false() -> None:
