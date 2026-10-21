@@ -4,6 +4,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
@@ -269,6 +270,28 @@ def lookup_rows(db: Path, terms: list[str]) -> list[dict[str, object]]:
     return rows
 
 
+@cache
+def _generic_probe_keys() -> frozenset[str]:
+    """Apply the real lookup normalizers to the existing excluded generic labels."""
+    labels = [
+        "none",
+        "nan",
+        "na",
+        "null",
+        "unknown",
+        "not applicable",
+        "p_value",
+        "p value",
+        "variable",
+        "result",
+        "exposure",
+        "expression",
+        "symbol",
+    ]
+    normalized = level_two(level_one(pl.LazyFrame({"term": labels}), "term"), "term").collect()
+    return frozenset(labels) | frozenset(normalized["term"]) | frozenset(normalized["term_two"])
+
+
 def distinct(lf: pl.LazyFrame, l1: str, l2: str, col: str = "term") -> pl.LazyFrame:
     """Extract unique terms from two text-normalization columns as a LazyFrame.
 
@@ -297,8 +320,10 @@ def distinct(lf: pl.LazyFrame, l1: str, l2: str, col: str = "term") -> pl.LazyFr
     # concat/unique, so first-seen tier selection would be scheduling-dependent.
     terms: pl.LazyFrame = pl.concat([t1, t2]).group_by(col).agg(pl.col("nlp_level").min())
 
-    bad: str = r"^\d+$|^(none|nan|na|null|unknown|not applicable|p_value|variable|result|exposure|expression|symbol)$|^$"
-    return terms.filter(~pl.col(col).str.contains(bad))
+    # Probe keys are stemmed/sorted at level one, then stripped at level two.
+    # Filtering only the original spellings lets headers such as "Expression"
+    # ("express") and "Not applicable" ("applic not") resolve as entities.
+    return terms.filter(~pl.col(col).str.contains(r"^\d+$|^$") & ~pl.col(col).is_in(_generic_probe_keys()))
 
 
 def deduplicate_result(result: pl.DataFrame, column_context: bool) -> pl.DataFrame:
