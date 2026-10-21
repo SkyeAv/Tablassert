@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- **The `--qc` study stage now fails the build on self-referential edges.** A new `self-loop-edges` assertion in `build-kg --qc`'s stage-7 study flags any edge whose `subject` and `object` are the same CURIE. In a table-derived graph that is almost always a resolution collapse (two differently worded cells landing on one identifier, or one cell wired into both statement slots), so the edge states nothing and every consumer has to filter it. The study reports the offending edge count with the repeated CURIE and its per-CURIE total (capped at 10 examples like the other assertions) and exits non-zero; it does not delete the edge, so the author sees which mapping collapsed and fixes it in the config. Only non-empty string pairs count: absent, null, and blank slots stay under `incomplete-edges`, and non-string slots are not flagged. Intentionally reflexive assertions fail a `--qc` build too (accepted caveat). The check streams the same single edge pass as the other assertions, so it adds no extra read.
+
 ## 22.1.0 - 2026-10-22
 
 ### Changed
