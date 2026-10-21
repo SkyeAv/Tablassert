@@ -215,7 +215,7 @@ sections:
 ## Conditional Filtering with Reindex
 
 Filter a **CSV** of gene-disease associations down to significant, well-powered rows before building KGX
-edges (reindex on column values).
+edges (reindex on column values, with a Polars regex for the rows whose value has several spellings).
 
 **Data:** CSV with gene-disease associations and significance thresholds
 
@@ -231,6 +231,7 @@ template:
     reindex:
       - {column: C, comparison: lt, comparator: 0.05}
       - {column: D, comparison: ge, comparator: 100}
+      - {column: A, comparison: ne, comparator: "^(?:n/?a|-{1,2}|unknown gene)$", regex: true}
   statement:
     subject:
       method: column
@@ -258,6 +259,8 @@ template:
 
 - **Reindex filtering** keeps only rows where column C (p-value) < 0.05 AND column D (sample size) >= 100; multiple reindex conditions are ANDed together.
 - **Comparison operators**: `lt` (less than), `ge` (greater or equal), `eq`, `ne`, `gt`, `le`.
+- **Regex comparator** (`regex: true` on an `eq`/`ne` entry) drops every placeholder gene cell in one filter (`N/A`, `n/a`, `--`, `unknown gene`) instead of one literal filter per spelling. The pattern is anchored with `^`/`$` because Polars matching is unanchored: unanchored `n/?a` would also drop `bona fide`.
+- **Backwards compatibility**: `regex` defaults to false, so an `eq`/`ne` entry without it still compares the cell to the literal `comparator`.
 
 ---
 
