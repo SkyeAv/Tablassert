@@ -58,6 +58,7 @@ TablassertErrorCodes = Literal[
     "comparison-nonnumeric-comparator",
     "comparison-membership-comparator-required",
     "comparison-membership-empty",
+    "reindex-membership-column-missing",
     "encoding-bad-excel-column",
     "regex-bad-pattern",
     "regex-bad-replacement",

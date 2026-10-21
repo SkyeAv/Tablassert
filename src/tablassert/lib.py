@@ -45,11 +45,11 @@ from tablassert.coerce import (
     sig,
     study_size_target,
 )
-from tablassert.enums import EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
+from tablassert.enums import Comparisons, EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
 from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
-from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section
+from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, Reindex, RIGConfig, Section
 from tablassert.nlp import level_one, level_two
 from tablassert.qc import fullmap_audit
 from tablassert.rig import (
@@ -1070,6 +1070,86 @@ def reindex(df: pl.LazyFrame, col: str, op: Callable, comp: str | int | float, c
     return df.filter(op(expr, comp))
 
 
+MEMBERSHIP_KEY_COLUMN: str = "_reindex_membership_key"
+"""Throwaway join key column holding the string-cast cell value; dropped again before the op returns."""
+
+
+def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by exact membership in a list of identifiers (join / antijoin).
+
+    Args:
+        df: Source LazyFrame.
+        col: Column whose raw (pre-resolution) cell values are tested.
+        keys: Identifier list. Duplicates are ignored: a semi/anti join cannot multiply left
+            rows, and the join build side is cheaper once deduplicated.
+        anti: ``False`` (join) keeps rows whose value is in ``keys``; ``True`` (antijoin) keeps
+            the rows that are not.
+
+    Returns:
+        Filtered LazyFrame keeping the surviving rows in source order and every original
+        column with its original dtype.
+
+    Notes:
+        Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join
+        against a once-built key frame is the faster measured path at every tested size (1M rows
+        with 100k keys: 0.014s joined vs 0.036s filtered; with 10 keys: 2.4ms vs 2.9ms), and it is
+        the membership idiom already used in :mod:`tablassert.qc`.
+
+        The casted key lives in a throwaway column so ``col`` itself is never rewritten: entity
+        resolution downstream still sees the cell exactly as the source produced it.
+
+        Null semantics are join semantics, and they deliberately differ from ``ne``: a null cell
+        never matches, so join drops it while antijoin KEEPS it. Non-string columns are cast with
+        ``strict=False``, so a typed source (parquet ``Int64``) matches string identifiers instead
+        of failing on join-key dtypes; a ``Float64`` ``3.0`` reads as ``"3.0"``.
+    """
+    if not keys:
+        raise TablassertError("`join`/`antijoin` reindex requires at least one identifier.", code="comparison-membership-empty")
+
+    schema: pl.Schema = df.collect_schema()
+    if col not in schema:
+        raise TablassertError(f"`join`/`antijoin` reindex targets `{col}`, which the source does not have.", code="reindex-membership-column-missing")
+
+    key_col: str = MEMBERSHIP_KEY_COLUMN
+    if isinstance(schema[col], pl.String):
+        left: pl.LazyFrame = df.with_columns(pl.col(col).alias(key_col))
+    else:
+        left = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
+    how: Literal["semi", "anti"] = "anti" if anti else "semi"
+    return left.join(pl.DataFrame({key_col: list(dict.fromkeys(keys))}).lazy(), on=key_col, how=how).drop(key_col)
+
+
+def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
+    """Compile one ``Reindex`` config entry into its Tcode op tuple.
+
+    Args:
+        entry: Validated ``Reindex`` model (a membership entry always carries a non-empty
+            ``list[str]`` comparator; scalar entries never do).
+
+    Returns:
+        ``(callable, args)`` for the pipeline: :func:`reindex_membership` for ``join``/``antijoin``,
+        otherwise :func:`reindex` with the ``operator`` module callable and the same ``cast``
+        choice it has always used (numeric comparisons cast to Float64, ``eq``/``ne`` do not).
+
+    Notes:
+        ``Reindex.comparison`` carries the plain enum *value* at runtime because ``TablaBase``
+        sets ``use_enum_values=True``, so this branches on the strings, exactly as the inline
+        comprehension it replaces did.
+    """
+    col: str = idxname(entry.column)
+    comparison: str = entry.comparison
+    if comparison in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value):
+        if not isinstance(entry.comparator, list):
+            raise TablassertError(
+                f"`{comparison}` reindex requires a list of identifiers, got {type(entry.comparator).__name__}.",
+                code="comparison-membership-comparator-required",
+            )
+        return (reindex_membership, (col, entry.comparator, comparison == Comparisons.ANTIJOIN.value))
+    if comparison in (Comparisons.NE.value, Comparisons.EQ.value):
+        return (reindex, (col, getattr(operator, comparison), entry.comparator, False))
+    return (reindex, (col, getattr(operator, comparison), entry.comparator))
+
+
 def drop_not_significant(lf: pl.LazyFrame, col: str = "statistical_significance_qualifier") -> pl.LazyFrame:
     """Drop release-mode edges whose significance qualifier is ``not_significant``.
 
@@ -1338,14 +1418,7 @@ class Tcode(Section):
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
-            [
-                (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator))
-                if x.comparison not in ["ne", "eq"]
-                else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator, False))
-                for x in self.source.reindex
-            ]
-            if self.source.reindex
-            else None,
+            [reindex_op(x) for x in self.source.reindex] if self.source.reindex else None,
             # --head preview: randomly sample min(HEAD_ROWS, height) rows before any encoding/resolve.
             (head, (HEAD_ROWS,)) if self.head else None,
             [
@@ -1588,6 +1661,7 @@ PHASE_OF: dict[Callable, str] = {
     crop: "filter",
     pick: "filter",
     reindex: "filter",
+    reindex_membership: "filter",
     head: "filter",
     coerce_columns: "clean",
     clean_numeric: "clean",
