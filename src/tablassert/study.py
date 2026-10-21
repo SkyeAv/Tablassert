@@ -20,6 +20,7 @@ _MESSAGES: dict[str, str] = {
     "unnamed-nodes": "nodes with no name or an empty name",
     "unidentified-nodes": "nodes with no id or an empty id",
     "incomplete-edges": "edges missing subject, predicate, or object",
+    "self-loop-edges": "edges whose subject and object are the same CURIE",
     "demoted-edges": "edges demoted to bare biolink:Association despite a declared category_override",
     "undeclared-nodes": "nodes referenced by edges but not declared in the nodes file",
     "isolated-nodes": "declared nodes participating in no edge",
@@ -61,6 +62,9 @@ class _FileScan:
     #: predicate. A demotion is only a violation when the build declared a
     #: ``category_override`` (see :func:`study_kgx`); the count is collected either way.
     demoted: Counter[str]
+    #: Edges that assert a concept relates to itself, keyed by the shared CURIE. See
+    #: :func:`study_kgx` for why a self-referential edge is a violation.
+    self_loops: Counter[str]
     malformed: int
     missing: bool
     path: Path
@@ -94,17 +98,18 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
 
     Args:
         path: Path to a ``.nodes.ndjson`` or ``.edges.ndjson`` file.
-        edge: ``True`` to collect referenced ids from ``subject``/``object`` and
-            assert the three core edge slots are present; ``False`` to collect
-            declared node ``id``s and track duplicates, nodes with no name or
-            an empty name, and nodes with no id or an empty id.
+        edge: ``True`` to collect referenced ids from ``subject``/``object``, assert the
+            three core edge slots are present, and tally self-referential
+            (``subject == object``) edges; ``False`` to collect declared node ``id``s and
+            track duplicates, nodes with no name or an empty name, and nodes with no id
+            or an empty id.
 
     Returns:
         A :class:`_FileScan`; ``missing`` is set (and nothing else) when the
         file does not exist, so a typo'd path can never read as a clean pass.
     """
     scan: _FileScan = _FileScan(
-        set(), set(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), 0, not path.is_file(), path
+        set(), set(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), Counter(), 0, not path.is_file(), path
     )
     if scan.missing:
         return scan
@@ -162,6 +167,19 @@ def _scan_ndjson(path: Path, *, edge: bool) -> _FileScan:
                     slot_value: object = record.get(slot)
                     if slot_value is None or (isinstance(slot_value, str) and not slot_value.strip()):
                         scan.incomplete[slot] += 1
+                # A self-referential edge states that a concept relates to itself. In a
+                # table-derived graph that is almost never the claim the author made: it is
+                # the signature of a resolution collapse, where two differently worded cells
+                # (or one cell duplicated into both slots) land on the same CURIE -- the same
+                # failure mode that makes two rows share an edge id. Such an edge carries no
+                # relational information, so downstream consumers either drop it silently or
+                # count it as evidence. Only a non-empty string pair is flagged; absent or
+                # blank slots are already reported by ``incomplete-edges``, and a blank-vs-blank
+                # pair must not read as "the same CURIE".
+                subject: object = record.get("subject")
+                object_: object = record.get("object")
+                if isinstance(subject, str) and isinstance(object_, str) and subject == object_ and subject.strip():
+                    scan.self_loops[subject] += 1
                 # Bare ``biolink:Association`` means the row lost every specific class:
                 # ``lib.edge_category`` derives a class from the (subject role, object
                 # role) pair -- optionally pinned per object category by the section's
@@ -215,7 +233,8 @@ def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10, ca
     Streams both files once each and checks: duplicate node ids, duplicate edge
     ids, nodes with no
     name or an empty name, nodes with no id or an empty id, edges missing any
-    of ``subject``/``predicate``/``object``, nodes referenced by edges but
+    of ``subject``/``predicate``/``object``, edges whose ``subject`` and ``object`` are
+    the same CURIE (self-referential), nodes referenced by edges but
     never declared (``undeclared``), declared nodes participating in no edge
     (``isolated``), empty/malformed lines, string values carrying leading/trailing
     whitespace, and null or empty values in any field (a stronger contract than
@@ -228,6 +247,15 @@ def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10, ca
     class-specific slots ``prune_to_class`` nulled into
     ``has_supporting_studies``. Every check is an assertion -- the caller decides
     whether violations fail the build.
+
+    A self-referential edge (``subject`` and ``object`` resolved to one CURIE) is an
+    assertion that a concept relates to itself. Table-derived graphs produce them almost
+    always by accident: two differently worded cells collapsing onto the same identifier,
+    or one cell filling both statement slots, so the edge carries no relational content and
+    ships as noise a consumer has to filter. QC therefore reports it rather than quietly
+    deleting it, so the author sees which CURIEs collapsed and fixes the mapping (or drops
+    the row) in the config. Intentionally reflexive assertions are a known accepted caveat:
+    they fail a ``--qc`` build like every other violation.
 
     Args:
         nodes_path: Path to ``<name>_<version>.nodes.ndjson``.
@@ -270,6 +298,9 @@ def study_kgx(nodes_path: Path, edges_path: Path, *, example_limit: int = 10, ca
     if edges.incomplete:
         examples = [f"{slot} ({n})" for slot, n in edges.incomplete.most_common(example_limit)]
         violations.append(StudyViolation("incomplete-edges", "edges", sum(edges.incomplete.values()), examples))
+    if edges.self_loops:
+        examples = [f"{curie} ({n})" for curie, n in edges.self_loops.most_common(example_limit)]
+        violations.append(StudyViolation("self-loop-edges", "edges", sum(edges.self_loops.values()), examples))
     if category_override_declared and edges.demoted:
         examples = [f"{predicate} ({n})" for predicate, n in edges.demoted.most_common(example_limit)]
         violations.append(StudyViolation("demoted-edges", "edges", sum(edges.demoted.values()), examples))
