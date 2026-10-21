@@ -1071,7 +1071,36 @@ def reindex(df: pl.LazyFrame, col: str, op: Callable, comp: str | int | float, c
 
 
 MEMBERSHIP_KEY_COLUMN: str = "_reindex_membership_key"
-"""Throwaway join key column holding the string-cast cell value; dropped again before the op returns."""
+"""Base name for the throwaway join key column on the cast branch; extended with underscores until
+it is unused if a source frame already carries it, and dropped again before the op returns."""
+
+MEMBERSHIP_UNCASTABLE_DTYPES: frozenset[str] = frozenset({"List", "Array", "Struct", "Object"})
+"""polars dtype class NAMES whose cells have no single-string identity, so membership is refused.
+
+Matched by name because a module-level ``pl.List`` reference would resolve the lazy proxy and import
+polars at ``import tablassert.lib``, which is exactly what :mod:`tablassert._lazy` exists to avoid.
+Every parametrized variant reports its base name (``List(String)`` is named ``List``).
+
+A ``List``/``Array`` cell cannot be cast to ``String`` at all (``InvalidOperationError``) and a
+``Struct`` casts to a brace literal no identifier is spelled to match. Joining list cells on a
+separator instead would make a multi-value cell never match a single identifier, a silent wrong
+answer, so these raise a coded error.
+"""
+
+
+def _membership_key_column(schema: pl.Schema) -> str:
+    """Return a join key column name the frame does not already use.
+
+    Args:
+        schema: Collected schema of the frame being filtered.
+
+    Returns:
+        :data:`MEMBERSHIP_KEY_COLUMN`, or that name extended with underscores until it is free.
+    """
+    key_col: str = MEMBERSHIP_KEY_COLUMN
+    while key_col in schema:
+        key_col = f"{key_col}_"
+    return key_col
 
 
 def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool = False) -> pl.LazyFrame:
@@ -1086,26 +1115,42 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
             the rows that are not.
 
     Returns:
-        Filtered LazyFrame keeping the surviving rows in source order and every original
-        column with its original dtype.
+        Filtered LazyFrame keeping the surviving rows in left-frame order, with every original
+        column and its original dtype.
+
+    Raises:
+        TablassertError: ``comparison-membership-empty`` for an empty list,
+            ``reindex-membership-column-missing`` when the source lacks ``col``, and
+            ``reindex-membership-column-dtype-unsupported`` for nested cells.
 
     Notes:
         Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join
-        against a once-built key frame is the faster measured path once the list is non-trivial
-        (1M rows, median of three collects: 100k keys 0.018s vs 0.029s filtered; 1k keys 0.003s vs
+        against a once-built key frame is the faster measured path once the list is non-trivial (1M
+        rows, median of three collects: 100k keys 0.018s vs 0.029s filtered; 1k keys 0.003s vs
         0.004s; a tie at ten keys), and it is the membership idiom already used in
-        :mod:`tablassert.qc`. No ``is_in`` fast path exists for tiny lists: it would propagate nulls
-        differently from antijoin, and the difference is milliseconds per million rows.
+        :mod:`tablassert.qc`. No ``is_in`` fast path exists for tiny lists: it propagates nulls
+        differently from antijoin, and the gap is milliseconds per million rows.
 
-        The string path joins straight on ``col``; only the cast path needs a throwaway helper
-        column, and it is dropped again before the op returns, so ``col`` itself is never
-        rewritten: entity resolution downstream still sees the cell exactly as the source produced
-        it (same dtype, same name, same order).
+        ``maintain_order="left"`` is explicit, not incidental: polars documents the default order as
+        unspecified ("might differ across Polars versions or even between different runs"), and the
+        dependency is an open range, so a future 2.x must not be able to reshuffle a section's rows.
+        Measured free here (1M rows / 100k keys, five runs, median): semi 5.1ms -> 4.6ms, anti 5.4ms
+        -> 5.4ms.
 
-        Null semantics are join semantics, and they deliberately differ from ``ne``: a null cell
-        never matches, so join drops it while antijoin KEEPS it. Non-string columns are cast with
-        ``strict=False``, so a typed source (parquet ``Int64``) matches string identifiers instead
-        of failing on join-key dtypes; a ``Float64`` ``3.0`` reads as ``"3.0"``.
+        The string path joins straight on ``col``, because semi/anti joins emit only the left frame's
+        columns. Only the cast path adds a throwaway helper column, and it is dropped again, so
+        entity resolution downstream sees the cell exactly as the source produced it.
+
+        Null semantics are join semantics and deliberately differ from ``ne``: a null cell never
+        matches, so join drops it while antijoin KEEPS it.
+
+        Membership is textual, so an identifier must be spelled the way polars' cast renders it.
+        Measured forms: ``Int64`` 3 -> ``"3"``; ``Float64`` 3.0 -> ``"3.0"`` (1e+20 keeps scientific
+        form); ``Bool`` -> ``"true"``/``"false"``; ``Date`` -> ``"2024-01-15"``; ``Datetime`` ->
+        ``"2024-01-15 06:24:30.000000"`` (space, not ``T``, with microsecond precision); ``Time`` ->
+        ``"01:02:03"``; ``Decimal(10,2)`` 1.5 -> ``"1.50"`` (scale kept). A misspelled list is not an
+        error: join emits an empty section and antijoin emits every row. No zero-match warning is
+        emitted, because detecting it would cost an extra pass over the frame on every build.
     """
     if not keys:
         raise TablassertError("`join`/`antijoin` reindex requires at least one identifier.", code="comparison-membership-empty")
@@ -1113,16 +1158,20 @@ def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool =
     schema: pl.Schema = df.collect_schema()
     if col not in schema:
         raise TablassertError(f"`join`/`antijoin` reindex targets `{col}`, which the source does not have.", code="reindex-membership-column-missing")
+    if type(schema[col]).__name__ in MEMBERSHIP_UNCASTABLE_DTYPES:
+        raise TablassertError(
+            f"`join`/`antijoin` reindex cannot test `{col}`: {schema[col]} cells have no single string form to match identifiers against.",
+            code="reindex-membership-column-dtype-unsupported",
+        )
 
-    key_col: str = MEMBERSHIP_KEY_COLUMN
     unique: list[str] = list(dict.fromkeys(keys))
     how: Literal["semi", "anti"] = "anti" if anti else "semi"
     if isinstance(schema[col], pl.String):
-        # Semi/anti joins emit only the left frame's columns, so joining straight on `col` keeps
-        # the schema untouched and skips an extra projection (measurable at ~1ms per 1M rows).
-        return df.join(pl.DataFrame({col: unique}).lazy(), on=col, how=how)
+        # No helper column: the join returns the left frame's columns unchanged.
+        return df.join(pl.DataFrame({col: unique}).lazy(), on=col, how=how, maintain_order="left")
+    key_col: str = _membership_key_column(schema)
     left: pl.LazyFrame = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
-    return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how).drop(key_col)
+    return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how, maintain_order="left").drop(key_col)
 
 
 def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:

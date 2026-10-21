@@ -147,6 +147,8 @@ def test_reindex_op_compiles_join_and_antijoin() -> None:
         ("eq", "NA", (lib.reindex, ("column_1", operator.eq, "NA", False))),
         ("ne", "NA", (lib.reindex, ("column_1", operator.ne, "NA", False))),
         ("lt", 0.05, (lib.reindex, ("column_1", operator.lt, 0.05))),
+        ("le", 1.5, (lib.reindex, ("column_1", operator.le, 1.5))),
+        ("gt", 2, (lib.reindex, ("column_1", operator.gt, 2))),
         ("ge", 100, (lib.reindex, ("column_1", operator.ge, 100))),
     ],
 )
@@ -199,3 +201,81 @@ def test_tcode_emits_membership_op_in_source_position() -> None:
     assert (lib.reindex, ("column_1", operator.ne, "NA", False)) in cleaned
     assert (lib.reindex_membership, ("column_2", ["mapk1"], True)) in cleaned
     assert [op[0] for op in cleaned].index(lib.reindex_membership) > [op[0] for op in cleaned].index(lib.reindex)
+
+
+def test_join_string_path_returns_input_schema_unchanged() -> None:
+    """The String fast path adds no projection: names, order and dtypes are the source's own.
+
+    WHY: the fast path is chosen by dtype (`isinstance(schema[col], pl.String)`), so it needs its
+    own schema assertion -- the Int64 test only proves the cast branch cleans up after itself.
+    """
+    df = _lf(column_1=["a", "b"], column_2=[1, 2])
+    for anti in (False, True):
+        out = lib.reindex_membership(df, "column_1", ["a"], anti=anti)
+        assert out.collect_schema() == df.collect_schema()
+
+
+def test_membership_survives_a_shuffled_source_and_keeps_left_order() -> None:
+    """``maintain_order="left"`` is what makes source order a guarantee rather than an observation.
+
+    WHY: polars documents default join order as unspecified ("might differ across Polars versions or
+    even between different runs") and the dependency is an open range, so an unordered engine could
+    reshuffle a section's rows without failing any other test. A shuffled corpus is the only shape
+    that can tell left order from engine-chosen order.
+    """
+    identifiers = [f"HGNC:{i}" for i in range(400)]
+    shuffled = [identifiers[i] for i in (7, 300, 1, 250, 99, 4, 180, 2)]
+    df = _lf(column_1=shuffled)
+    out = lib.reindex_membership(df, "column_1", ["HGNC:300", "HGNC:1", "HGNC:99"])
+    assert _values(out) == ["HGNC:300", "HGNC:1", "HGNC:99"]
+
+
+def test_nested_column_raises_loudly() -> None:
+    """Negative: list/array/struct cells have no single string identity, so membership errors out.
+
+    WHY: polars raises `InvalidOperationError` for casting a List column to String, and a Struct
+    silently casts to a brace literal. Both would surface as an opaque engine error (or a filter that
+    matches nothing) rather than the repo's coded error naming the column.
+    """
+    for dtype, frame in (
+        (pl.List(pl.Int64), pl.LazyFrame({"column_1": [[1, 2]]})),
+        (pl.Struct({"a": pl.Int64}), pl.LazyFrame({"column_1": [{"a": 1}]})),
+    ):
+        assert frame.collect_schema()["column_1"] == dtype
+        with pytest.raises(TablassertError, match="reindex-membership-column-dtype-unsupported"):
+            lib.reindex_membership(frame, "column_1", ["1"])
+
+
+def test_helper_column_name_does_not_clobber_a_source_column() -> None:
+    """The cast branch's join key never overwrites a source column that happens to share its name.
+
+    WHY: unreachable through ``Tcode`` (``idx`` renames every source column to ``column_<n>``), but
+    ``reindex_membership`` is a public op and an overwrite-then-drop would silently delete a column.
+    """
+    df = pl.LazyFrame({"column_1": [3, 4], lib.MEMBERSHIP_KEY_COLUMN: ["keep", "me"]})
+    out = lib.reindex_membership(df, "column_1", ["3"])
+    assert out.collect_schema().names() == ["column_1", lib.MEMBERSHIP_KEY_COLUMN]
+    assert out.collect()[lib.MEMBERSHIP_KEY_COLUMN].to_list() == ["keep"]
+
+
+def test_cast_branch_null_semantics_match_the_string_branch() -> None:
+    """Null cells behave identically whether or not the column needed a cast.
+
+    WHY: the two branches are separate polars plans, and a divergence (antijoin dropping nulls only
+    on typed columns) would be invisible to the String-branch tests.
+    """
+    df = pl.LazyFrame({"column_1": [3, None, 5]})
+    assert _values(lib.reindex_membership(df, "column_1", ["3", "5"])) == [3, 5]
+    assert _values(lib.reindex_membership(df, "column_1", ["3"], anti=True)) == [None, 5]
+
+
+def test_zero_match_is_silent_by_design() -> None:
+    """A keep-list that matches nothing is a valid empty filter, not an error.
+
+    WHY pinned explicitly: the tempting "helpful" change is to warn or raise on zero matches, but
+    detecting it costs an extra pass over the frame on every build, and sections that legitimately
+    filter everything to death are normal in these configs.
+    """
+    df = _lf(column_1=["a", "b"])
+    assert lib.reindex_membership(df, "column_1", ["nope"]).collect().height == 0
+    assert lib.reindex_membership(df, "column_1", ["nope"], anti=True).collect().height == 2
