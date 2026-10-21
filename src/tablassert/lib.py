@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Iterable
 from functools import cache
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import Field, NonNegativeInt
@@ -1844,15 +1845,24 @@ def dedup_stream(p_in: Path, is_edges: bool, domain: str = "TABLASSERT", uuid_fi
         so it never ships in the final NDJSON.
 
     Returns:
-        ``None``; writes the deduplicated stream alongside ``p_in`` with no
-        ``.tmp`` suffix, then deletes ``p_in``.
+        ``None``; atomically replaces the deduplicated stream alongside ``p_in`` with no
+        ``.tmp`` suffix, then deletes ``p_in``. Parsing, collision, and native writer
+        failures preserve the existing output and the input for diagnosis.
     """
     p_out: Path = p_in.with_suffix("")
+    if p_out == p_in:
+        raise ValueError("dedup_stream requires an input filename with a removable suffix")
 
-    if p_out.is_file():
-        p_out.unlink()
-
-    merged, scalar_conflicts = rs.dedup_ndjson(p_in, p_out, is_edges, domain, uuid_fields, on_collision)
+    # Keep the previous artifact intact until native parsing/dedup completes.
+    # A sibling directory keeps replacement on the same filesystem and retains
+    # the public basename for native collision diagnostics and fold reports.
+    with TemporaryDirectory(prefix=f".{p_out.name}.dedup-", dir=p_out.parent) as stage_dir:
+        staged: Path = Path(stage_dir) / p_out.name
+        merged, scalar_conflicts = rs.dedup_ndjson(p_in, staged, is_edges, domain, uuid_fields, on_collision)
+        report: Path = staged.with_name(staged.name + ".foldreport.json")
+        staged.replace(p_out)
+        if report.exists():
+            report.replace(p_out.with_name(p_out.name + ".foldreport.json"))
     if merged:
         logger.warning(
             "uuid_on_collision=merge folded {merged} divergent edge records into their first-seen edges; {conflicts} conflicting scalar fields kept the first value",
