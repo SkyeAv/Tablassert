@@ -258,6 +258,7 @@ OP_COST: dict[Callable, int] = {
     lib.crop: 1,
     lib.pick: 1,
     lib.reindex: 1,
+    lib.reindex_regex: 1,
     # head samples min(HEAD_ROWS, height) rows, so it needs a height pass before slicing.
     lib.head: 2,
     # Encode: each is one lazy expression over a single column.

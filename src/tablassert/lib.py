@@ -1070,6 +1070,31 @@ def reindex(df: pl.LazyFrame, col: str, op: Callable, comp: str | int | float, c
     return df.filter(op(expr, comp))
 
 
+def reindex_regex(df: pl.LazyFrame, col: str, pattern: str, negate: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by filtering rows on a polars regex match against a column.
+
+    Args:
+        df: Source LazyFrame.
+        col: Column to test.
+        pattern: Polars-compatible regex, matched unanchored and case-sensitively (write `^`/`$`
+            to pin a whole cell).
+        negate: When True keep the rows that do NOT match (the `ne` filter); when False keep the
+            matches (the `eq` filter).
+
+    Returns:
+        LazyFrame containing only rows whose predicate is true.
+
+    Notes:
+        The column is cast to String first, so a typed source (parquet, or a numeric column in a
+        text table) filters on its text form instead of raising polars' ``InvalidOperationError:
+        expected String type``. A null cell matches nothing and ``not_()`` leaves it null, so null
+        rows drop under both directions -- the same null rule literal `eq`/`ne` already have, since
+        a null comparison is never true.
+    """
+    match: pl.Expr = pl.col(col).cast(pl.String).str.contains(pattern)
+    return df.filter(match.not_() if negate else match)
+
+
 def drop_not_significant(lf: pl.LazyFrame, col: str = "statistical_significance_qualifier") -> pl.LazyFrame:
     """Drop release-mode edges whose significance qualifier is ``not_significant``.
 
@@ -1339,7 +1364,12 @@ class Tcode(Section):
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
             [
-                (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator))
+                # `regex` is only legal with `eq`/`ne` (models.Reindex rejects it elsewhere), so the
+                # regex arm never needs the numeric cast or an `operator` lookup. Legacy entries keep
+                # emitting exactly the tuples they always did, so their run-cache op digests do not move.
+                (reindex_regex, (idxname(x.column), x.comparator, x.comparison == "ne"))
+                if x.regex
+                else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator))
                 if x.comparison not in ["ne", "eq"]
                 else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator, False))
                 for x in self.source.reindex
@@ -1588,6 +1618,7 @@ PHASE_OF: dict[Callable, str] = {
     crop: "filter",
     pick: "filter",
     reindex: "filter",
+    reindex_regex: "filter",
     head: "filter",
     coerce_columns: "clean",
     clean_numeric: "clean",

@@ -346,6 +346,54 @@ def test_reindex_filters_rows_all_comparisons(
     assert {e["subject"] for e in edges} == expected_subjects
 
 
+@pytest.mark.parametrize(
+    ("comparison", "pattern", "driver_values", "expected_subjects"),
+    [
+        # One `ne` pattern replaces the per-spelling literal filters a shipped config would otherwise
+        # need for the same missing-value family.
+        pytest.param("ne", r"(?i)^n/?a$", ["N/A", "n/a", "ok1", "ok2"], {"HGNC:11998", "HGNC:3236"}, id="ne-junk-family"),
+        pytest.param("eq", r"^ok\d$", ["ok1", "ok2", "N/A", "NA"], {"HGNC:1100", "HGNC:6871"}, id="eq-shape"),
+        # Anchored: "NA" and "N/A2" survive a `^N/A$` exclusion, pinning that anchoring is opt-in.
+        pytest.param("ne", r"^N/A$", ["N/A", "NA", "N/A2", "ok"], {"HGNC:6871", "HGNC:11998", "HGNC:3236"}, id="ne-anchored"),
+    ],
+)
+def test_reindex_regex_filters_rows(
+    comparison: str,
+    pattern: str,
+    driver_values: list[str],
+    expected_subjects: set[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rig_factory: Any,
+) -> None:
+    """``source.reindex`` with ``regex: true`` filters rows by a polars regex during a real build.
+
+    This is the feature's reason to exist: a source whose missing values are spelled several ways
+    (``N/A``, ``n/a``) drops all of them with one filter instead of one literal ``ne`` per
+    spelling. It also proves the dispatch: a regex entry must emit the ``reindex_regex`` op, while
+    the ``regex``-less entries above keep emitting ``reindex``.
+    """
+    fullmap: Path = _build_rich_redb(tmp_path / "fullmap")
+    data: Path = tmp_path / "data.tsv"
+    rows: list[str] = [f"{subject}\t{driver}" for subject, driver in zip(["brca1", "mapk1", "tp53", "egfr"], driver_values, strict=True)]
+    data.write_text("\n".join(rows) + "\n")
+
+    config: dict[str, Any] = _table_config(
+        data,
+        {
+            "subject": {"method": "column", "encoding": "A"},
+            "predicate": "associated_with",
+            "object": {"method": "value", "encoding": "MONDO:0004979"},
+        },
+    )
+    config["template"]["source"]["reindex"] = [{"column": "B", "comparison": comparison, "comparator": pattern, "regex": True}]
+
+    _nodes, edge_text = _run_build(tmp_path, monkeypatch, rig_factory, config, fullmap, "REINDEX_REGEX_KG")
+
+    edges: list[dict[str, Any]] = _parse_edges(edge_text)
+    assert {e["subject"] for e in edges} == expected_subjects
+
+
 def test_regex_backref_replacement(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
     """``${1}`` capture-group backrefs and qualifier regex mapping survive the pipeline.
 
