@@ -1401,9 +1401,32 @@ class Tcode(Section):
                 x.exclude_prefixes,
                 x.exclude_regex,
                 x.nullable if isinstance(x, Qualifier) else False,
+                x.taxon_from,
             )
             for x, col in node_columns
         ]
+        # Per-row taxon scoping (ResolveSpec.taxon_from): a scoped column reads the
+        # taxon metadata its source column's resolution emits, so sources must resolve
+        # first. Layer the specs by dependency (config validation has already rejected
+        # cycles and unknown targets); with no taxon_from anywhere this is one batch
+        # and the op list is exactly what it always was.
+        spec_cols: set[str] = {spec.col for spec in specs}
+        batches: list[list[ResolveSpec]] = []
+        placed: set[str] = set()
+        pending: list[ResolveSpec] = list(specs)
+        while pending:
+            ready: list[ResolveSpec] = [s for s in pending if s.taxon_from is None or s.taxon_from in placed or s.taxon_from not in spec_cols]
+            if not ready:
+                raise TablassertError(
+                    f"taxon_from references form a cycle among {', '.join(sorted(s.col for s in pending))}; "
+                    "no column can resolve first. This is rejected at config time, so a build reaching here means the "
+                    "section was assembled programmatically -- fix the spec layering.",
+                    code="taxon-from-cycle",
+                )
+            batches.append(ready)
+            placed.update(s.col for s in ready)
+            pending = [s for s in pending if s.col not in placed]
+        resolve_ops: list[Any] = [(resolve_batch, (batch, db, self.log, self.store.stem, self.config.name, True, "_two")) for batch in batches]
         return [
             [self.node_prep(x, col) for x, col in node_columns],
             # Encode only: no pre-resolution snapshot and no NLP normalization, both of
@@ -1415,7 +1438,7 @@ class Tcode(Section):
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.
             (trim, ()),
-            (resolve_batch, (specs, db, self.log, self.store.stem, self.config.name, True, "_two")),
+            *resolve_ops,
             # QC audits only the strict columns: a nullable qualifier's nulls are expected
             # (blank cell / no match), not resolution errors for the audit to delete.
             [

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -575,7 +576,9 @@ def join_matches(lf: pl.LazyFrame, col: str, matches: pl.DataFrame, tag: str = "
     return _join_matches_eager(lf.collect(), col, matches, tag, drop_unresolved).lazy()
 
 
-def _join_matches_eager(df: pl.DataFrame, col: str, matches: pl.DataFrame, tag: str = "_two", drop_unresolved: bool = True) -> pl.DataFrame:
+def _join_matches_eager(
+    df: pl.DataFrame, col: str, matches: pl.DataFrame, tag: str = "_two", drop_unresolved: bool = True, taxon_key: str | None = None
+) -> pl.DataFrame:
     """Eager core of ``join_matches``: join ranked matches into an in-memory frame.
 
     Args:
@@ -585,6 +588,10 @@ def _join_matches_eager(df: pl.DataFrame, col: str, matches: pl.DataFrame, tag: 
         tag: Suffix used to derive the level-two column name.
         drop_unresolved: When True rows whose ``col`` did not match are dropped;
             when False the row is kept and the resolved columns stay null.
+        taxon_key: Optional join-key column present on BOTH sides (``df`` and
+            ``matches``) that must match in addition to the term, used by per-row
+            taxon scoping (``ResolveSpec.taxon_from``) so one term's matches from
+            different taxon scopes never leak across rows. Dropped from the output.
 
     Returns:
         DataFrame with resolved columns. Tied best-ranked CURIEs are returned as
@@ -594,14 +601,25 @@ def _join_matches_eager(df: pl.DataFrame, col: str, matches: pl.DataFrame, tag: 
     l1: str = col
     l2: str = l1 + tag
 
-    result: pl.DataFrame = df.join(matches.filter(pl.col("NLP_LEVEL").eq(1)), left_on=l1, right_on="term", how="left", suffix="_l1")
-
-    l2_matches: pl.DataFrame = matches.filter(pl.col("NLP_LEVEL").eq(2))
-    result = result.join(l2_matches, left_on=l2, right_on="term", how="left", suffix="_l2")
+    if taxon_key is not None:
+        result: pl.DataFrame = df.join(
+            matches.filter(pl.col("NLP_LEVEL").eq(1)), left_on=[l1, taxon_key], right_on=["term", taxon_key], how="left", suffix="_l1"
+        )
+        l2_matches: pl.DataFrame = matches.filter(pl.col("NLP_LEVEL").eq(2))
+        result = result.join(l2_matches, left_on=[l2, taxon_key], right_on=["term", taxon_key], how="left", suffix="_l2")
+    else:
+        result = df.join(matches.filter(pl.col("NLP_LEVEL").eq(1)), left_on=l1, right_on="term", how="left", suffix="_l1")
+        l2_matches = matches.filter(pl.col("NLP_LEVEL").eq(2))
+        result = result.join(l2_matches, left_on=l2, right_on="term", how="left", suffix="_l2")
 
     result = result.with_columns([_coalesce_expr(col, suffix, base, prefix, cast_str) for suffix, base, prefix, cast_str in _JOIN_COALESCE_SPECS])
 
-    result = result.select(pl.exclude(r"^(CURIE|PREFERRED_NAME|CATEGORY_NAME|TAXON_ID|SOURCE_NAME|SOURCE_VERSION|NLP_LEVEL|PR|FREQUENCY)(_l2)?$"))
+    exclude: str = r"^(CURIE|PREFERRED_NAME|CATEGORY_NAME|TAXON_ID|SOURCE_NAME|SOURCE_VERSION|NLP_LEVEL|PR|FREQUENCY)(_l2)?$"
+    if taxon_key is not None:
+        exclude = (
+            r"^(CURIE|PREFERRED_NAME|CATEGORY_NAME|TAXON_ID|SOURCE_NAME|SOURCE_VERSION|NLP_LEVEL|PR|FREQUENCY|" + re.escape(taxon_key) + r")(_l2)?$"
+        )
+    result = result.select(pl.exclude(exclude))
     result = result.select(pl.exclude(col + tag))
     result = result.with_columns(pl.col(f"{col}_taxon").replace("NCBITaxon:0", None))
     if drop_unresolved:
@@ -627,6 +645,89 @@ class ResolveSpec(NamedTuple):
     Set only for ``nullable`` qualifiers; subject/object always resolve strict so an
     edge with a missing node is dropped, never emitted.
     """
+    taxon_from: str | None = None
+    """When set, per-row taxon scoping from another resolved column of the same frame.
+
+    Names a node column that an earlier ``resolve_batch`` pass already resolved: its
+    ``<col>_taxon`` metadata (an ``NCBITaxon:<id>`` string) scopes this column's
+    ``filter_and_rank`` taxon filter row by row instead of the static ``taxon``.
+    Rows whose taxon cell is blank fall back to the 9606 default; a non-null cell
+    whose resolved taxon is not an NCBITaxon id fails loudly rather than silently
+    resolving everything under one species.
+    """
+
+
+_TAXON_SCOPE: str = "__taxon_scope"
+"""Helper column carrying each row's per-row taxon scope during ``resolve_batch``.
+
+Filled by :func:`_per_row_taxon_matches` from the ``taxon_from`` column's resolved
+metadata (an NCBITaxon id string, or the ``9606`` fallback for blank taxon cells),
+used as the second join key so one term's matches from different taxon scopes never
+leak across rows, and dropped before the frame leaves the op.
+"""
+
+
+def _per_row_taxon_matches(
+    result: pl.DataFrame, spec: ResolveSpec, raw: pl.DataFrame, tag: str, column_context: bool
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Scope this spec's matches per row by the ``taxon_from`` column's resolved taxon.
+
+    The ``taxon_from`` column was resolved by an earlier ``resolve_batch`` pass, so
+    ``result`` already carries its resolved CURIE (``<col>``) and its taxon metadata
+    (``<col>_taxon``, ``NCBITaxon:<id>`` or null for a non-taxon-bearing concept).
+    Rows are bucketed by that scope; each bucket's terms go through the same
+    ``filter_and_rank`` a static-taxon spec uses, keyed by the scope so the join back
+    picks each row's own bucket. Blank taxon cells fall back to the 9606 default; a
+    non-null cell whose taxon is not an NCBITaxon id fails the build instead of
+    silently resolving everything under one species.
+
+    Returns:
+        The frame with ``_TAXON_SCOPE`` appended (join key; the caller drops it after
+        the join) and the concatenated per-scope matches carrying the same key.
+
+    Raises:
+        TablassertError: ``taxon-from-unresolved-column`` when the taxon source's
+            resolved or metadata column is absent (the earlier pass never ran);
+            ``taxon-from-not-ncbitaxon`` when a non-null taxon cell resolves without
+            an NCBITaxon taxon id.
+    """
+    source: str = spec.taxon_from or ""
+    meta_col: str = f"{source}_taxon"
+    missing: list[str] = [c for c in (source, meta_col) if c not in result.columns]
+    if missing:
+        raise TablassertError(
+            f"ResolveSpec for {spec.col!r} sets taxon_from={source!r} but the frame lacks {', '.join(repr(c) for c in missing)}; "
+            "the named column must be resolved by an earlier resolve_batch pass in the same pipeline.",
+            code="taxon-from-unresolved-column",
+        )
+    value: pl.Series = result.select(pl.col(source).cast(pl.String).str.strip_chars().alias("v"))["v"]
+    meta: pl.Series = result.select(pl.col(meta_col).cast(pl.String).str.strip_chars().alias("m"))["m"]
+    has_value: pl.Series = value.is_not_null() & (value != "")
+    is_ncbitaxon: pl.Series = meta.str.contains(r"^NCBITaxon:\d+$").fill_null(False)
+    bad: pl.Series = has_value & ~is_ncbitaxon
+    if bad.any():
+        offenders: list[str] = sorted({f"{v!r} -> {m!r}" for v, m in zip(value.filter(bad).to_list(), meta.filter(bad).to_list(), strict=True)})[:5]
+        raise TablassertError(
+            f"taxon_from column {source!r} carries value(s) that did not resolve to an NCBITaxon taxon: "
+            f"{', '.join(offenders)}. Fix the source table so every non-blank taxon cell names a species, "
+            "or the row's entity resolution cannot be scoped.",
+            code="taxon-from-not-ncbitaxon",
+        )
+    scope: pl.Expr = (
+        pl.when(has_value & is_ncbitaxon)
+        .then(pl.col(meta_col).cast(pl.String).str.strip_chars().str.replace("NCBITaxon:", ""))
+        .otherwise(pl.lit("9606"))
+    )
+    result = result.with_columns(scope.alias(_TAXON_SCOPE))
+    parts: list[pl.DataFrame] = []
+    for taxon in sorted(set(result[_TAXON_SCOPE].to_list())):
+        bucket: pl.DataFrame = result.filter(pl.col(_TAXON_SCOPE) == taxon)
+        bucket_terms: pl.DataFrame = distinct(bucket.lazy(), spec.col, spec.col + tag).collect()
+        bucket_matches: pl.DataFrame = filter_and_rank(
+            raw, bucket_terms, taxon, spec.prioritize, spec.avoid, column_context, spec.exclude_prefixes, spec.exclude_regex
+        )
+        parts.append(bucket_matches.with_columns(pl.lit(taxon).alias(_TAXON_SCOPE)))
+    return result, (pl.concat(parts) if parts else empty_matches(column_context))
 
 
 def resolve_batch(
@@ -721,6 +822,12 @@ def resolve_batch(
     for spec in specs:
         if on_phase is not None:
             on_phase(f"resolve:{spec.col}")
+        if spec.taxon_from is not None:
+            scoped_result, matches = _per_row_taxon_matches(result, spec, raw, tag, column_context)
+            if log:
+                log_unmatched(spec.col, terms_by_col[spec.col].lazy(), matches, section_hash, config_file)
+            result = _join_matches_eager(scoped_result, spec.col, matches, tag, drop_unresolved=not spec.nullable, taxon_key=_TAXON_SCOPE)
+            continue
         terms_df: pl.DataFrame = terms_by_col[spec.col]
         matches: pl.DataFrame = filter_and_rank(
             raw, terms_df, spec.taxon, spec.prioritize, spec.avoid, column_context, spec.exclude_prefixes, spec.exclude_regex

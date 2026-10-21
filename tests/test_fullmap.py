@@ -1205,3 +1205,86 @@ def test_dimension_maps_warns_on_unnameable_fullmap_categories(monkeypatch: pyte
         fullmap.logger.remove(sink_id)
         fullmap._SOURCE_CACHE.clear()
     assert any("NotANameableCategory" in message for message in captured)
+
+
+def test_resolve_batch_taxon_from_scopes_each_row_by_its_own_taxon(fullmap_db: Path) -> None:
+    """taxon_from resolves the same term differently per row, by that row's species.
+
+    The frame simulates the state after the taxon source column's own resolve pass:
+    `species_context_qualifier` holds resolved NCBITaxon CURIEs and
+    `species_context_qualifier_taxon` carries the metadata that resolution emitted.
+    One row is human, one mouse, one has a blank taxon cell. All three share the
+    term `disease_taxon`, which exists as a human disease (MONDO:50) and a
+    wrong-taxon disease (MONDO:51): each row must get its own bucket's CURIE, and
+    the blank row falls back to the documented 9606 default.
+    """
+    lf: pl.LazyFrame = pl.DataFrame(
+        {
+            "subject": ["disease_taxon", "disease_taxon", "disease_taxon"],
+            "subject_two": ["disease_taxon", "disease_taxon", "disease_taxon"],
+            "species_context_qualifier": ["NCBITaxon:9606", "NCBITaxon:40674", None],
+            "species_context_qualifier_taxon": ["NCBITaxon:9606", "NCBITaxon:40674", None],
+        }
+    ).lazy()
+
+    result: list[dict[str, Any]] = (
+        resolve_batch(lf, [ResolveSpec("subject", taxon_from="species_context_qualifier")], fullmap_db, log=False).collect().to_dicts()
+    )
+
+    assert sorted(row["subject"] for row in result) == ["MONDO:50", "MONDO:50", "MONDO:51"]
+    assert {row["species_context_qualifier"] for row in result} == {"NCBITaxon:9606", "NCBITaxon:40674", None}
+    # The scope helper column never leaves the op.
+    assert all("__taxon_scope" not in row for row in result)
+
+
+def test_resolve_batch_taxon_from_rejects_non_ncbitaxon_taxon_cell(fullmap_db: Path) -> None:
+    """A taxon cell that resolved to a non-NCBITaxon concept fails the build loudly.
+
+    A species text that maps onto something without an NCBITaxon taxon id cannot
+    scope entity resolution; resolving those rows under any single species would be
+    silent cross-species leakage, so the build stops instead.
+    """
+    lf: pl.LazyFrame = pl.DataFrame(
+        {
+            "subject": ["disease_taxon"],
+            "subject_two": ["disease_taxon"],
+            "species_context_qualifier": ["MONDO:2"],
+            "species_context_qualifier_taxon": [None],
+        }
+    ).lazy()
+
+    with pytest.raises(TablassertError) as exc_info:
+        resolve_batch(lf, [ResolveSpec("subject", taxon_from="species_context_qualifier")], fullmap_db, log=False).collect()
+    assert exc_info.value.code == "taxon-from-not-ncbitaxon"
+
+
+def test_resolve_batch_taxon_from_requires_the_resolved_source_columns(fullmap_db: Path) -> None:
+    """A taxon_from reference whose source was never resolved fails at spec check."""
+    lf: pl.LazyFrame = pl.DataFrame({"subject": ["disease_taxon"], "subject_two": ["disease_taxon"]}).lazy()
+
+    with pytest.raises(TablassertError) as exc_info:
+        resolve_batch(lf, [ResolveSpec("subject", taxon_from="species_context_qualifier")], fullmap_db, log=False).collect()
+    assert exc_info.value.code == "taxon-from-unresolved-column"
+
+
+def test_resolve_batch_taxon_from_nullable_source_keeps_blank_row(fullmap_db: Path) -> None:
+    """A blank taxon cell on a nullable source keeps its edge under the 9606 default.
+
+    The nullability lives on the SOURCE spec (resolved in the earlier pass); this
+    spec only reads the result, so a nullable source that left blanks must not lose
+    rows here, and the blank must resolve under the default scope like any other.
+    """
+    lf: pl.LazyFrame = pl.DataFrame(
+        {
+            "subject": ["disease_taxon"],
+            "subject_two": ["disease_taxon"],
+            "species_context_qualifier": [None],
+            "species_context_qualifier_taxon": [None],
+        }
+    ).lazy()
+
+    result: list[dict[str, Any]] = (
+        resolve_batch(lf, [ResolveSpec("subject", taxon_from="species_context_qualifier")], fullmap_db, log=False).collect().to_dicts()
+    )
+
+    assert [row["subject"] for row in result] == ["MONDO:50"]

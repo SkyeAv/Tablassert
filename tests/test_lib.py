@@ -4264,3 +4264,80 @@ def test_dedup_stream_edges_default_mode_still_aborts_on_divergence(tmp_path: Pa
     p_in.write_text('{"subject":"A","object":"B","predicate":"r","p_value":"0.01"}\n{"subject":"A","object":"B","predicate":"r","p_value":"0.99"}\n')
     with pytest.raises(RuntimeError, match="uuid-fields-not-a-key"):
         lib.dedup_stream(p_in, is_edges=True, domain="infores:test-kg", uuid_fields=["subject", "object", "predicate"], on_collision="error")
+
+
+def test_tcode_collect_layers_taxon_from_sources_first(fixtures_path: Path) -> None:
+    """A taxon_from reference splits resolve_batch: the taxon source resolves first.
+
+    Per-row scoping reads the source column's resolved taxon metadata, so the source
+    must come back before any column scoped by it. With no taxon_from the op list
+    keeps exactly one shared resolve_batch (the neighboring batch tests pin that).
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_taxon_from.parquet")
+    data["statement"]["qualifiers"] = [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C"}]
+    data["statement"]["subject"] = {"method": "column", "encoding": "A", "taxon_from": "species_context_qualifier"}
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    batches: list[list[str]] = [[spec.col for spec in op[1][0]] for op in collected if op[0].__name__ == "resolve_batch"]
+
+    # Minimal layering: columns with no taxon_from ride the first batch (object plus
+    # the taxon source), and only the scoped column waits for the second.
+    assert batches == [["object", "species_context_qualifier"], ["subject"]]
+    scoped_specs: list[Any] = [spec for op in collected if op[0].__name__ == "resolve_batch" for spec in op[1][0] if spec.col == "subject"]
+    assert scoped_specs[0].taxon_from == "species_context_qualifier"
+
+
+def test_compile_e2e_taxon_from_resolves_each_row_under_its_own_species(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
+    """One section mixing species resolves the same term per row under that row's taxon.
+
+    This is the DAKP animal-label shape: a species_context_qualifier column carries
+    the organism each row occurred in; the subject term resolves to the
+    species-appropriate concept (human disease vs wrong-taxon disease) instead of one
+    static answer, and each edge carries its own NCBITaxon qualifier. A blank-9606
+    control row proves the default scope still applies.
+    """
+    monkeypatch.chdir(tmp_path)
+    rows: dict[str, list[dict[str, object]]] = {
+        # level_one keys (Porter2 stems): "Disease Taxon" -> "diseas taxon",
+        # "Homo sapiens" -> "homo sapien", "Mus musculus" -> "mus musculus".
+        "diseas taxon": [
+            fake_fullmap_row("diseas taxon", "MONDO:50", "Human disease", "Disease", 9606),
+            fake_fullmap_row("diseas taxon", "MONDO:51", "Mouse disease", "Disease", 10090),
+        ],
+        "homo sapien": [fake_fullmap_row("homo sapien", "NCBITaxon:9606", "Homo sapiens", "OrganismTaxon", 9606)],
+        "mus musculus": [fake_fullmap_row("mus musculus", "NCBITaxon:10090", "Mus musculus", "OrganismTaxon", 10090)],
+        "diseas x": [fake_fullmap_row("diseas x", "MONDO:0000001", "Disease X", "Disease", 0)],
+    }
+    install_fake_fullmap(monkeypatch, rows)
+    table_path, _ = write_text_section(
+        tmp_path,
+        "taxon_scope",
+        {
+            "statement": {
+                "subject": {"method": "value", "encoding": "Disease Taxon", "taxon_from": "species_context_qualifier"},
+                "object": {"method": "value", "encoding": "Disease X"},
+                "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "A", "taxon": None}],
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        },
+        ["Homo sapiens", "Mus musculus", ""],
+    )
+    data: Any = from_yaml(table_path)
+    store: Path = tmp_path / "taxon_scope.parquet"
+    tcode_model: Tcode = Tcode.model_validate({**data, "config": table_path, "store": store, "name": "TAXON_KG", "infores": "infores:taxon-kg"})  # pyright: ignore
+
+    subgraph: Path = lib.compile_subgraph(tcode_model.collect(tmp_path / "fullmap.redb"))  # pyright: ignore
+    lib.compile_graph([subgraph], "taxon", "1.0.0", rig_factory(tmp_path, infores_id="infores:taxon-kg"))
+    edges: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "taxon_1.0.0.edges.ndjson").read_text().splitlines()]
+
+    by_species: dict[str, dict[str, Any]] = {edge["species_context_qualifier"]: edge for edge in edges}
+    assert set(by_species) == {"NCBITaxon:9606", "NCBITaxon:10090"}
+    assert by_species["NCBITaxon:9606"]["subject"] == "MONDO:50"
+    assert by_species["NCBITaxon:10090"]["subject"] == "MONDO:51"
+    # The blank-tax third row resolved under the default 9606 scope and merged with the human row.
+    assert len(edges) == 2

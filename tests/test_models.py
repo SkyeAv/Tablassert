@@ -1360,3 +1360,70 @@ def test_graph_uuid_on_collision_rejects_unknown_values(rig_factory: Any) -> Non
     }
     with pytest.raises(ValidationError):
         Graph.model_validate(data)
+
+
+def test_node_encoding_accepts_taxon_from() -> None:
+    """taxon_from names another resolved column for per-row taxon scoping."""
+    node: NodeEncoding = NodeEncoding(method="value", encoding="BRCA1", taxon_from="species_context_qualifier")  # pyright: ignore
+    assert node.taxon_from == "species_context_qualifier"
+    assert node.taxon == 9606  # untouched default; the conflict is on the raw input only
+
+
+def test_node_encoding_rejects_taxon_from_with_explicit_taxon() -> None:
+    """An explicit taxon next to taxon_from is a config-time conflict, whatever the value.
+
+    Two taxon knobs on one encoding would compete for the same filter, and because
+    `taxon` defaults to 9606 the check must run on the author-written raw input:
+    only an explicitly declared taxon conflicts, including an explicit null.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        NodeEncoding(method="value", encoding="BRCA1", taxon=10090, taxon_from="species_context_qualifier")  # pyright: ignore
+    assert "taxon-from-conflict" in str(exc_info.value)
+    with pytest.raises(ValidationError):
+        NodeEncoding(method="value", encoding="BRCA1", taxon=None, taxon_from="species_context_qualifier")  # pyright: ignore
+
+
+def _statement_dict(taxon_from: str | None) -> dict[str, object]:
+    return {
+        "subject": {"method": "value", "encoding": "A", **({"taxon_from": taxon_from} if taxon_from else {})},
+        "object": {"method": "value", "encoding": "B"},
+        "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C"}],
+    }
+
+
+def test_statement_rejects_taxon_from_targeting_unknown_column() -> None:
+    """taxon_from must name subject, object, or a CURIE-ranged qualifier of this statement."""
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(_statement_dict("not_a_column"))
+    assert "taxon-from-unknown-column" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_targeting_enum_qualifier() -> None:
+    """Enum-ranged qualifiers never resolve, so they cannot scope another column's taxon."""
+    data: dict[str, object] = _statement_dict("object_direction_qualifier")
+    data["qualifiers"] = [{"qualifier": "object_direction_qualifier", "method": "value", "encoding": "increased"}]
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(data)
+    assert "taxon-from-unknown-column" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_self_reference() -> None:
+    """A column cannot be scoped by its own resolution."""
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(_statement_dict("subject"))
+    assert "taxon-from-self" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_cycles() -> None:
+    """A taxon_from cycle has no valid resolution order and dies at config time."""
+    data: dict[str, object] = _statement_dict("species_context_qualifier")
+    data["qualifiers"] = [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C", "taxon_from": "subject"}]
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(data)
+    assert "taxon-from-cycle" in str(exc_info.value)
+
+
+def test_statement_accepts_taxon_from_resolved_qualifier() -> None:
+    """The DAKP shape: subject/object scoped by the species context qualifier."""
+    statement: models.Statement = models.Statement.model_validate(_statement_dict("species_context_qualifier"))
+    assert statement.subject.taxon_from == "species_context_qualifier"

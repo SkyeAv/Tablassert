@@ -307,6 +307,36 @@ class NodeEncoding(Encoding):
         ),
         examples=[9606, 10090],
     )
+    taxon_from: str | None = Field(
+        None,
+        description=(
+            "Per-row taxon scoping: name another resolved node column of the same statement (a CURIE-ranged qualifier key, "
+            "or `subject`/`object`) whose resolved NCBITaxon CURIE scopes this column's entity resolution row by row, instead of "
+            "the static `taxon`. The named column is resolved first; rows whose taxon cell is blank fall back to the 9606 "
+            "default, and a non-null cell that does not resolve to an NCBITaxon CURIE fails the build (`taxon-from-not-ncbitaxon`). "
+            "Mutually exclusive with an explicit `taxon`."
+        ),
+        examples=["species_context_qualifier"],
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def taxon_from_excludes_explicit_taxon(cls, data: Any) -> Any:
+        """Reject `taxon_from` set together with an explicit `taxon`.
+
+        Two taxon knobs on one encoding would compete for the same filter, and the
+        winner would depend on evaluation order. `taxon` defaults to 9606, so the
+        check must run on the raw input: only an author-written `taxon` conflicts,
+        and `taxon_from` supplies its own default (9606 for blank taxon cells).
+        """
+        if isinstance(data, dict) and data.get("taxon_from") is not None and "taxon" in data:
+            raise TablassertValidationError(
+                "`taxon_from` and an explicit `taxon` are mutually exclusive; remove one. `taxon_from` scopes resolution "
+                "per row from the named column and falls back to the 9606 default for blank taxon cells.",
+                code="taxon-from-conflict",
+            )
+        return data
+
     prioritize: list[Categories] | None = Field(
         None, description="Biolink categories ranked higher during entity resolution.", examples=[[Categories.GENE, Categories.PROTEIN]]
     )
@@ -482,6 +512,53 @@ class Statement(TablaBase):
                     code="qualifier-duplicated",
                 )
             seen.add(key)
+        return self
+
+    @model_validator(mode="after")
+    def validate_taxon_from_targets(self: Self) -> Self:
+        """Validate every `taxon_from` reference before a build can run.
+
+        `taxon_from` scopes one node column's resolution by another resolved node
+        column of the same statement, so the target must exist, must itself resolve
+        (enum-ranged qualifiers never resolve), must not be the column carrying the
+        reference, and must not participate in a reference cycle -- a cyclic pair
+        would have no valid resolution order. All four failures are config-time so a
+        bad reference dies at load, not hours into a build.
+        """
+        resolved: dict[str, NodeEncoding | Qualifier] = {
+            "subject": self.subject,
+            "object": self.object,
+            **{str(q.qualifier): q for q in self.qualifiers or [] if q.resolved},
+        }
+        for name, encoding in resolved.items():
+            target: str | None = getattr(encoding, "taxon_from", None)
+            if target is None:
+                continue
+            if target not in resolved:
+                raise TablassertValidationError(
+                    f"`taxon_from: {target}` on `{name}` does not name a resolved node column of this statement; "
+                    "expected `subject`, `object`, or a CURIE-ranged qualifier key.",
+                    code="taxon-from-unknown-column",
+                )
+            if target == name:
+                raise TablassertValidationError(
+                    f"`taxon_from: {target}` on `{name}` references itself; a column cannot be scoped by its own resolution.", code="taxon-from-self"
+                )
+            # Chase the reference chain from the target: any path back to a column that
+            # already carries a reference is a cycle with no valid resolution order.
+            seen: set[str] = {name}
+            cursor: str = target
+            while cursor in resolved:
+                if cursor in seen:
+                    raise TablassertValidationError(
+                        f"`taxon_from` references form a cycle through `{cursor}`; there is no column that can resolve first.",
+                        code="taxon-from-cycle",
+                    )
+                seen.add(cursor)
+                nxt: str | None = getattr(resolved[cursor], "taxon_from", None)
+                if nxt is None:
+                    break
+                cursor = nxt
         return self
 
     @model_validator(mode="after")
