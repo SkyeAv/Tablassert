@@ -661,6 +661,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#identifier-allow-list-and-deny-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identifier Allow-list and Deny-list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#null-handling-with-forward-fill" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1194,6 +1205,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#identifier-allow-list-and-deny-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Identifier Allow-list and Deny-list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#null-handling-with-forward-fill" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1464,37 +1486,91 @@ edges (reindex on column values, with a Polars regex for the rows whose value ha
 <p><strong>Key techniques:</strong></p>
 <ul>
 <li><strong>Reindex filtering</strong> keeps only rows where column C (p-value) &lt; 0.05 AND column D (sample size) &gt;= 100; multiple reindex conditions are ANDed together.</li>
-<li><strong>Comparison operators</strong>: <code>lt</code> (less than), <code>ge</code> (greater or equal), <code>eq</code>, <code>ne</code>, <code>gt</code>, <code>le</code>.</li>
+<li><strong>Comparison operators</strong>: <code>lt</code> (less than), <code>ge</code> (greater or equal), <code>eq</code>, <code>ne</code>, <code>gt</code>, <code>le</code>, plus the membership pair <code>join</code>/<code>antijoin</code> in the next section.</li>
 <li><strong>Regex comparator</strong> (<code>regex: true</code> on an <code>eq</code>/<code>ne</code> entry) drops every placeholder gene cell in one filter (<code>N/A</code>, <code>n/a</code>, <code>--</code>, <code>unknown gene</code>) instead of one literal filter per spelling. The pattern is anchored with <code>^</code>/<code>$</code> because Polars matching is unanchored: unanchored <code>n/?a</code> would also drop <code>bona fide</code>.</li>
 <li><strong>Backwards compatibility</strong>: <code>regex</code> defaults to false, so an <code>eq</code>/<code>ne</code> entry without it still compares the cell to the literal <code>comparator</code>.</li>
+</ul>
+<hr />
+<h2 id="identifier-allow-list-and-deny-list">Identifier Allow-list and Deny-list<a class="headerlink" href="#identifier-allow-list-and-deny-list" title="Permanent link">&para;</a></h2>
+<p>Split one association table into two sections by exact identifier membership: <code>join</code> keeps the rows
+whose cell is in the supplied list, <code>antijoin</code> keeps the rows that are not. <strong>Use case:</strong> a curated
+allow-list of entities that must be published, and the rest of the same file kept separate from
+it, without writing one <code>eq</code> condition per identifier.</p>
+<p><strong>Data:</strong> TSV with a gene CURIE column and a disease column</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">template</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./curated-associations.tsv</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="nt">url</span><span class="p">:</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/curated-associations.tsv</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">delimiter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;\t&quot;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="nt">subject</span><span class="p">:</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Gene</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">      </span><span class="nt">taxon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9606</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">associated_with</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="nt">object</span><span class="p">:</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">B</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Disease</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">  </span><span class="nt">provenance</span><span class="p">:</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">    </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PMID</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">    </span><span class="nt">publication</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;77889900&quot;</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="nt">sections</span><span class="p">:</span>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">  </span><span class="c1"># Section 1: only the curated genes.</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="w">      </span><span class="nt">reindex</span><span class="p">:</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">column</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="nt"> comparison</span><span class="p">:</span><span class="w"> </span><span class="nv">join</span><span class="p p-Indicator">,</span><span class="nt"> comparator</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;HGNC:1100&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;HGNC:11998&quot;</span><span class="p p-Indicator">]}</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="w">  </span><span class="c1"># Section 2: every other gene. Same list, opposite operator, so the pair partitions the file.</span>
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="w">      </span><span class="nt">reindex</span><span class="p">:</span>
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">column</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="p p-Indicator">,</span><span class="nt"> comparison</span><span class="p">:</span><span class="w"> </span><span class="nv">antijoin</span><span class="p p-Indicator">,</span><span class="nt"> comparator</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;HGNC:1100&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;HGNC:11998&quot;</span><span class="p p-Indicator">]}</span>
+</code></pre></div>
+<p><strong>Key techniques:</strong></p>
+<ul>
+<li><strong>Same stage as every other filter:</strong> membership runs on the raw cell before entity resolution, so
+  the list must be spelled the way the column is written (here gene CURIEs in column A).</li>
+<li><strong>Complementary lists:</strong> <code>join</code> and <code>antijoin</code> over the <em>same</em> list partition the file, so each row
+  lands in exactly one section. Two different lists are not a partition, and a row in both is emitted
+  by both sections.</li>
+<li><strong>Blank cells go with the tail:</strong> a null or empty cell never matches, so <code>join</code> drops it while
+  <code>antijoin</code> keeps it. Those rows resolve to nothing and surface as <code>incomplete-edges</code> QC findings
+  under <code>build-kg --qc</code> rather than being filtered out silently.</li>
+<li><strong>Column dtype:</strong> a text source reads every column as a string, so no cast is involved. A typed
+  parquet column is compared in its string form (<code>3</code> for the integer three, <code>"3.0"</code> for the float).</li>
 </ul>
 <hr />
 <h2 id="null-handling-with-forward-fill">Null Handling with Forward Fill<a class="headerlink" href="#null-handling-with-forward-fill" title="Permanent link">&para;</a></h2>
 <p>Build <code>subclass_of</code> edges from a hierarchical <strong>CSV</strong> where parent categories propagate down through
 empty cells (forward fill).</p>
 <p><strong>Data:</strong> CSV with category headers followed by subcategory rows (gaps in category column)</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">template</span><span class="p">:</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./hierarchical-data.csv</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="nt">url</span><span class="p">:</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/hierarchical.csv</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="nt">delimiter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;,&quot;</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="nt">subject</span><span class="p">:</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">      </span><span class="nt">fill</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forward</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ChemicalEntity</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">subclass_of</span>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="nt">object</span><span class="p">:</span>
-<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
-<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">B</span>
-<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ChemicalEntity</span><span class="p p-Indicator">]</span>
-<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">  </span><span class="nt">provenance</span><span class="p">:</span>
-<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">    </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PMID</span>
-<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">    </span><span class="nt">publication</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;99887766&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">template</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">local</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./hierarchical-data.csv</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="nt">url</span><span class="p">:</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/hierarchical.csv</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="nt">delimiter</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;,&quot;</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">  </span><span class="nt">statement</span><span class="p">:</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="nt">subject</span><span class="p">:</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">A</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">      </span><span class="nt">fill</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">forward</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ChemicalEntity</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">    </span><span class="nt">predicate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">subclass_of</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">    </span><span class="nt">object</span><span class="p">:</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">column</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">      </span><span class="nt">encoding</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">B</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">      </span><span class="nt">prioritize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">ChemicalEntity</span><span class="p p-Indicator">]</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">  </span><span class="nt">provenance</span><span class="p">:</span>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">    </span><span class="nt">repo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PMID</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">    </span><span class="nt">publication</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;99887766&quot;</span>
 </code></pre></div>
 <p><strong>Key techniques:</strong></p>
 <ul>
