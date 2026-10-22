@@ -124,6 +124,9 @@ def test_dynamic_loop_never_overflows_when_a_phase_total_resets_to_zero() -> Non
 TRIGGERS: dict[str, Callable[[], object]] = {
     "comparison-bad-comparator-type": lambda: Reindex(column="A", comparison=Comparisons.EQ, comparator=5),  # pyright: ignore
     "comparison-nonnumeric-comparator": lambda: Reindex(column="A", comparison=Comparisons.GT, comparator="x"),  # pyright: ignore
+    "comparison-membership-comparator-required": lambda: Reindex(column="A", comparison=Comparisons.JOIN, comparator="CHEBI:1"),  # pyright: ignore
+    "comparison-membership-empty": lambda: Reindex(column="A", comparison=Comparisons.JOIN, comparator=[]),  # pyright: ignore
+    "comparison-membership-member-not-a-string": lambda: Reindex(column="A", comparison=Comparisons.ANTIJOIN, comparator=[3]),  # pyright: ignore
     "config-rows-and-row-slice-conflict": lambda: Text(
         local=Path("./t.tsv"), url=["https://example.com/t.tsv"], kind="text", rows=[1], row_slice=[1, 5]
     ),  # pyright: ignore

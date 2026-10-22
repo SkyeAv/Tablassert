@@ -45,11 +45,11 @@ from tablassert.coerce import (
     sig,
     study_size_target,
 )
-from tablassert.enums import EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
+from tablassert.enums import Comparisons, EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
 from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
-from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section
+from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, Reindex, RIGConfig, Section
 from tablassert.nlp import level_one, level_two
 from tablassert.qc import fullmap_audit
 from tablassert.rig import (
@@ -1070,6 +1070,113 @@ def reindex(df: pl.LazyFrame, col: str, op: Callable, comp: str | int | float, c
     return df.filter(op(expr, comp))
 
 
+MEMBERSHIP_KEY_COLUMN: str = "_reindex_membership_key"
+"""Base name for the throwaway join key column on the cast branch; extended with underscores until
+it is unused if a source frame already carries it, and dropped again before the op returns."""
+
+MEMBERSHIP_UNCASTABLE_DTYPES: frozenset[str] = frozenset({"List", "Array", "Struct", "Object", "Binary"})
+"""polars dtype class NAMES whose cells have no single-string identity, so membership is refused.
+
+Matched by name because a module-level ``pl.List`` reference would resolve the lazy proxy and import
+polars at ``import tablassert.lib``, which is exactly what :mod:`tablassert._lazy` exists to avoid.
+Every parametrized variant reports its base name (``List(String)`` is named ``List``).
+
+A ``List``/``Array`` cell cannot be cast to ``String`` at all (``InvalidOperationError``), an
+``Object`` cell casts through python and never compares equal to an identifier, a ``Struct`` casts to
+a brace literal no identifier is spelled to match, and a ``Binary`` cell casts only when it happens to
+be valid UTF-8, so one list would match some rows and raise on the rest. Joining list cells on a
+separator instead would make a multi-value cell never match a single identifier, a silent wrong
+answer, so these dtypes raise a coded error.
+"""
+
+
+def _membership_key_column(schema: pl.Schema) -> str:
+    """Return a join key column name the frame does not already use.
+
+    Args:
+        schema: Collected schema of the frame being filtered.
+
+    Returns:
+        :data:`MEMBERSHIP_KEY_COLUMN`, or that name extended with underscores until it is free.
+    """
+    key_col: str = MEMBERSHIP_KEY_COLUMN
+    while key_col in schema:
+        key_col = f"{key_col}_"
+    return key_col
+
+
+def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by exact membership in a list of identifiers (join / antijoin).
+
+    Args:
+        df: Source LazyFrame.
+        col: Column whose raw (pre-resolution) cell values are tested.
+        keys: Identifier list. Duplicates are ignored: a semi/anti join cannot multiply left
+            rows, and the join build side is cheaper once deduplicated.
+        anti: ``False`` (join) keeps rows whose value is in ``keys``; ``True`` (antijoin) keeps
+            the rows that are not.
+
+    Returns:
+        Filtered LazyFrame keeping the surviving rows in left-frame order, with every original
+        column and its original dtype.
+
+    Raises:
+        TablassertError: ``comparison-membership-empty`` for an empty list,
+            ``reindex-membership-column-missing`` when the source lacks ``col``, and
+            ``reindex-membership-column-dtype-unsupported`` for cells with no single string form
+            (``List``, ``Array``, ``Struct``, ``Object``, ``Binary``).
+
+    Notes:
+        Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join
+        against a once-built key frame is the faster measured path once the list is non-trivial (1M
+        rows, median of three collects: 100k keys 0.018s vs 0.029s filtered; 1k keys 0.003s vs
+        0.004s; a tie at ten keys), and it is the membership idiom already used in
+        :mod:`tablassert.qc`. No ``is_in`` fast path exists for tiny lists: it propagates nulls
+        differently from antijoin, and the gap is milliseconds per million rows.
+
+        ``maintain_order="left"`` is explicit, not incidental: polars documents the default order as
+        unspecified ("might differ across Polars versions or even between different runs"), and the
+        dependency is an open range, so a future 2.x must not be able to reshuffle a section's rows.
+        Measured free here (1M rows / 100k keys, five runs, median): semi 5.1ms -> 4.6ms, anti 5.4ms
+        -> 5.4ms.
+
+        The string path joins straight on ``col``, because semi/anti joins emit only the left frame's
+        columns. Only the cast path adds a throwaway helper column, and it is dropped again, so
+        entity resolution downstream sees the cell exactly as the source produced it.
+
+        Null semantics are join semantics and deliberately differ from ``ne``: a null cell never
+        matches, so join drops it while antijoin KEEPS it.
+
+        Membership is textual, so an identifier must be spelled the way polars' cast renders it.
+        Measured forms: ``Int64`` 3 -> ``"3"``; ``Float64`` 3.0 -> ``"3.0"`` (1e+20 keeps scientific
+        form); ``Bool`` -> ``"true"``/``"false"``; ``Date`` -> ``"2024-01-15"``; ``Datetime`` ->
+        ``"2024-01-15 06:24:30.000000"`` (space, not ``T``, with microsecond precision); ``Time`` ->
+        ``"01:02:03"``; ``Decimal(10,2)`` 1.5 -> ``"1.50"`` (scale kept). A misspelled list is not an
+        error: join emits an empty section and antijoin emits every row. No zero-match warning is
+        emitted, because detecting it would cost an extra pass over the frame on every build.
+    """
+    if not keys:
+        raise TablassertError("`join`/`antijoin` reindex requires at least one identifier.", code="comparison-membership-empty")
+
+    schema: pl.Schema = df.collect_schema()
+    if col not in schema:
+        raise TablassertError(f"`join`/`antijoin` reindex targets `{col}`, which the source does not have.", code="reindex-membership-column-missing")
+    if type(schema[col]).__name__ in MEMBERSHIP_UNCASTABLE_DTYPES:
+        raise TablassertError(
+            f"`join`/`antijoin` reindex cannot test `{col}`: {schema[col]} cells have no single string form to match identifiers against.",
+            code="reindex-membership-column-dtype-unsupported",
+        )
+
+    unique: list[str] = list(dict.fromkeys(keys))
+    how: Literal["semi", "anti"] = "anti" if anti else "semi"
+    if isinstance(schema[col], pl.String):
+        # No helper column: the join returns the left frame's columns unchanged.
+        return df.join(pl.DataFrame({col: unique}).lazy(), on=col, how=how, maintain_order="left")
+    key_col: str = _membership_key_column(schema)
+    left: pl.LazyFrame = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
+    return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how, maintain_order="left").drop(key_col)
+
+
 def reindex_regex(df: pl.LazyFrame, col: str, pattern: str, negate: bool = False) -> pl.LazyFrame:
     """Reindex a LazyFrame by filtering rows on a polars regex match against a column.
 
@@ -1093,6 +1200,46 @@ def reindex_regex(df: pl.LazyFrame, col: str, pattern: str, negate: bool = False
     """
     match: pl.Expr = pl.col(col).cast(pl.String).str.contains(pattern)
     return df.filter(match.not_() if negate else match)
+
+
+def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
+    """Compile one ``Reindex`` config entry into its Tcode op tuple.
+
+    Args:
+        entry: Validated ``Reindex`` model. The validator guarantees the pairing: a membership entry
+            carries a non-empty ``list[str]`` comparator, ``regex`` only ever sits on ``eq``/``ne``,
+            and a scalar entry carries a scalar comparator.
+
+    Returns:
+        ``(callable, args)`` for the pipeline: :func:`reindex_membership` for ``join``/``antijoin``,
+        :func:`reindex_regex` for a ``regex`` entry, otherwise :func:`reindex` with the ``operator``
+        module callable and the same ``cast`` choice it has always used (numeric comparisons cast to
+        Float64, ``eq``/``ne`` do not).
+
+    Notes:
+        Legacy entries keep emitting exactly the tuples they always did, so their run-cache op digests
+        do not move; membership is the only new shape.
+
+        ``Reindex.comparison`` carries the plain enum *value* at runtime because ``TablaBase`` sets
+        ``use_enum_values=True``, so this branches on the strings, exactly as the inline comprehension
+        it replaces did.
+    """
+    col: str = idxname(entry.column)
+    comparison: str = entry.comparison
+    if comparison in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value):
+        if not isinstance(entry.comparator, list):
+            raise TablassertError(
+                f"`{comparison}` reindex requires a list of identifiers, got {type(entry.comparator).__name__}.",
+                code="comparison-membership-comparator-required",
+            )
+        return (reindex_membership, (col, entry.comparator, comparison == Comparisons.ANTIJOIN.value))
+    if entry.regex:
+        # models.Reindex rejects `regex` off eq/ne, so this arm never needs the numeric cast or an
+        # operator lookup.
+        return (reindex_regex, (col, entry.comparator, comparison == Comparisons.NE.value))
+    if comparison in (Comparisons.NE.value, Comparisons.EQ.value):
+        return (reindex, (col, getattr(operator, comparison), entry.comparator, False))
+    return (reindex, (col, getattr(operator, comparison), entry.comparator))
 
 
 def drop_not_significant(lf: pl.LazyFrame, col: str = "statistical_significance_qualifier") -> pl.LazyFrame:
@@ -1363,19 +1510,7 @@ class Tcode(Section):
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
-            [
-                # `regex` is only legal with `eq`/`ne` (models.Reindex rejects it elsewhere), so the
-                # regex arm never needs the numeric cast or an `operator` lookup. Legacy entries keep
-                # emitting exactly the tuples they always did, so their run-cache op digests do not move.
-                (reindex_regex, (idxname(x.column), x.comparator, x.comparison == "ne"))
-                if x.regex
-                else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator))
-                if x.comparison not in ["ne", "eq"]
-                else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator, False))
-                for x in self.source.reindex
-            ]
-            if self.source.reindex
-            else None,
+            [reindex_op(x) for x in self.source.reindex] if self.source.reindex else None,
             # --head preview: randomly sample min(HEAD_ROWS, height) rows before any encoding/resolve.
             (head, (HEAD_ROWS,)) if self.head else None,
             [
@@ -1618,6 +1753,7 @@ PHASE_OF: dict[Callable, str] = {
     crop: "filter",
     pick: "filter",
     reindex: "filter",
+    reindex_membership: "filter",
     reindex_regex: "filter",
     head: "filter",
     coerce_columns: "clean",

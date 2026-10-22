@@ -119,9 +119,18 @@ class TablaBase(BaseModel):
 class Reindex(TablaBase):
     column: str = Field(..., pattern=r"^[A-Z]{1,3}$", description="Source column letters used for row filtering.", examples=["A", "AA"])
     comparison: Comparisons = Field(
-        Comparisons.NE, description="Comparison operator used in reindex filtering.", examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT]
+        Comparisons.NE,
+        description="Comparison operator used in reindex filtering.",
+        examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT, Comparisons.JOIN, Comparisons.ANTIJOIN],
     )
-    comparator: str | int | float = Field(..., description="Right-side value compared against the selected column.", examples=["N/A", 0, 1.5])
+    comparator: str | int | float | list[str] = Field(
+        ...,
+        description=(
+            "Right-side value compared against the selected column. For `join`/`antijoin` this is the list of "
+            "identifiers matched exactly against the raw (pre-resolution) cell value."
+        ),
+        examples=["N/A", 0, 1.5, ["CHEBI:41774", "CHEBI:48217"]],
+    )
     regex: bool = Field(
         False,
         description=(
@@ -133,12 +142,65 @@ class Reindex(TablaBase):
         ),
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def membership_members_are_strings(cls, data: Any) -> Any:
+        """Reject an identifier list whose members are not strings, with a code rather than a field type error.
+
+        Args:
+            data: Raw config value for one ``Reindex`` entry.
+
+        Returns:
+            ``data`` unchanged when the entry is not a membership list, or when every member is a
+            string.
+
+        Raises:
+            TablassertValidationError: ``comparison-membership-member-not-a-string`` when a
+                ``join``/``antijoin`` list holds a non-string member.
+
+        Notes:
+            Without this guard the pydantic union rejects `comparator: [3, 4]` (the natural spelling
+            against an `Int64` column, whose string form is `3`) as a bare `string_type` field error
+            with no stable code and no docs URL, while every other failure in this family is coded.
+            The fix stays "quote the identifiers": membership is textual, so an unquoted number is a
+            config error rather than something to coerce silently.
+        """
+        if not isinstance(data, dict):
+            return data
+        comparison = data.get("comparison")
+        comparator = data.get("comparator")
+        if comparison not in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value) or not isinstance(comparator, list):
+            return data
+        for index, member in enumerate(comparator):
+            if not isinstance(member, str):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` identifier lists must hold quoted strings: member {index} is {type(member).__name__} ({member!r}). "
+                    f'Quote it (for example ["{member}"]) to match the cell as text.',
+                    code="comparison-membership-member-not-a-string",
+                )
+        return data
+
     @model_validator(mode="after")
     def comparison_datatypes(self: Self) -> Self:
         x: Comparisons = self.comparison
-        y: str | int | float = self.comparator
+        y: str | int | float | list[str] = self.comparator
 
-        if x == Comparisons.NE or x == Comparisons.EQ:
+        if x == Comparisons.JOIN or x == Comparisons.ANTIJOIN:
+            if self.regex:
+                raise TablassertValidationError(
+                    "`regex` is only meaningful with the `eq`/`ne` comparisons; `join`/`antijoin` match identifiers by exact string identity against a list.",
+                    code="comparison-regex-requires-eq-ne",
+                )
+            if not isinstance(y, list):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` comparisons require a list of identifier strings, got {type(y).__name__}.",
+                    code="comparison-membership-comparator-required",
+                )
+            if not y:
+                raise TablassertValidationError(
+                    "`join`/`antijoin` comparators must hold at least one identifier.", code="comparison-membership-empty"
+                )
+        elif x == Comparisons.NE or x == Comparisons.EQ:
             if not isinstance(y, str):
                 raise TablassertValidationError(
                     f"`eq`/`ne` comparisons require a str comparator, got {type(y).__name__}.", code="comparison-bad-comparator-type"

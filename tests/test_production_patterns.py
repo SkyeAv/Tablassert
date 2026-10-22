@@ -303,11 +303,15 @@ def test_provenance_override_rehomes_urls_in_kgx(tmp_path: Path, monkeypatch: py
         pytest.param("le", 1.5, ["0.5", "1.5", "2.5", "3.5"], {"HGNC:1100", "HGNC:6871"}, id="le"),
         pytest.param("gt", 2, ["0.5", "1.5", "2.5", "3.5"], {"HGNC:11998", "HGNC:3236"}, id="gt"),
         pytest.param("ge", 2.5, ["0.5", "1.5", "2.5", "3.5"], {"HGNC:11998", "HGNC:3236"}, id="ge"),
+        # Membership comparisons take a list of identifiers matched against the raw cell value.
+        pytest.param("join", ["ok1", "ok2"], ["NA", "ok1", "ok2", "ok3"], {"HGNC:6871", "HGNC:11998"}, id="join"),
+        pytest.param("antijoin", ["ok1", "ok2"], ["NA", "ok1", "ok2", "ok3"], {"HGNC:1100", "HGNC:3236"}, id="antijoin"),
+        pytest.param("antijoin", ["2.5"], ["0.5", "1.5", "2.5", "3.5"], {"HGNC:1100", "HGNC:6871", "HGNC:3236"}, id="antijoin-numeric-column"),
     ],
 )
 def test_reindex_filters_rows_all_comparisons(
     comparison: str | None,
-    comparator: str | float,
+    comparator: str | int | float | list[str],
     driver_values: list[str],
     expected_subjects: set[str],
     tmp_path: Path,
@@ -319,7 +323,9 @@ def test_reindex_filters_rows_all_comparisons(
     The ``default-ne`` case omits ``comparison`` entirely, exactly like TableConfigs
     MBKG HOSKINSON3: ``Reindex.comparison`` defaults to ``ne``. ``eq``/``ne`` compare
     raw strings (``cast=False`` in the ``_source_ops`` call); the numeric operators
-    cast the driver column to Float64 first.
+    cast the driver column to Float64 first. ``join``/``antijoin`` compare raw cell strings
+    against an identifier list through :func:`tablassert.lib.reindex_membership`, including
+    against a column the reader typed as numeric.
     """
     fullmap: Path = _build_rich_redb(tmp_path / "fullmap")
     data: Path = tmp_path / "data.tsv"

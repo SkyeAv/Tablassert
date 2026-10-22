@@ -56,6 +56,13 @@ TablassertErrorCodes = Literal[
     "config-rows-and-row-slice-conflict",
     "comparison-bad-comparator-type",
     "comparison-nonnumeric-comparator",
+    # Membership (join/antijoin) family: the first two are config-validation failures on the
+    # `comparator` field, the last two are op-level failures on the column being tested.
+    "comparison-membership-comparator-required",
+    "comparison-membership-empty",
+    "comparison-membership-member-not-a-string",
+    "reindex-membership-column-missing",
+    "reindex-membership-column-dtype-unsupported",
     "comparison-regex-requires-eq-ne",
     "encoding-bad-excel-column",
     "regex-bad-pattern",
