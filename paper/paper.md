@@ -33,7 +33,7 @@ each table's columns map to subject-predicate-object statements; Tablassert reso
 ("TP53", "lung cancer") to compact uniform resource identifiers (CURIEs), attaches provenance and
 statistical annotations, and emits KGX-compliant [@kgx] node and edge files carrying Biolink Model
 categories [@biolink-model]. The same recipe can be inspected, reused, and refined, so a graph
-starts small and improves iteratively instead of being frozen inside a bespoke ingest script.
+starts small instead of being frozen inside a bespoke ingest script.
 
 # Statement of need
 
@@ -49,17 +49,17 @@ Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabu
 sources and need rigorously structured output without maintaining a transform pipeline per source.
 Beyond journal supplements, the same recipes apply to any relational source -- trial registries,
 drug approval records, or a researcher's own tables -- and each build can emit the Resource Ingest
-Guide metadata that Translator submissions require. Recipes are validated with Pydantic before a
-build starts, so a typo or an impossible combination of options fails immediately with an error
-naming the offending field, rather than surfacing as a malformed graph hours later.
+Guide metadata that Translator submissions require. Recipes are validated before a build
+starts, so a typo fails immediately with an error naming the field, rather than surfacing as a
+malformed graph hours later.
 
 # State of the field
 
 The prevailing practice for Translator ingests is bespoke Python per data source, with generic tools at each layer that none of them composes. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Koza [@koza], the Monarch Initiative's ingest engine, pairs YAML configuration with semi-declarative Python transforms and outputs KGX, but leaves entity resolution to separate services or mappings. LinkML [@linkml] models the schema of a finished knowledge graph generically, but a schema says nothing about how a spreadsheet column becomes a node. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a network API, which makes build-time bulk lookups slow and builds themselves irreproducible without network access.
-Extending those tools would not remove the cost Tablassert targets: the repeated ingest code, the
-hosted-resolution dependency, and the lack of integrated mapping-quality checks. Tablassert
-integrates all three into one recipe-driven pipeline, and contributing resolution or audit stages
-back to Koza would not produce a single declarative YAML mapping covering both.
+Extending those tools would not remove the cost Tablassert targets: repeated ingest code, the
+hosted-resolution dependency, and no integrated mapping-quality checks. Tablassert integrates all
+three into one recipe-driven pipeline; contributing resolution or audit stages back to Koza would
+still not yield a single declarative mapping.
 
 # Software design
 
@@ -77,15 +77,15 @@ vocabularies, onto canonical identifiers with category and taxon metadata. The s
 set of redb [@redb] key-value files -- an embedded, crash-safe Rust engine chosen over
 analytical stores because resolution is point-lookup-shaped, not query-shaped -- built in a
 parallel, memory-bounded streaming pass, and partitioned into shards that serve concurrent batch
-lookups. Restricting resolution to BABEL-covered entities is deliberate: what does not map is
+lookups. The prebuilt archive for the current BABEL 22.2.0 export is 44.5 GB compressed; the redb
+store used here, built from the 2026-07-22 export, occupies 24.7 GB. What does not map is
 reported, not guessed, and metadata arrives with the identifier. Resolution is exact-match over
 normalized keys rather than fuzzy search -- approximate matches surface only in the audit stage,
 not in the graph -- because fuzzy resolution returns plausible-but-wrong identifiers often enough
 to corrupt a graph silently. The build applies a fixed allowlist of the top 100 experimental taxa
 derived from Translator knowledge-graph node frequencies, alongside all OrganismTaxon rows and
 rows without taxon metadata: a deliberate trade-off that shrinks the database but drops
-species-specific identifiers outside the allowlist. A prebuilt fullmap can be downloaded from
-RENCI alongside building one locally.
+species-specific identifiers outside the allowlist.
 
 Resolution is column-aware rather than string-in/CURIE-out. Each node column carries its own
 constraints: an NCBI taxon filter that keeps taxon-bearing matches for the declared species while
@@ -99,10 +99,8 @@ column being resolved breaks remaining ties, so a column of gene symbols resolve
 names as genes. These are query shapes the hosted API does not offer: it takes a string and returns
 ranked identifiers, with no taxon constraint, category policy, or per-column context, and the full
 identifier-record workflow (string to identifier, then canonicalization for preferred name and
-category) takes two HTTP calls per term where the fullmap returns all of it in one batched fetch.
-Benchmarks shipped in `paper/benchmarks/` quantify this on 113 real ingest terms: local resolution
-sustained 171 unique terms per second, while the hosted workflow spent a median of 0.55 seconds
-per call.
+category) takes two HTTP calls per term where the fullmap returns all of it in one batched fetch
+(see Benchmarks).
 
 Every edge carries recipe-declared structured provenance -- source record URLs, supporting
 publications, and the processing context that produced it -- so an assertion can be traced back to
@@ -115,14 +113,23 @@ with their scores rather than silently retained; in the DAKP production builds t
 the full graph -- 1,661,094 audited rows in the current release -- which in practice catches
 resolution errors that upstream synonym sources are slow to fix. Output correctness is checked in
 two passes: an optional study stage asserts structural invariants over the emitted NDJSON (no
-duplicate or isolated nodes, no empty required fields, no edges demoted to bare Association), and
-the `validate-kgx` command validates every node and edge against category-specific Biolink schema
-classes, so the emitted graph, not just its configuration, can be verified well-formed. Tablassert
+duplicate or isolated nodes, no empty required fields, no edges demoted to bare Association). The
+`validate-kgx` command goes beyond KGX's schema-driven `validate` [@kgx]: every node and edge is
+constructed as the Biolink class its own category names, knowledge-source identity is checked
+against the Translator infores registry offline, and `--prune` rewrites the edges file in place to
+its strictly-compliant subset, with the exit code gating the post-prune state. Tablassert
 is a Python package with a PyO3 Rust extension; the resolution engine, database build, and NDJSON
-writer run in Rust while recipes and validation remain Python. The same benchmark folder contrasts
-a Koza transform of the tutorial example (79 lines of YAML plus Python, no resolution) with the
-32-line Tablassert recipe: on 10,000 rows Tablassert took 6.9 seconds including resolution against
-the fullmap, Koza 5.4 seconds without it.
+writer run in Rust while recipes and validation remain Python.
+
+# Benchmarks
+
+Raw results ship in `paper/benchmarks/`. On 113 real ingest terms, local
+fullmap resolution sustained 171 unique terms per second through the build's batch path,
+returning the full identifier record in one fetch; the hosted SRI service spent a median of 0.55
+seconds per call, and its two-call identifier-record workflow 0.58 seconds per term. The Koza
+contrast maps the tutorial example both ways: 79 lines of YAML plus Python with no entity
+resolution, versus the 32-line Tablassert recipe (10,000 rows: 6.9 seconds including resolution
+against the fullmap, 5.4 seconds without it).
 
 # Research impact statement
 
