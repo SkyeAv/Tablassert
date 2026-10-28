@@ -1,0 +1,5 @@
+gene_symbol,disease_name,p_value,sample_size
+TP53,lung cancer,0.001,450
+BRCA1,breast cancer,0.0001,1200
+EGFR,colorectal cancer,0.005,680
+KRAS,pancreatic cancer,0.002,320
