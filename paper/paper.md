@@ -55,7 +55,7 @@ malformed graph hours later.
 
 # State of the field
 
-The prevailing practice for Translator ingests is bespoke Python per data source, with generic tools at each layer that none of them composes. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Koza [@koza], the Monarch Initiative's ingest engine, pairs YAML configuration with semi-declarative Python transforms and outputs KGX, but leaves entity resolution to separate services or mappings. LinkML [@linkml] models the schema of a finished knowledge graph generically, but a schema says nothing about how a spreadsheet column becomes a node. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a network API, which makes build-time bulk lookups slow and builds themselves irreproducible without network access.
+The prevailing practice for Translator ingests is bespoke Python per data source, with generic tools at each layer that none of them composes. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Koza [@koza], the Monarch Initiative's [@monarch] ingest engine, pairs YAML configuration with semi-declarative Python transforms and outputs KGX, but leaves entity resolution to separate services or mappings. LinkML [@linkml] models the schema of a finished knowledge graph generically, but a schema says nothing about how a spreadsheet column becomes a node. BioCypher [@biocypher] standardizes biomedical graph construction, and with OntoWeaver maps tabular data into semantic graphs [@ontoweaver], but both assume a curated ontology-aligned model rather than ad hoc research tables. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a network API, which makes build-time bulk lookups slow and builds themselves irreproducible without network access.
 Extending those tools would not remove the cost Tablassert targets: repeated ingest code, the
 hosted-resolution dependency, and no integrated mapping-quality checks. Tablassert integrates all
 three into one recipe-driven pipeline; contributing resolution or audit stages back to Koza would
@@ -99,8 +99,10 @@ column being resolved breaks remaining ties, so a column of gene symbols resolve
 names as genes. These are query shapes the hosted API does not offer: it takes a string and returns
 ranked identifiers, with no taxon constraint, category policy, or per-column context, and the full
 identifier-record workflow (string to identifier, then canonicalization for preferred name and
-category) takes two HTTP calls per term where the fullmap returns all of it in one batched fetch
-(see Benchmarks).
+category) takes two HTTP calls per term where the fullmap returns all of it in one batched
+fetch. Benchmarks in `paper/benchmarks/` quantify the gap on 113 real ingest terms: local
+resolution sustained 171 unique terms per second through the build's exact batch path, versus a
+median of 0.55 seconds per hosted call (0.58 seconds for the two-call workflow).
 
 Every edge carries recipe-declared structured provenance -- source record URLs, supporting
 publications, and the processing context that produced it -- so an assertion can be traced back to
@@ -119,17 +121,10 @@ constructed as the Biolink class its own category names, knowledge-source identi
 against the Translator infores registry offline, and `--prune` rewrites the edges file in place to
 its strictly-compliant subset, with the exit code gating the post-prune state. Tablassert
 is a Python package with a PyO3 Rust extension; the resolution engine, database build, and NDJSON
-writer run in Rust while recipes and validation remain Python.
-
-# Benchmarks
-
-Raw results ship in `paper/benchmarks/`. On 113 real ingest terms, local
-fullmap resolution sustained 171 unique terms per second through the build's batch path,
-returning the full identifier record in one fetch; the hosted SRI service spent a median of 0.55
-seconds per call, and its two-call identifier-record workflow 0.58 seconds per term. The Koza
-contrast maps the tutorial example both ways: 79 lines of YAML plus Python with no entity
-resolution, versus the 32-line Tablassert recipe (10,000 rows: 6.9 seconds including resolution
-against the fullmap, 5.4 seconds without it).
+writer run in Rust while recipes and validation remain Python. The Koza contrast
+in `paper/benchmarks/` maps the tutorial example both ways: 79 lines of YAML plus Python with no
+entity resolution, against the 32-line Tablassert recipe (10,000 rows: 6.9 seconds including
+resolution against the fullmap, 5.4 seconds without it).
 
 # Research impact statement
 
@@ -150,18 +145,16 @@ built with Tablassert is in preparation.
 # AI usage disclosure
 
 Generative AI assisted with code generation, test writing, documentation, and drafting and
-revising this manuscript, primarily through a customized pi coding agent (version 0.81.1). AI spelling and
-grammar checks were used for the documentation and manuscript; Grammarly also assisted with
-the manuscript. AI coding-agent use began on 27 January 2026, marked by commit `50f29e8`,
-which credits Claude Sonnet 4.5; subsequent commits also credit Claude Opus 4.5. Initial
-software versions were developed without AI coding agents.
+revising this manuscript, primarily through a customized pi coding agent (version 0.81.1). AI
+spelling and grammar checks were used for the documentation and manuscript; Grammarly also
+assisted with the manuscript. AI coding-agent use began on 27 January 2026, marked by commit
+`50f29e8`; commit co-author credits record Claude Sonnet 4.5, Claude Opus 4.5, and Claude Opus
+4.6 (context-window variants grouped per version). Initial software versions were developed
+without AI coding agents.
 
-Commit co-author credits additionally record Claude Sonnet 4.5, Claude Opus 4.5, and
-Claude Opus 4.6, with context-window variants grouped under the same model version.
 Models used included the following recorded identifiers:
-`claude-opus-5`, `claude-opus-5-5`,
-`claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-v4-flash`,
-`gemini-3.8-flash`, `glm-5.3`,
+`claude-opus-5`, `claude-opus-5-5`, `claude-sonnet-5`, `claude-sonnet-5-5`,
+`deepseek-v4-pro`, `deepseek-v4-flash`, `gemini-3.8-flash`, `glm-5.3`,
 `glm-5.3-flash`, `gpt-5.6-luna`, `gpt-5.6-sol-review`, `gpt-5.6-terra`, `gpt-6-astra`,
 `gpt-6-luna`, `gpt-6-sol`, `gpt-6.1-sol`, `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7-pro`,
 `kimi-k2.8-preview`, `kimi-k3`, `kimi-k3.1-pro`,
