@@ -1,0 +1,29 @@
+name: tutorial-koza
+
+reader:
+  files:
+    - ./tutorial-data.csv
+  format: csv
+  delimiter: ","
+
+transform:
+  code: ./tutorial-transform.py
+
+writer:
+  format: tsv
+  node_properties:
+    - id
+    - name
+    - category
+  edge_properties:
+    - subject
+    - predicate
+    - object
+    - primary_knowledge_source
+    - publications
+    - p_value
+    - sample_size
+
+metadata:
+  name: Tutorial tabular source (Koza equivalent)
+  description: Same mapping as the Tablassert tutorial example, expressed as a Koza transform.

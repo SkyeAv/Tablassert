@@ -1,0 +1,117 @@
+# Terms drawn from DAKP production audit top text pairs (subject/object strings)
+# plus common biomedical vocabulary used across Tablassert ingests.
+# One term per line; lines starting with # are ignored.
+TECEFIDERA
+Multiple sclerosis
+PROACTIV MD ADAPALENE ACNE TREATMENT
+Acne
+OTEZLA
+Psoriasis
+XARELTO
+Atrial fibrillation
+PROACTIV MD DEEP CLEANSING FACE WASH
+XARELTO XR
+Rivaroxaban
+DIANA LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE
+Peritoneal dialysis
+PROACTIV MD DAILY OIL CONTROL SPF 30
+XELJANZ
+Rheumatoid arthritis
+ARELTO
+Thrombosis prophylaxis
+DIANEAL LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE
+Dialysis solution
+XARELTO XR
+DIALUID
+Hypermagnesemia
+PAXLOVID
+COVID-19 treatment
+NUPLAZID
+Parkinson's disease psychosis
+XARELTO
+Deep vein thrombosis
+AUBAGIO
+Multiple sclerosis
+AMPYRA
+Multiple sclerosis
+MIRENA
+Heavy menstrual bleeding
+ELIGARD
+Prostate cancer
+CHANTIX
+Smoking cessation
+XYREM
+Narcolepsy
+GILENYA
+Multiple sclerosis
+AVANDIA
+Diabetes mellitus type 2
+OXYCONTIN
+Chronic pain
+NUPLAZID
+MIRENA
+ZYPREXA
+Schizophrenia
+RINVOQ
+Rheumatoid arthritis
+CONTRACEPTION
+CIIMZA
+Contrast dye
+SIMPONI
+Ulcerative colitis
+CIMZIA
+Crohn's disease
+# Common biomedical vocabulary exercised by Tablassert ingests
+TP53
+lung cancer
+aspirin
+ibuprofen
+metformin
+Bifidobacterium
+Lactobacillus
+Alistipes
+Eubacterium rectale
+Faecalibacterium prausnitzii
+Helicobacter pylori
+Staphylococcus aureus
+non-alcoholic fatty liver disease
+type 2 diabetes
+inflammatory bowel disease
+Alzheimer disease
+attention deficit hyperactivity disorder
+rheumatoid arthritis
+systemic lupus erythematosus
+Breast cancer
+Colorectal cancer
+Prostate cancer
+BRCA1
+BRCA2
+EGFR
+KRAS
+APOE
+TNF
+IL6
+LEP
+ADIPOQ
+insulin
+glucose
+cholesterol
+triglycerides
+butyric acid
+propionic acid
+tryptophan
+fecal microbiota transplant
+probiotics
+antibiotics
+trimethoprim
+fluoxetine
+atororvastatin
+lisinopril
+folic acid
+vitamin D
+iron
+hepcidin
+ferritin
+C-reactive protein
+interleukin-6
+tumor necrosis factor

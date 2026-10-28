@@ -1,0 +1,32 @@
+template:
+  source:
+    kind: text
+    local: ./tutorial-data.csv
+    url:
+      - https://example.com/data.csv
+    row_slice:
+      - 1
+      - auto
+    delimiter: ","
+  statement:
+    subject:
+      method: column
+      encoding: A
+      prioritize:
+        - Gene
+    predicate: associated_with
+    object:
+      method: column
+      encoding: B
+      prioritize:
+        - Disease
+  provenance:
+    repo: PMID
+    publication: "12345678"
+  annotations:
+    - annotation: p_value
+      method: column
+      encoding: C
+    - annotation: study_size
+      method: column
+      encoding: D
