@@ -17,7 +17,17 @@ Hosted flows measured:
   fullmap fetch returns per term (canonical CURIE, preferred name, category, taxon,
   source).
 
-## Results (wenceslaus, 2026-10-28; tablassert 19.7.0; fullmap source 2026jul22, 24 GB)
+## Results (wenceslaus, 2026-10-28; tablassert 19.7.0; fullmap source 2026jul22)
+
+Fullmap store, uncompressed on disk (exact bytes via `stat`):
+
+| Component | Bytes | GB (decimal) |
+| ------------------------------------ | ------------------ | -------------- |
+| `fullmap` (primary redb) | 24,741,679,104 | 24.74 |
+| `fullmap.s0..s15.redb` (16 shards) | 68,139,679,744 | 68.14 |
+| Total store | 92,881,358,848 | 92.88 (86.50 GiB) |
+
+(`downloads/` in the same directory holds 38.08 GB of BABEL source exports; not part of the database.)
 
 See `results.json` for full detail; medians of 3 local repeats, hosted at
 concurrency 4 with retry/backoff:

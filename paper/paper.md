@@ -76,9 +76,9 @@ maps normalized synonyms, including the meta-identifiers that unify the same con
 vocabularies, onto canonical identifiers with category and taxon metadata. The store itself is a
 set of redb [@redb] key-value files -- an embedded, crash-safe Rust engine chosen over
 analytical stores because resolution is point-lookup-shaped, not query-shaped -- built in a
-parallel, memory-bounded streaming pass, and partitioned into shards that serve concurrent batch
-lookups. The prebuilt archive for the current BABEL 22.2.0 export is 44.5 GB compressed; the redb
-store used here, built from the 2026-07-22 export, occupies 24.7 GB. What does not map is
+parallel, memory-bounded streaming pass. The prebuilt archive for the current BABEL 22.2.0 export is 44.5 GB compressed; the redb
+store used here, built from the 2026-07-22 export, occupies 92.9 GB across one primary and 16
+shard files. What does not map is
 reported, not guessed, and metadata arrives with the identifier. Resolution is exact-match over
 normalized keys rather than fuzzy search -- approximate matches surface only in the audit stage,
 not in the graph -- because fuzzy resolution returns plausible-but-wrong identifiers often enough
