@@ -55,8 +55,19 @@ malformed graph hours later.
 
 # State of the field
 
-The prevailing practice for Translator ingests is bespoke Python per data source, with generic tools at each layer that none of them composes. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Koza [@koza], the Monarch Initiative's [@monarch] ingest engine, pairs YAML configuration with semi-declarative Python transforms and outputs KGX, but leaves entity resolution to separate services or mappings. LinkML [@linkml] models the schema of a finished knowledge graph generically, but a schema says nothing about how a spreadsheet column becomes a node. BioCypher [@biocypher] standardizes biomedical graph construction, and with OntoWeaver maps tabular data into semantic graphs [@ontoweaver], but both assume a curated ontology-aligned model rather than ad hoc research tables. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a network API, which makes build-time bulk lookups slow and builds themselves irreproducible without network access.
-Extending those tools would not remove the cost Tablassert targets: repeated ingest code, the
+The prevailing practice for Translator ingests is bespoke Python per data source, with generic
+tools at each layer that none of them composes. KGX [@kgx] exchanges and validates graphs but
+provides no column-to-statement mapping. Koza [@koza], the Monarch Initiative's [@monarch] ingest
+engine, pairs YAML configuration with semi-declarative Python transforms and outputs KGX, but
+leaves entity resolution to separate services or mappings. LinkML [@linkml] models the schema of a
+finished knowledge graph generically, but a schema says nothing about how a spreadsheet column
+becomes a node. BioCypher [@biocypher] standardizes biomedical graph construction, and with
+OntoWeaver maps tabular data into semantic graphs [@ontoweaver], but both assume a curated
+ontology-aligned model rather than ad hoc research tables. SPIRES [@spires] extracts knowledge
+from free text by zero-shot prompting, while Tablassert's sources are already structured tables.
+The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a
+network API, which makes bulk build-time lookups slow and irreproducible offline.
+None of these removes the cost Tablassert targets: repeated ingest code, the
 hosted-resolution dependency, and no integrated mapping-quality checks. Tablassert integrates all
 three into one recipe-driven pipeline; contributing resolution or audit stages back to Koza would
 still not yield a single declarative mapping.
@@ -101,12 +112,12 @@ ranked identifiers, with no taxon constraint, category policy, or per-column con
 identifier-record workflow (string to identifier, then canonicalization for preferred name and
 category) takes two HTTP calls per term where the fullmap returns all of it in one batched
 fetch. Benchmarks in `paper/benchmarks/` quantify the gap on 113 real ingest terms: local
-resolution sustained 171 unique terms per second through the build's exact batch path, versus a
+resolution sustained 171 unique terms per second through the build's batch path, versus a
 median of 0.55 seconds per hosted call (0.58 seconds for the two-call workflow).
 
 Every edge carries recipe-declared structured provenance -- source record URLs, supporting
-publications, and the processing context that produced it -- so an assertion can be traced back to
-the exact row and evidence that support it. Optional quality control audits each resolved name
+publications, and the processing context that produced it -- so an assertion traces back to its
+row and evidence. Optional quality control audits each resolved name
 with a four-stage cascade: exact or alias match, fuzzy string similarity, Schwartz-Hearst
 abbreviation expansion, then SapBERT [@sapbert] embedding similarity using a checkpoint fine-tuned
 on BABEL synonyms (`RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`), each
