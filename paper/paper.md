@@ -31,19 +31,16 @@ Translator [@translator]. Biomedical research routinely publishes its findings a
 tables: association statistics, assay readouts, curated gene lists. A user declares, in YAML, how
 each table's columns map to qualified subject-predicate-object statements; Tablassert resolves free text
 ("TP53", "lung cancer") to compact uniform resource identifiers (CURIEs), attaches provenance and
-statistical annotations, and emits KGX-compliant [@kgx] node and edge files leveraging the Biolink Model 
+statistical annotations, and emits KGX-compliant [@kgx] node and edge files leveraging the Biolink Model
 [@biolink-model]. The same recipe can be inspected, reused, and refined, so a graph
 starts small instead of being frozen inside a bespoke ingest script.
 
 # Statement of need
 
-Tablassert grew out of a recurring research task: converting one paper's supplementary spreadsheet
-into a Translator knowledge graph, then another, then another. Each hand-written ingest repeated
-the same structure -- read the table, map columns to Biolink statements, resolve names, attach
-provenance -- until near-identical codebases outnumbered the tables they served. Tablassert
-replaces that per-source code with a declarative recipe: a few lines of YAML per table describe
-what each row asserts, and the package handles formatting, resolution, and validation the same way
-every time.
+Converting supplementary spreadsheets into Translator graphs repeatedly requires reading tables,
+mapping columns to Biolink statements, resolving names, and attaching provenance. Tablassert
+replaces this per-source code with declarative YAML recipes while handling formatting, resolution,
+and validation consistently.
 
 Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabular biomedical
 sources and need rigorously structured output without maintaining a transform pipeline per source.
@@ -67,14 +64,12 @@ ontology-aligned model rather than ad hoc research tables. SPIRES [@spires] extr
 from free text by zero-shot prompting, while Tablassert's sources are already structured tables.
 The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier mappings as a
 network API, which makes bulk build-time lookups slow and irreproducible offline.
-None of these removes the cost Tablassert targets: repeated ingest code, the
-hosted-resolution dependency, and no integrated mapping-quality checks. Tablassert integrates all
-three into one recipe-driven pipeline; contributing resolution or audit stages back to Koza would
-still not yield a single declarative mapping.
+Tablassert composes declarative mapping, local resolution, and mapping-quality checks into one
+recipe-driven pipeline.
 
 # Software design
 
-Tablassert's core trade-off is buy-time work for build-time ease: a large entity-resolution
+Tablassert's core trade-off is up-front work for build-time ease: a large entity-resolution
 database is built (or downloaded) once, and every subsequent build resolves millions of terms
 locally in batched lookups without service calls. Recipes are compiled into TCode, an ordered
 sequence of (callable, arguments) operations, executed through Polars lazy frames so independent
@@ -84,7 +79,10 @@ prefix of instructions reuse its computed snapshot instead of recomputing it.
 
 The embedded fullmap database is the design's foundation. Built from BABEL [@babel] exports, it
 maps normalized synonyms, including the meta-identifiers that unify the same concept across source
-vocabularies, onto canonical identifiers with category and taxon metadata. The store itself is a
+vocabularies, onto canonical identifiers with category and taxon metadata. Level-one normalization
+trims whitespace and quotes, Unicode-lowercases text, Porter2-stems ASCII alphabetic tokens,
+then deduplicates, sorts, and joins tokens; level two additionally removes non-word characters.
+Identical normalization is applied to synonyms and query text. The store itself is a
 set of redb [@redb] key-value files -- an embedded, crash-safe Rust engine chosen over
 analytical stores because resolution is point-lookup-shaped, not query-shaped -- built in a
 parallel, memory-bounded streaming pass. The prebuilt archive for the current BABEL 22.2.0 export is 44.5 GB compressed; the redb
@@ -92,11 +90,9 @@ store used here, built from the 2026-07-22 export, occupies 92.9 GB across one p
 shard files. What does not map is
 reported, not guessed, and metadata arrives with the identifier. Resolution is exact-match over
 normalized keys rather than fuzzy search -- approximate matches surface only in the audit stage,
-not in the graph -- because fuzzy resolution returns plausible-but-wrong identifiers often enough
-to corrupt a graph silently, which is inexcusable when researchers and medical professionals rely 
-on Translator for accurate information. The build applies a fixed allowlist of the top 100 experimental taxa
+not in the graph -- to avoid silently accepting plausible but incorrect approximate matches. The build applies a fixed allowlist of the top 100 experimental taxa
 derived from Translator knowledge-graph node frequencies, alongside all OrganismTaxon rows and
-rows without taxon metadata: a deliberate trade-off that shrinks the database and speeds up query times but excludes 
+rows without taxon metadata: a deliberate trade-off that shrinks the database and speeds up query times but excludes
 some rare species-specific identifiers outside the allowlist.
 
 Resolution is column-aware rather than string-in/CURIE-out. Each node column carries its own
@@ -108,12 +104,13 @@ level-one-normalized equality at NLP level 1 ranks 5, everything else 10, multip
 bonus of 1 for prioritized categories and 50 otherwise -- then deduplicated to the best tier,
 retaining distinct CURIEs that tie. When column context is on, category frequency across the
 column being resolved breaks remaining ties, so a column of gene symbols resolves ambiguous short
-names as genes instead of proteins or a phenotypic feature with the same name. These are query 
+names as genes instead of proteins or a phenotypic feature with the same name. These are query
 shapes the hosted API does not offer: it takes a string and returns
 ranked identifiers, with no taxon constraint, category policy, or per-column context, and the full
 identifier-record workflow (string to identifier, then canonicalization for preferred name and
 category) takes two HTTP calls per term where the fullmap returns all of it in one batched
-fetch. Benchmarks quantify the gap on 113 real ingest terms: local
+fetch. Benchmarks on a dual-socket Intel Xeon Gold 6230 host (40 physical cores, 80 hardware
+threads, 187 GiB RAM, SSD RAID1, Ubuntu 24.04) used 113 ingest terms: local
 resolution sustained 171 unique terms per second through the build's batch path, versus a
 median of 0.55 seconds per hosted call (0.58 seconds for the two-call workflow).
 
@@ -124,17 +121,19 @@ with a four-stage cascade: exact or alias match, fuzzy string similarity, Schwar
 abbreviation expansion, then SapBERT [@sapbert] embedding similarity using a checkpoint fine-tuned
 on BABEL synonyms (`RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`), each
 stage handling only what cheaper stages could not clear. Suspect mappings are dropped and logged
-with their scores rather than silently retained; in the DAKP production builds this audit covers
-the full graph -- 1,661,094 audited rows in the current release -- which in practice catches
-resolution errors that upstream synonym sources are slow to fix. Output correctness is checked in
+with their scores rather than silently retained. A DAKP FAERS audit (2026-10-22) rejected "factor ii" mapped
+to `HMDB:HMDB0000607` (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its
+synonym, but the coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin]. Output correctness is checked in
 two passes: an optional study stage asserts structural invariants over the emitted NDJSON (no
 duplicate or isolated nodes, no empty required fields, no edges demoted to bare Association). The
 `validate-kgx` command goes beyond KGX's schema-driven `validate` [@kgx]: every node and edge is
 constructed as the Biolink class its own category names, knowledge-source identity is checked
 against the Translator infores registry offline, and `--prune` rewrites the edges file in place to
 its strictly-compliant subset, with the exit code gating the post-prune state. Tablassert
-is a Python package with a PyO3 Rust extension; the resolution engine, database build, and NDJSON
-writer run in Rust while recipes and validation remain Python. The Koza contrast
+uses PyO3 Rust for normalization, resolution, database construction, and NDJSON writing.
+GIL-released Rust regions use Rayon workers for CPU-heavy normalization and sharded lookups,
+enabling parallel execution even on GIL-enabled Python 3.11, without requiring free-threaded Python.
+This removes per-term Python callbacks and serial lookup bottlenecks; recipes and validation remain Python. The Koza contrast
 in `paper/benchmarks/` maps the tutorial example both ways: 79 lines of YAML plus Python with no
 entity resolution, against the 32-line Tablassert recipe (10,000 rows: 6.9 seconds including
 resolution against the fullmap, 5.4 seconds without it).
@@ -145,7 +144,8 @@ Tablassert and its declarative precursor underlie several production knowledge g
 published MicrobiomeKG [@microbiomekg], a Translator-deployed graph built from supplementary
 tables of 40 publications, was produced with an early unnamed precursor; the deployed Microbiome
 and Multiomics knowledge graphs [@multiomics-kp] and their maintenance builds use present-day
-Tablassert. DAKP [@dakp], the Drug Approvals Knowledge Provider (now developed in the glusman-team
+Tablassert. Multiomics 3.1.3 contains 222,994 nodes and 18,206,965 edges from 2,136 PMC publications [@multiomics-kp];
+DAKP 1.26.0 contains 16,257 nodes and 135,263 edges [@drug-approvals]. DAKP [@dakp], the Drug Approvals Knowledge Provider (now developed in the glusman-team
 graph monorepo [@graph-monorepo]), applies Tablassert to regulatory drug-approval sources and
 publishes validated, versioned releases to a public dataset archive [@drug-approvals]; a public
 linkouts interface exposes its per-edge evidence, and integration into the Translator ingest
@@ -175,16 +175,12 @@ Models used included the following recorded identifiers:
 `laguna-s-2.1`, `qwen3.8-flash`, `qwen3.8-max`, `qwen3.8-max-preview`, `mimo-v2.5`, and
 `mimo-v2.6-pro`.
 
-A bespoke LLM-as-judge implementation reviewed code before pull requests, and CodeRabbit occasionally
-reviewed pull requests before Goetz's own review. Validation combined manual review and
-auditing with automated tests, CI/CD pipelines, custom linting rules written by Goetz, and
-scripted inclusion checks for required output elements. Git pre-commit hooks provided earlier
-checks to shorten CI feedback, and language servers provided development-time diagnostics.
-Detailed prompt engineering, with promptfoo (version 0.121.17) and GEPA (version 0.1.4) used to
-optimize prompts for desired
-outputs, supported output control; LLM-as-judge evaluations and scripted inclusion checks
-assessed outputs. Prompt optimization and AI-based evaluation were not treated as independent
-proof of correctness. These checks supplemented, rather than replaced, human review.
+A bespoke LLM-as-judge implementation reviewed code before pull requests; CodeRabbit occasionally
+reviewed pull requests before Goetz. Validation combined manual auditing, automated tests, CI/CD,
+Goetz's custom linting rules, scripted inclusion checks, Git pre-commit hooks, and language-server
+diagnostics. Detailed prompt engineering used promptfoo (0.121.17) and GEPA (0.1.4) to optimize
+outputs, evaluated with LLM judges and inclusion checks. Prompt optimization and AI evaluation
+supplemented human review without independently proving correctness.
 The authors made all software architecture decisions and manually reviewed and audited
 all changes, including AI-assisted outputs. The authors retain full responsibility for the
 accuracy, originality, licensing, and ethical and legal compliance of the submitted software
