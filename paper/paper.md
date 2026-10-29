@@ -37,18 +37,15 @@ recipe, so a graph starts small instead of being frozen inside a bespoke ingest 
 
 # Statement of need
 
-Repeatedly converting supplementary spreadsheets into Translator graphs requires reading tables,
-mapping columns to Biolink statements, resolving names, and attaching provenance. By replacing
-this per-source code with declarative YAML recipes, Tablassert handles formatting, resolution,
-and validation consistently.
+Tablassert replaces repetitive spreadsheet-ingest code with declarative YAML recipes for
+consistent formatting, resolution, and validation.
 
 Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabular biomedical
 sources and need rigorously structured output without maintaining a transform pipeline per
 source. Extending beyond journal supplements, the same recipes apply to any relational source --
 trial registries, drug approval records, or a researcher's own tables -- and each build can emit
 the Resource Ingest Guide metadata required for integration with Translator. Recipes are
-validated before a build starts, so a typo fails immediately with an error naming the field,
-rather than surfacing as a malformed graph hours later.
+validated before a build starts, so configuration errors fail early with field-specific messages.
 
 # State of the field
 
@@ -200,5 +197,9 @@ Center for Advancing Translational Sciences, Biomedical Translator Program (Othe
 Awards OT2TR003443, OT2TR003428, and OT2TR005706). Any opinions expressed in this manuscript are
 those of the Translator community at large and do not necessarily reflect the views of NCATS,
 individual Translator team members, or affiliated organizations and institutions.
+
+The funders provided financial support but had no role in software design, analysis, or
+manuscript preparation. Consortium authorship requirements were clarified through committee
+consultation.
 
 # References
