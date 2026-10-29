@@ -29,10 +29,10 @@ bibliography: paper.bib
 Tablassert turns biomedical spreadsheets (Excel, CSV, TSV) into knowledge graphs ready for NCATS
 Translator [@translator]. Biomedical research routinely publishes its findings as supplementary
 tables: association statistics, assay readouts, curated gene lists. A user declares, in YAML, how
-each table's columns map to subject-predicate-object statements; Tablassert resolves free text
+each table's columns map to qualified subject-predicate-object statements; Tablassert resolves free text
 ("TP53", "lung cancer") to compact uniform resource identifiers (CURIEs), attaches provenance and
-statistical annotations, and emits KGX-compliant [@kgx] node and edge files carrying Biolink Model
-categories [@biolink-model]. The same recipe can be inspected, reused, and refined, so a graph
+statistical annotations, and emits KGX-compliant [@kgx] node and edge files leveraging the Biolink Model 
+[@biolink-model]. The same recipe can be inspected, reused, and refined, so a graph
 starts small instead of being frozen inside a bespoke ingest script.
 
 # Statement of need
@@ -49,7 +49,7 @@ Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabu
 sources and need rigorously structured output without maintaining a transform pipeline per source.
 Beyond journal supplements, the same recipes apply to any relational source -- trial registries,
 drug approval records, or a researcher's own tables -- and each build can emit the Resource Ingest
-Guide metadata that Translator submissions require. Recipes are validated before a build
+Guide metadata required for integration with Translator. Recipes are validated before a build
 starts, so a typo fails immediately with an error naming the field, rather than surfacing as a
 malformed graph hours later.
 
@@ -93,10 +93,11 @@ shard files. What does not map is
 reported, not guessed, and metadata arrives with the identifier. Resolution is exact-match over
 normalized keys rather than fuzzy search -- approximate matches surface only in the audit stage,
 not in the graph -- because fuzzy resolution returns plausible-but-wrong identifiers often enough
-to corrupt a graph silently. The build applies a fixed allowlist of the top 100 experimental taxa
+to corrupt a graph silently, which is inexcusable when researchers and medical professionals rely 
+on Translator for accurate information. The build applies a fixed allowlist of the top 100 experimental taxa
 derived from Translator knowledge-graph node frequencies, alongside all OrganismTaxon rows and
-rows without taxon metadata: a deliberate trade-off that shrinks the database but drops
-species-specific identifiers outside the allowlist.
+rows without taxon metadata: a deliberate trade-off that shrinks the database and speeds up query times but excludes 
+some rare species-specific identifiers outside the allowlist.
 
 Resolution is column-aware rather than string-in/CURIE-out. Each node column carries its own
 constraints: an NCBI taxon filter that keeps taxon-bearing matches for the declared species while
@@ -107,11 +108,12 @@ level-one-normalized equality at NLP level 1 ranks 5, everything else 10, multip
 bonus of 1 for prioritized categories and 50 otherwise -- then deduplicated to the best tier,
 retaining distinct CURIEs that tie. When column context is on, category frequency across the
 column being resolved breaks remaining ties, so a column of gene symbols resolves ambiguous short
-names as genes. These are query shapes the hosted API does not offer: it takes a string and returns
+names as genes instead of proteins or a phenotypic feature with the same name. These are query 
+shapes the hosted API does not offer: it takes a string and returns
 ranked identifiers, with no taxon constraint, category policy, or per-column context, and the full
 identifier-record workflow (string to identifier, then canonicalization for preferred name and
 category) takes two HTTP calls per term where the fullmap returns all of it in one batched
-fetch. Benchmarks in `paper/benchmarks/` quantify the gap on 113 real ingest terms: local
+fetch. Benchmarks quantify the gap on 113 real ingest terms: local
 resolution sustained 171 unique terms per second through the build's batch path, versus a
 median of 0.55 seconds per hosted call (0.58 seconds for the two-call workflow).
 
@@ -173,7 +175,7 @@ Models used included the following recorded identifiers:
 `laguna-s-2.1`, `qwen3.8-flash`, `qwen3.8-max`, `qwen3.8-max-preview`, `mimo-v2.5`, and
 `mimo-v2.6-pro`.
 
-A bespoke LLM-as-judge implementation reviewed code before pull requests, and CodeRabbit
+A bespoke LLM-as-judge implementation reviewed code before pull requests, and CodeRabbit occasionally
 reviewed pull requests before Goetz's own review. Validation combined manual review and
 auditing with automated tests, CI/CD pipelines, custom linting rules written by Goetz, and
 scripted inclusion checks for required output elements. Git pre-commit hooks provided earlier
@@ -183,7 +185,7 @@ optimize prompts for desired
 outputs, supported output control; LLM-as-judge evaluations and scripted inclusion checks
 assessed outputs. Prompt optimization and AI-based evaluation were not treated as independent
 proof of correctness. These checks supplemented, rather than replaced, human review.
-Skye Lane Goetz made all software architecture decisions and manually reviewed and audited
+The authors made all software architecture decisions and manually reviewed and audited
 all changes, including AI-assisted outputs. The authors retain full responsibility for the
 accuracy, originality, licensing, and ethical and legal compliance of the submitted software
 and manuscript.
@@ -196,6 +198,6 @@ Awards OT2TR003443, OT2TR003428, and OT2TR005706). Any opinions expressed in thi
 those of the Translator community at large and do not necessarily reflect the views of NCATS,
 individual Translator team members, or affiliated organizations and institutions.
 
-TODO(collaborators): contributor acknowledgements and sponsor-involvement statement go here.
+TODO(collaborators): contributor acknowledgments and sponsor-involvement statement go here.
 
 # References
