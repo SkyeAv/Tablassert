@@ -165,13 +165,11 @@ Tablassert is in preparation.
 
 Generative AI assisted with code generation, test writing, documentation, and drafting and
 revising this manuscript, primarily through a customized Pi coding agent (version 0.81.1). AI
-spelling and grammar checks were used for the documentation and manuscript; Grammarly also
-assisted with the manuscript. AI coding-agent use began on 27 January 2026, marked by commit
-`50f29e8`; commit co-author credits record Claude Sonnet 4.5, Claude Opus 4.5, and Claude Opus
-4.6 (context-window variants grouped per version). Initial software versions were developed
-without AI coding agents.
+spelling and grammar checks covered documentation and manuscript, including Grammarly for the
+manuscript. Coding-agent use began on 27 January 2026 (`50f29e8`); co-author credits record
+Claude Sonnet 4.5 and Opus 4.5/4.6 (context variants grouped). Initial versions used no coding agents.
 
-Models used included the following recorded identifiers: `claude-opus-5`, `claude-opus-5-5`,
+Models used included `claude-opus-5`, `claude-opus-5-5`,
 `claude-sonnet-5`, `claude-sonnet-5-5`, `deepseek-v4-pro`, `deepseek-v4-flash`,
 `gemini-3.8-flash`, `glm-5.3`, `glm-5.3-flash`, `gpt-5.6-luna`, `gpt-5.6-sol-review`,
 `gpt-5.6-terra`, `gpt-6-astra`, `gpt-6-luna`, `gpt-6-sol`, `gpt-6.1-sol`, `kimi-k2.5`,
@@ -190,6 +188,11 @@ including AI-assisted outputs. The authors retain full responsibility for the ac
 originality, licensing, and ethical and legal compliance of the submitted software and
 manuscript.
 
+# Author contributions
+
+Skye Lane Goetz developed the software, led design, and performed analyses. Jared C. Roach and
+Gwênlyn Glusman helped design the software and analyses and provided detailed project feedback. All authors will write, revise, and proofread.
+
 # Acknowledgements
 
 This work was supported by the National Science Foundation (award 2150265) and by the National
@@ -198,6 +201,6 @@ Awards OT2TR003443, OT2TR003428, and OT2TR005706). Any opinions expressed in thi
 those of the Translator community at large and do not necessarily reflect the views of NCATS,
 individual Translator team members, or affiliated organizations and institutions.
 
-TODO(collaborators): contributor acknowledgments and sponsor-involvement statement go here.
+TODO: confirm contributions; disclose sponsor involvement.
 
 # References
