@@ -1,8 +1,8 @@
 """Koza 2.7.0 transform equivalent of the Tablassert tutorial example.
 
 Emits one associated_with edge per row plus its two nodes. Entity resolution is
-NOT included: Koza provides no resolver, so identifiers must already be CURIEs
-or be mapped by hand (see README for what this comparison measures).
+NOT included in this mapping-only arm. The companion resolved transform adds
+hosted NameResolution and NodeNormalization (see README).
 """
 
 from dataclasses import dataclass, field

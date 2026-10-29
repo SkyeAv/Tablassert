@@ -1,65 +1,77 @@
-# Name resolution: local fullmap vs hosted SRI service
+# Name resolution: local fullmap vs hosted SRI NameResolution + NodeNormalization
 
-Compares Tablassert's embedded fullmap database (batched local lookups through
-`tablassert.fullmap.resolve_batch`, the exact path a build runs) against the hosted
-Translator SRI name resolution service (<https://name-resolution-sri.renci.org>) on
-the same 113 terms. Terms are drawn from the DAKP production audit's most frequent
-free-text subject/object pairs plus common ingest vocabulary; the exact list ships
-in `terms.txt`.
+Compares Tablassert's embedded fullmap database (batched local lookups through the
+installed API: `level_one`/`level_two` normalization + `tablassert.fullmap.resolve_batch`)
+against the hosted Translator flow on the same deterministic unique term list from
+`terms.txt` (113 hand-selected input entries, 104 unique terms, deduplicated and
+sorted). This is a convenience sample from ingest vocabulary, not a random or
+representative sample; coverage and timing must not be generalized to accuracy or
+to all biomedical terms:
 
-Hosted flows measured:
+1. `GET https://name-resolution-sri.renci.org/lookup?string=<term>&limit=5&only_taxa=NCBITaxon:9606`
+   per term for candidate CURIEs (concurrency <= 4, request budget <= 300 calls).
+   The matched run passes the pipe-separated `only_taxa=NCBITaxon:9606` filter on
+   every lookup; identical handling of taxon-free candidates is not established.
+2. `POST https://nodenormalization-sri.renci.org/get_normalized_nodes` batched
+   (100 CURIEs per request) for canonical id, preferred name, and categories.
+   The response is keyed by the requested (input) CURIEs, not canonical ids, and
+   the harness groups results by requested candidate, preserving the /lookup
+   ranking. The `/synonyms` endpoint is NOT called; canonical records come from
+   NodeNormalization, the same service a downstream consumer would use.
 
-- Single-hop: `GET /lookup?string=<term>` -- what a build would call per term to get
-  candidate CURIEs.
-- Multi-hop identifier-record workflow: `GET /lookup` for the string, then
-  `POST /synonyms` on the top CURIE to fetch the canonical identifier's preferred
-  name and categories. This is the two-request flow needed to obtain what one
-  fullmap fetch returns per term (canonical CURIE, preferred name, category, taxon,
-  source).
+## What each run records
 
-## Results (wenceslaus, 2026-10-28; tablassert 19.7.0; fullmap source 2026jul22)
+- Per-term canonical record (id, preferred name, category, taxon) for BOTH sides;
+  local rows keep their input term via the `input_term` column, and ties appear as
+  multiple rows per input term.
+- Coverage at three distinct levels, never collapsed into one number:
+  `http_ok` (HTTP 200), `nonempty_candidates` (200 AND >= 1 candidate), and
+  `complete_record` (TOP-RANKED candidate has canonical id + preferred name + category).
+  Failed requests become error records; there is no fake coverage.
+- `api_spec` block: endpoints, methods, request shapes, batch size, retry and
+  concurrency parameters as actually called.
 
-Fullmap store, uncompressed on disk (exact bytes via `stat`):
+## Documented mismatches (explicit, not silently papered over)
 
-| Component | Bytes | GB (decimal) |
-| ------------------------------------ | ------------------ | -------------- |
-| `fullmap` (primary redb) | 24,741,679,104 | 24.74 |
-| `fullmap.s0..s15.redb` (16 shards) | 68,139,679,744 | 68.14 |
-| Total store | 92,881,358,848 | 92.88 (86.50 GiB) |
+- Taxon: `/lookup` DOES support server-side taxon filtering via the pipe-separated
+  `only_taxa` query parameter; the matched run passes `only_taxa=NCBITaxon:9606`.
+  Fullmap explicitly retains taxon-free rows; equivalence of the hosted service's
+  unknown-taxon handling is not established. Separately, the harness records
+  `human_pref`, a post-hoc preference for candidates whose NodeNormalization `taxa`
+  include NCBITaxon:9606 (taxa-free entries stay eligible), clearly labeled
+  post-filtering and kept distinct from `canonical` (the TOP-RANKED candidate's
+  record, never the first complete record in arbitrary order).
+- Category policy: the hosted API supports Biolink-type filters, but those are not
+  equivalent to fullmap's per-column prioritize/avoid ranking and context rules.
+  This run enables no category filter or priority on either side.
+- No column context: the local side runs with `column_context=False`, so neither
+  side sees table context in the per-term lookup.
 
-(`downloads/` in the same directory holds 38.08 GB of BABEL source exports; not part of the database.)
+## Cold vs warm, repeats
 
-See `results.json` for full detail; medians of 3 local repeats, hosted at
-concurrency 4 with retry/backoff:
+- Local cold: ONE fresh `local_runner` process per repeat (fresh interpreter,
+  empty term cache, fresh redb handles). The timer surrounds only
+  `resolve_batch(...).collect()`; interpreter startup, imports, and input parsing
+  are excluded. The OS file cache is NOT cleared, so this is not a cold-page-cache
+  measurement.
+- Local warm: repeats back to back in one process. Both are reported separately
+  and never pooled; at least 3 repeats each.
+- Hosted: one complete sweep, bounded request budget (default 300 HTTP attempts,
+  including retries), concurrency 4, retry with backoff. Logical calls and actual
+  HTTP attempts are reported separately; latency includes any retry/backoff. Lookup and batched-normalization times are recorded
+  separately and summed for end-to-end time; hosted latency is not a multi-run
+  median. Throughput includes both stages.
 
-| Metric | Local fullmap | Hosted (single-hop) | Hosted (multi-hop) |
-| ------------------------------------- | -------------------------- | ----------------------------- | ----------------------------- |
-| Throughput | 171 unique terms/s | 113 terms in 19.9 s (~5.7/s at concurrency 4) | 113 terms in 17.4 s (~6.5/s at concurrency 4) |
-| Median latency per term | ~5 ms | 0.553 s | 0.576 s |
-| Requests per term for full record | 0 (one batched fetch) | 2 | 2 |
-| Coverage (terms with >= 1 hit) | 136 resolved rows from 113 terms (ties multi-resolve; misses dropped) | 113/113 | 113/113 (108 canonical records) |
-| Offline reproducibility | yes | no | no |
-
-Notes:
-
-- `resolve_batch` deduplicates terms before the redb fetch, so throughput is
-  reported over unique terms; replicating rows (1130-row run, `terms_10x.txt`)
-  added no measurable lookup cost.
-- The hosted service occasionally rate-limits bursts; the harness retries with
-  backoff, and hosted runs use modest concurrency (<= 6).
-- Qualitative difference (not timed): the hosted API returns ranked hits with no
-  taxon constraint, category policy, prefix/regex exclusion, or per-column context;
-  the fullmap applies all of these per node column during the same batched fetch.
-  Worked example: the hosted top hit for "TP53" is the pig ortholog
-  (NCBITaxon:9823); a Tablassert subject column with `taxon: 9606` filters that
-  hit by construction.
+`results-2026-10-28-v1.json` is the recorded run of the previous harness version
+(per-term `/lookup` + `/synonyms`, no NodeNormalization stage, pooled coverage);
+it is kept for provenance and is not comparable to the current harness.
 
 ## Re-running
 
 ```bash
 python bench_name_res.py --terms terms.txt --fullmap /path/to/fullmap \
-    --python /path/to/python-with-tablassert --out results.json --repeats 3
+    --python /path/to/python-with-tablassert --out results.json \
+    --local-repeats 3 --hosted-concurrency 4 --hosted-max-requests 300 --limit 5
 ```
 
-Requires a tablassert installation importable by `--python` and a built (or
-downloaded) fullmap directory.
+Offline tests (mocked network, no services contacted): `pytest test_bench_name_res.py`.

@@ -1,0 +1,1879 @@
+{
+  "date_utc": "2026-10-29T20:17:28Z",
+  "tablassert_version": "19.7.0",
+  "polars_version": "2.0.0rc2",
+  "python_version": "3.12.3",
+  "platform": "Linux-6.8.0-142-generic-x86_64-with-glibc2.39",
+  "fullmap": "/local_raid1/sgoetz/DBSTORE/FULLMAP/fullmap",
+  "mode": "cold",
+  "resolve_policy": {
+    "taxon": "9606",
+    "column_context": false,
+    "prioritize": null,
+    "avoid": null,
+    "note": "per-term lookup: no column context, single taxon=9606 constraint"
+  },
+  "repeats": 1,
+  "n_terms": 104,
+  "wall_s": [
+    0.8830866632051766
+  ],
+  "wall_s_median": 0.8830866632051766,
+  "unique_terms_per_s_median": 117.76873588208252,
+  "per_unique_term_ms_median": 8.49121791543439,
+  "resolved_rows_per_run": [
+    264
+  ],
+  "resolved_terms_per_run": 93,
+  "records": [
+    {
+      "input_term": "ADIPOQ",
+      "canonical_id": "NCBIGene:9370",
+      "preferred_name": "ADIPOQ",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "AMPYRA",
+      "canonical_id": "UMLS:C2732151",
+      "preferred_name": "Ampyra",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "APOE",
+      "canonical_id": "FB:FBgn0004472",
+      "preferred_name": "apo",
+      "category": "biolink:Gene",
+      "taxon": null
+    },
+    {
+      "input_term": "APOE",
+      "canonical_id": "ZFIN:ZDB-GENE-070117-2098",
+      "preferred_name": "apo",
+      "category": "biolink:Gene",
+      "taxon": null
+    },
+    {
+      "input_term": "AUBAGIO",
+      "canonical_id": "UMLS:C3497721",
+      "preferred_name": "Aubagio",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "AVANDIA",
+      "canonical_id": "UMLS:C0875967",
+      "preferred_name": "Avandia",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Acne",
+      "canonical_id": "MONDO:0011438",
+      "preferred_name": "acne",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Alistipes",
+      "canonical_id": "NCBITaxon:239759",
+      "preferred_name": "Alistipes",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Alistipes",
+      "canonical_id": "UMLS:C1490417",
+      "preferred_name": "Alistipes",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Alzheimer disease",
+      "canonical_id": "MONDO:0004975",
+      "preferred_name": "Alzheimer disease",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Alzheimer disease",
+      "canonical_id": "MONDO:0004975",
+      "preferred_name": "Alzheimer disease",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Alzheimer disease",
+      "canonical_id": "NCBIGene:351",
+      "preferred_name": "APP",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Alzheimer disease",
+      "canonical_id": "NCBIGene:351",
+      "preferred_name": "APP",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Atrial fibrillation",
+      "canonical_id": "MONDO:0004981",
+      "preferred_name": "atrial fibrillation",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Atrial fibrillation",
+      "canonical_id": "MONDO:0004981",
+      "preferred_name": "atrial fibrillation",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Atrial fibrillation",
+      "canonical_id": "MONDO:0004981",
+      "preferred_name": "atrial fibrillation",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Atrial fibrillation",
+      "canonical_id": "MONDO:0004981",
+      "preferred_name": "atrial fibrillation",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Atrial fibrillation",
+      "canonical_id": "MONDO:0004981",
+      "preferred_name": "atrial fibrillation",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "BRCA1",
+      "canonical_id": "NCBIGene:672",
+      "preferred_name": "BRCA1",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "BRCA2",
+      "canonical_id": "NCBIGene:675",
+      "preferred_name": "BRCA2",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Bifidobacterium",
+      "canonical_id": "NCBITaxon:1678",
+      "preferred_name": "Bifidobacterium",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Breast cancer",
+      "canonical_id": "MONDO:0007254",
+      "preferred_name": "breast cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Breast cancer",
+      "canonical_id": "MONDO:0007254",
+      "preferred_name": "breast cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Breast cancer",
+      "canonical_id": "MONDO:0007254",
+      "preferred_name": "breast cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PANTHER.FAMILY:PTHR45869:SF7",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "PR:000005897",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UMLS:C0006560",
+      "preferred_name": "C-reactive protein",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "C-reactive protein",
+      "canonical_id": "UNII:SCI18J406O",
+      "preferred_name": "C-REACTIVE PROTEIN",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "CHANTIX",
+      "canonical_id": "UMLS:C1712042",
+      "preferred_name": "Chantix",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "CIMZIA",
+      "canonical_id": "UMLS:C2343521",
+      "preferred_name": "Cimzia",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "CONTRACEPTION",
+      "canonical_id": "UMLS:C0009871",
+      "preferred_name": "Contraceptive Agents",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "CONTRACEPTION",
+      "canonical_id": "UMLS:C0009886",
+      "preferred_name": "Contraceptive Devices",
+      "category": "biolink:Device",
+      "taxon": null
+    },
+    {
+      "input_term": "CONTRACEPTION",
+      "canonical_id": "UMLS:C0344225",
+      "preferred_name": "Encounter due to presence of intrauterine contraceptive device",
+      "category": "biolink:Phenomenon",
+      "taxon": null
+    },
+    {
+      "input_term": "CONTRACEPTION",
+      "canonical_id": "UMLS:C0700589",
+      "preferred_name": "Contraceptive methods",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "CONTRACEPTION",
+      "canonical_id": "UMLS:C4546343",
+      "preferred_name": "Uses contraception (finding)",
+      "category": "biolink:Phenomenon",
+      "taxon": null
+    },
+    {
+      "input_term": "COVID-19 treatment",
+      "canonical_id": "UMLS:C5244048",
+      "preferred_name": "COVID-19 treatment",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Chronic pain",
+      "canonical_id": "HP:0012532",
+      "preferred_name": "Chronic pain",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Chronic pain",
+      "canonical_id": "HP:0012532",
+      "preferred_name": "Chronic pain",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Colorectal cancer",
+      "canonical_id": "MONDO:0005575",
+      "preferred_name": "colorectal cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Colorectal cancer",
+      "canonical_id": "MONDO:0005575",
+      "preferred_name": "colorectal cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Colorectal cancer",
+      "canonical_id": "MONDO:0005575",
+      "preferred_name": "colorectal cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Contrast dye",
+      "canonical_id": "UMLS:C0742795",
+      "preferred_name": "contrast dye",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Crohn's disease",
+      "canonical_id": "MONDO:0005011",
+      "preferred_name": "Crohn disease",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Deep vein thrombosis",
+      "canonical_id": "HP:0002625",
+      "preferred_name": "Deep venous thrombosis",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Deep vein thrombosis",
+      "canonical_id": "HP:0002625",
+      "preferred_name": "Deep venous thrombosis",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Deep vein thrombosis",
+      "canonical_id": "UMLS:C0340708",
+      "preferred_name": "Deep vein thrombosis of lower limb",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Deep vein thrombosis",
+      "canonical_id": "UMLS:C0340708",
+      "preferred_name": "Deep vein thrombosis of lower limb",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Diabetes mellitus type 2",
+      "canonical_id": "MONDO:0005148",
+      "preferred_name": "type 2 diabetes mellitus",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Diabetes mellitus type 2",
+      "canonical_id": "MONDO:0005148",
+      "preferred_name": "type 2 diabetes mellitus",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Diabetes mellitus type 2",
+      "canonical_id": "MONDO:0005148",
+      "preferred_name": "type 2 diabetes mellitus",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Dialysis solution",
+      "canonical_id": "MESH:D015314",
+      "preferred_name": "Dialysis Solutions",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Dialysis solution",
+      "canonical_id": "MESH:D015314",
+      "preferred_name": "Dialysis Solutions",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Dialysis solution",
+      "canonical_id": "UMLS:C0011947",
+      "preferred_name": "Dialysis Solutions",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "Dialysis solution",
+      "canonical_id": "UMLS:C0011947",
+      "preferred_name": "Dialysis Solutions",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "EGFR",
+      "canonical_id": "NCBIGene:1956",
+      "preferred_name": "EGFR",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "ELIGARD",
+      "canonical_id": "UMLS:C1170247",
+      "preferred_name": "Eligard",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Eubacterium rectale",
+      "canonical_id": "UMLS:C0317478",
+      "preferred_name": "Agathobacter rectalis",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Faecalibacterium prausnitzii",
+      "canonical_id": "NCBITaxon:853",
+      "preferred_name": "Faecalibacterium prausnitzii",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "GILENYA",
+      "canonical_id": "UMLS:C2938762",
+      "preferred_name": "Gilenya",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Heavy menstrual bleeding",
+      "canonical_id": "HP:0000132",
+      "preferred_name": "Menorrhagia",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Helicobacter pylori",
+      "canonical_id": "NCBITaxon:210",
+      "preferred_name": "Helicobacter pylori",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Helicobacter pylori",
+      "canonical_id": "NCBITaxon:210",
+      "preferred_name": "Helicobacter pylori",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Helicobacter pylori",
+      "canonical_id": "NCBITaxon:210",
+      "preferred_name": "Helicobacter pylori",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Hypermagnesemia",
+      "canonical_id": "HP:0002918",
+      "preferred_name": "Hypermagnesemia",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Hypermagnesemia",
+      "canonical_id": "NCIT:C37969",
+      "preferred_name": "Hypermagnesemia",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": null
+    },
+    {
+      "input_term": "IL6",
+      "canonical_id": "NCBIGene:3569",
+      "preferred_name": "IL6",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "KRAS",
+      "canonical_id": "NCBIGene:3845",
+      "preferred_name": "KRAS",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "LEP",
+      "canonical_id": "FB:FBgn0084500",
+      "preferred_name": "lep",
+      "category": "biolink:Gene",
+      "taxon": null
+    },
+    {
+      "input_term": "Lactobacillus",
+      "canonical_id": "NCBITaxon:1578",
+      "preferred_name": "Lactobacillus",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "MIRENA",
+      "canonical_id": "UMLS:C0591811",
+      "preferred_name": "Mirena",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Multiple sclerosis",
+      "canonical_id": "MONDO:0005301",
+      "preferred_name": "multiple sclerosis",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "NUPLAZID",
+      "canonical_id": "UMLS:C4238587",
+      "preferred_name": "Nuplazid",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Narcolepsy",
+      "canonical_id": "MONDO:0021107",
+      "preferred_name": "narcolepsy",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "OTEZLA",
+      "canonical_id": "UMLS:C3817351",
+      "preferred_name": "Otezla",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "OXYCONTIN",
+      "canonical_id": "UMLS:C0722364",
+      "preferred_name": "Oxycontin",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "PAXLOVID",
+      "canonical_id": "CHEBI:192712",
+      "preferred_name": "Paxlovid",
+      "category": "biolink:ChemicalMixture",
+      "taxon": null
+    },
+    {
+      "input_term": "PAXLOVID",
+      "canonical_id": "UMLS:C5565871",
+      "preferred_name": "Paxlovid",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Parkinson's disease psychosis",
+      "canonical_id": "UMLS:C3805119",
+      "preferred_name": "Parkinson's disease psychosis",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "Peritoneal dialysis",
+      "canonical_id": "UMLS:C0031139",
+      "preferred_name": "Peritoneal Dialysis",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Peritoneal dialysis",
+      "canonical_id": "UMLS:C0031139",
+      "preferred_name": "Peritoneal Dialysis",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Prostate cancer",
+      "canonical_id": "MONDO:0008315",
+      "preferred_name": "prostate cancer",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Prostate cancer",
+      "canonical_id": "MONDO:0008315",
+      "preferred_name": "prostate cancer",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Psoriasis",
+      "canonical_id": "MONDO:0005083",
+      "preferred_name": "psoriasis",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "RINVOQ",
+      "canonical_id": "UMLS:C5196212",
+      "preferred_name": "Rinvoq",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Rheumatoid arthritis",
+      "canonical_id": "MONDO:0008383",
+      "preferred_name": "rheumatoid arthritis",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Rivaroxaban",
+      "canonical_id": "UNII:ESP6837WVA",
+      "preferred_name": "rivaroxaban",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "SIMPONI",
+      "canonical_id": "UMLS:C2684024",
+      "preferred_name": "Simponi",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "Schizophrenia",
+      "canonical_id": "MONDO:0005090",
+      "preferred_name": "schizophrenia",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0085134",
+      "preferred_name": "Cessation of smoking",
+      "category": "biolink:Behavior",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0085134",
+      "preferred_name": "Cessation of smoking",
+      "category": "biolink:Behavior",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0085134",
+      "preferred_name": "Cessation of smoking",
+      "category": "biolink:Behavior",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0337671",
+      "preferred_name": "Former smoker",
+      "category": "biolink:Phenomenon",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0337671",
+      "preferred_name": "Former smoker",
+      "category": "biolink:Phenomenon",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C0337671",
+      "preferred_name": "Former smoker",
+      "category": "biolink:Phenomenon",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C1095963",
+      "preferred_name": "Smoking cessation therapy",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C1095963",
+      "preferred_name": "Smoking cessation therapy",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Smoking cessation",
+      "canonical_id": "UMLS:C1095963",
+      "preferred_name": "Smoking cessation therapy",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Staphylococcus aureus",
+      "canonical_id": "NCBITaxon:1280",
+      "preferred_name": "Staphylococcus aureus",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "Staphylococcus aureus",
+      "canonical_id": "NCBITaxon:1280",
+      "preferred_name": "Staphylococcus aureus",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "TNF",
+      "canonical_id": "NCBIGene:7124",
+      "preferred_name": "TNF",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "TP53",
+      "canonical_id": "NCBIGene:7157",
+      "preferred_name": "TP53",
+      "category": "biolink:Gene",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "Thrombosis prophylaxis",
+      "canonical_id": "UMLS:C0199242",
+      "preferred_name": "Administration of prophylactic anticoagulant",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "Ulcerative colitis",
+      "canonical_id": "MONDO:0005101",
+      "preferred_name": "ulcerative colitis",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "XARELTO",
+      "canonical_id": "UMLS:C3159309",
+      "preferred_name": "Xarelto",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "XELJANZ",
+      "canonical_id": "UMLS:C3505045",
+      "preferred_name": "Xeljanz",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "XYREM",
+      "canonical_id": "UMLS:C1170735",
+      "preferred_name": "Xyrem",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "ZYPREXA",
+      "canonical_id": "UMLS:C0527258",
+      "preferred_name": "Zyprexa",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "antibiotics",
+      "canonical_id": "PUBCHEM.COMPOUND:46874763",
+      "preferred_name": "Antibiotic",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "antibiotics",
+      "canonical_id": "UMLS:C0003232",
+      "preferred_name": "Antibiotics",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "aspirin",
+      "canonical_id": "CHEBI:15365",
+      "preferred_name": "Acetylsalicylic acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "attention deficit hyperactivity disorder",
+      "canonical_id": "MONDO:0005302",
+      "preferred_name": "attention deficit hyperactivity disorder, inattentive type",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "attention deficit hyperactivity disorder",
+      "canonical_id": "MONDO:0005302",
+      "preferred_name": "attention deficit hyperactivity disorder, inattentive type",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "attention deficit hyperactivity disorder",
+      "canonical_id": "MONDO:0007743",
+      "preferred_name": "attention deficit-hyperactivity disorder",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "attention deficit hyperactivity disorder",
+      "canonical_id": "MONDO:0007743",
+      "preferred_name": "attention deficit-hyperactivity disorder",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "CHEBI:30772",
+      "preferred_name": "Butyric Acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "CHEBI:30772",
+      "preferred_name": "Butyric Acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "CHEBI:30772",
+      "preferred_name": "Butyric Acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "UMLS:C0006523",
+      "preferred_name": "Butyric Acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "UMLS:C0006523",
+      "preferred_name": "Butyric Acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "butyric acid",
+      "canonical_id": "UMLS:C0006523",
+      "preferred_name": "Butyric Acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "cholesterol",
+      "canonical_id": "PUBCHEM.COMPOUND:304",
+      "preferred_name": "cholesterol",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "fecal microbiota transplant",
+      "canonical_id": "UMLS:C2242628",
+      "preferred_name": "Fecal Microbiota Transplantation",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "fecal microbiota transplant",
+      "canonical_id": "UMLS:C2242628",
+      "preferred_name": "Fecal Microbiota Transplantation",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "ferritin",
+      "canonical_id": "CHEBI:82594",
+      "preferred_name": "Ferritin",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "ferritin",
+      "canonical_id": "PANTHER.FAMILY:PTHR11431",
+      "preferred_name": "FERRITIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "ferritin",
+      "canonical_id": "UMLS:C0015879",
+      "preferred_name": "Ferritin",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "fluoxetine",
+      "canonical_id": "CHEBI:5118",
+      "preferred_name": "Fluoxetine",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:27470",
+      "preferred_name": "Folic acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:27470",
+      "preferred_name": "Folic acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:27470",
+      "preferred_name": "Folic acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:27470",
+      "preferred_name": "Folic acid",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:37445",
+      "preferred_name": "folic acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:37445",
+      "preferred_name": "folic acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:37445",
+      "preferred_name": "folic acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "folic acid",
+      "canonical_id": "CHEBI:37445",
+      "preferred_name": "folic acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "CHEBI:15444",
+      "preferred_name": "Amylose",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "CHEBI:15903",
+      "preferred_name": "Beta-D-Glucose",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "CHEBI:17234",
+      "preferred_name": "D-glucose",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "CHEBI:4167",
+      "preferred_name": "D-glucopyranose",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "EFO:0004468",
+      "preferred_name": "glucose measurement",
+      "category": "biolink:PhenotypicFeature",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "PUBCHEM.COMPOUND:24749",
+      "preferred_name": "L-glucose",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "UMLS:C0337438",
+      "preferred_name": "Glucose measurement",
+      "category": "biolink:Procedure",
+      "taxon": null
+    },
+    {
+      "input_term": "glucose",
+      "canonical_id": "UMLS:C5781949",
+      "preferred_name": "Glucose^1.5H post dose glucagon",
+      "category": "biolink:ClinicalFinding",
+      "taxon": null
+    },
+    {
+      "input_term": "hepcidin",
+      "canonical_id": "PR:000008438",
+      "preferred_name": "hepcidin",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "hepcidin",
+      "canonical_id": "UMLS:C0966897",
+      "preferred_name": "hepcidin",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "ibuprofen",
+      "canonical_id": "CHEBI:5855",
+      "preferred_name": "Ibuprofen",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "ibuprofen",
+      "canonical_id": "PUBCHEM.COMPOUND:18943906",
+      "preferred_name": "Ibuprofen Ibuprofen Ibuprofen",
+      "category": "biolink:MolecularMixture",
+      "taxon": null
+    },
+    {
+      "input_term": "ibuprofen",
+      "canonical_id": "UNII:ALC8A4Q82T",
+      "preferred_name": "IBUPROFENAL",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "inflammatory bowel disease",
+      "canonical_id": "MONDO:0005265",
+      "preferred_name": "inflammatory bowel disease",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "insulin",
+      "canonical_id": "PANTHER.FAMILY:PTHR11454:SF9",
+      "preferred_name": "INSULIN",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "insulin",
+      "canonical_id": "PUBCHEM.COMPOUND:70678557",
+      "preferred_name": "Insulin",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "insulin",
+      "canonical_id": "UMLS:C0021641",
+      "preferred_name": "Insulin",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "insulin",
+      "canonical_id": "UMLS:C3537244",
+      "preferred_name": "Insulins",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "PR:000001393",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "interleukin-6",
+      "canonical_id": "UMLS:C0021760",
+      "preferred_name": "interleukin-6",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "iron",
+      "canonical_id": "CHEBI:18248",
+      "preferred_name": "Iron",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "iron",
+      "canonical_id": "UMLS:C0402709",
+      "preferred_name": "Ironer",
+      "category": "biolink:PopulationOfIndividualOrganisms",
+      "taxon": null
+    },
+    {
+      "input_term": "iron",
+      "canonical_id": "UMLS:C1567140",
+      "preferred_name": "Irones",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "lisinopril",
+      "canonical_id": "PUBCHEM.COMPOUND:118984969",
+      "preferred_name": "lisinopril",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "lisinopril",
+      "canonical_id": "UMLS:C0065374",
+      "preferred_name": "lisinopril",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "lung cancer",
+      "canonical_id": "MONDO:0008903",
+      "preferred_name": "lung cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "lung cancer",
+      "canonical_id": "MONDO:0008903",
+      "preferred_name": "lung cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "lung cancer",
+      "canonical_id": "MONDO:0008903",
+      "preferred_name": "lung cancer",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "metformin",
+      "canonical_id": "CHEBI:6801",
+      "preferred_name": "Metformin",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "non-alcoholic fatty liver disease",
+      "canonical_id": "MONDO:0013209",
+      "preferred_name": "metabolic dysfunction-associated steatotic liver disease",
+      "category": "biolink:Disease",
+      "taxon": null
+    },
+    {
+      "input_term": "probiotics",
+      "canonical_id": "MESH:D019936",
+      "preferred_name": "Probiotics",
+      "category": "biolink:OrganismTaxon",
+      "taxon": null
+    },
+    {
+      "input_term": "propionic acid",
+      "canonical_id": "UMLS:C0033482",
+      "preferred_name": "Propionic Acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "propionic acid",
+      "canonical_id": "UMLS:C0033482",
+      "preferred_name": "Propionic Acids",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "rheumatoid arthritis",
+      "canonical_id": "MONDO:0008383",
+      "preferred_name": "rheumatoid arthritis",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "systemic lupus erythematosus",
+      "canonical_id": "MONDO:0007915",
+      "preferred_name": "systemic lupus erythematosus",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "triglycerides",
+      "canonical_id": "CHEBI:17855",
+      "preferred_name": "triglyceride",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "trimethoprim",
+      "canonical_id": "CHEBI:45924",
+      "preferred_name": "Trimethoprim",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "tryptophan",
+      "canonical_id": "CHEBI:27897",
+      "preferred_name": "tryptophan",
+      "category": "biolink:SmallMolecule",
+      "taxon": null
+    },
+    {
+      "input_term": "tryptophan",
+      "canonical_id": "UMLS:C0041249",
+      "preferred_name": "tryptophan",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PANTHER.FAMILY:PTHR11471:SF23",
+      "preferred_name": "TUMOR NECROSIS FACTOR",
+      "category": "biolink:GeneFamily",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "PR:000000134",
+      "preferred_name": "tumor necrosis factor",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "tumor necrosis factor",
+      "canonical_id": "UMLS:C0041368",
+      "preferred_name": "Tumor Necrosis Factors",
+      "category": "biolink:Protein",
+      "taxon": null
+    },
+    {
+      "input_term": "type 2 diabetes",
+      "canonical_id": "MONDO:0005148",
+      "preferred_name": "type 2 diabetes mellitus",
+      "category": "biolink:Disease",
+      "taxon": "NCBITaxon:9606"
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UMLS:C3537249",
+      "preferred_name": "D Vitamin",
+      "category": "biolink:Drug",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    },
+    {
+      "input_term": "vitamin D",
+      "canonical_id": "UNII:9VU1KI44GP",
+      "preferred_name": "VITAMIN D",
+      "category": "biolink:ChemicalEntity",
+      "taxon": null
+    }
+  ],
+  "note": "resolve_batch dedups terms before the redb fetch; throughput is over unique terms. For cold, the harness launches one local_runner process per repeat; warm repeats share one process. The OS file cache is not cleared. Ties resolve to multiple rows per input term."
+}
