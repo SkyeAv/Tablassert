@@ -201,6 +201,4 @@ Awards OT2TR003443, OT2TR003428, and OT2TR005706). Any opinions expressed in thi
 those of the Translator community at large and do not necessarily reflect the views of NCATS,
 individual Translator team members, or affiliated organizations and institutions.
 
-TODO: confirm contributions; disclose sponsor involvement.
-
 # References
