@@ -12,15 +12,15 @@
     "non_whitespace_characters": 392
   },
   "koza_transform_py": {
-    "lines": 31,
-    "non_whitespace_characters": 883
+    "lines": 47,
+    "non_whitespace_characters": 1589
   },
   "tablassert_total": {
     "lines": 56,
     "non_whitespace_characters": 1152
   },
   "koza_total": {
-    "lines": 56,
-    "non_whitespace_characters": 1275
+    "lines": 72,
+    "non_whitespace_characters": 1981
   }
 }

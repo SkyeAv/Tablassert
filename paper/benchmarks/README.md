@@ -8,7 +8,8 @@ scripts, inputs, and recorded results with the environment they were measured in
   `get_normalized_nodes`) on real ingest vocabulary, with per-term canonical
   records and three-level coverage on both sides.
 - `koza_comparison/`: line and non-whitespace-character counts for the
-  Tablassert tutorial recipe and a mapping-only Koza transform. No runtime is
+  Tablassert tutorial recipe and a Koza transform calling the same Tablassert
+  resolution API, with recorded resolution-output equivalence. No runtime is
   benchmarked.
 
 Name-resolution runs were executed on the `wenceslaus` build host (80 hardware
