@@ -66,19 +66,22 @@ recipe-driven pipeline.
 
 # Software design
 
-Tablassert's core trade-off is up-front work for build-time ease: a large entity-resolution
-database is built or downloaded once, then subsequent builds resolve terms locally in batches
-without service calls. Recipes are compiled into TCode, an ordered sequence of (callable,
-arguments) operations, executed through Polars lazy frames. Independent transformations fuse
-until batched resolution, quality control, or output writing requires materialization. Sections
-sharing an instruction prefix reuse its computed snapshot.
+Tablassert has two main trade-offs:
 
-Pydantic models validate every recipe before execution with field-specific errors. Accepted YAML
-satisfies the configuration schema, and successful builds produce correctly formatted KGX; this
-guarantees structure, not biological correctness. YAML requires fewer changes than
-source-specific code, helping nontechnical contributors and AI coding agents author graphs. This
-trades granular control and source-specific optimizations for time savings and broader
-participation.
+1. **The fullmap database.** Building or downloading the entity-resolution database requires
+   up-front storage; subsequent builds resolve terms locally in batches without service
+   calls.
+2. **Declarative YAML configuration.** Pydantic models validate recipes before execution
+   with field-specific errors. Accepted YAML satisfies its schema, and successful
+   builds produce correctly formatted KGX; this guarantees structure, not biological correctness.
+   YAML requires fewer changes than source-specific code, helping nontechnical contributors and
+   AI coding agents author graphs. This trades granular control and source-specific optimizations
+   for time savings and broader participation.
+
+Recipes are compiled into TCode, an ordered sequence of (callable, arguments) operations executed
+through Polars lazy frames. Independent transformations fuse until batched resolution, quality
+control, or output writing requires materialization. Sections sharing an instruction prefix reuse
+its computed snapshot.
 
 The embedded fullmap database underpins the design. Built from BABEL [@babel] exports, it maps
 normalized synonyms and cross-vocabulary meta-identifiers onto canonical identifiers with
@@ -96,8 +99,6 @@ To keep the database smaller and query times faster, the build applies a fixed a
 top 100 experimental taxa derived from Translator knowledge-graph node frequencies, alongside
 all OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some
 rare species-specific identifiers outside the allowlist.
-
-Resolution constraints
 
 Resolution is column-aware rather than string-in/CURIE-out. Each node column carries its own
 constraints: an NCBI taxon filter that keeps taxon-bearing matches for the declared species
@@ -135,7 +136,7 @@ post-prune state. Passing these checks does not establish biological validity.
 Tablassert uses PyO3 Rust for normalization, resolution, database construction, and NDJSON
 writing. GIL-released Rust regions use Rayon workers for CPU-heavy normalization and sharded
 lookups, enabling parallel execution even on GIL-enabled Python 3.11, without requiring
-free-threaded Python. recipes and validation use Python.
+free-threaded Python. Recipes and validation use Python.
 
 ## Comparisons
 
