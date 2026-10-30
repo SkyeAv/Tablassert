@@ -211,9 +211,9 @@ All authors wrote, revised, and proofread the manuscript.
 
 # Acknowledgements
 
-This work was supported by the National Science Foundation (award 2150265) and by the National
+This work was supported by the National Science Foundation (Award 2150265) and by the National
 Center for Advancing Translational Sciences, Biomedical Translator Program (Other Transaction
-Awards OT2TR003443, OT2TR003428, and OT2TR005706). Any opinions expressed in this manuscript are
+Awards OT2TR003443, and OT2TR005706). Any opinions expressed in this manuscript are
 those of the Translator community at large and do not necessarily reflect the views of NCATS,
 individual Translator team members, or affiliated organizations and institutions.
 
