@@ -1,9 +1,12 @@
 template:
   source:
     kind: text
-    local: ./tutorial-data-10k.csv
+    local: ./tutorial-data.csv
     url:
       - https://example.com/data.csv
+    row_slice:
+      - 1
+      - auto
     delimiter: ","
   statement:
     subject:

@@ -1,11 +1,26 @@
 {
-  "tablassert_table_yaml": 29,
-  "tablassert_graph_wrapper_yaml": 24,
-  "koza_yaml": 25,
-  "koza_transform_py": 31,
-  "koza_resolved_yaml": 25,
-  "koza_resolved_transform_py": 86,
-  "tablassert_recipe_total": 53,
-  "koza_total": 56,
-  "koza_resolved_total": 111
+  "tablassert_table_yaml": {
+    "lines": 32,
+    "non_whitespace_characters": 385
+  },
+  "tablassert_graph_wrapper_yaml": {
+    "lines": 24,
+    "non_whitespace_characters": 767
+  },
+  "koza_yaml": {
+    "lines": 25,
+    "non_whitespace_characters": 392
+  },
+  "koza_transform_py": {
+    "lines": 31,
+    "non_whitespace_characters": 883
+  },
+  "tablassert_total": {
+    "lines": 56,
+    "non_whitespace_characters": 1152
+  },
+  "koza_total": {
+    "lines": 56,
+    "non_whitespace_characters": 1275
+  }
 }

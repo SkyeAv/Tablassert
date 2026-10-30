@@ -7,12 +7,11 @@ scripts, inputs, and recorded results with the environment they were measured in
   Translator flow (`name-resolution-sri` `/lookup` plus batched NodeNormalization
   `get_normalized_nodes`) on real ingest vocabulary, with per-term canonical
   records and three-level coverage on both sides.
-- `koza_comparison/`: Tablassert local resolution, Koza mapping only, and Koza
-  with hosted NameResolution plus NodeNormalization over the same table. The
-  executable harness records cold and warm runtime, output counts, resolution
-  coverage, and the policies that make the resulting graphs non-equivalent.
+- `koza_comparison/`: line and non-whitespace-character counts for the
+  Tablassert tutorial recipe and a mapping-only Koza transform. No runtime is
+  benchmarked.
 
-All runs were executed on the `wenceslaus` build host (80 cores, 187 GB RAM,
-Ubuntu Linux); per-run environment details (versions, dates, repeat counts) are
-recorded inside each `results.json`. Numbers in the manuscript come from these
+Name-resolution runs were executed on the `wenceslaus` build host (80 hardware
+threads, 187 GiB RAM, Ubuntu Linux); environment details are recorded in
+`name_resolution/results.json`. Numbers in the manuscript come from these
 files and nowhere else. Re-run instructions are in each subdirectory's README.
