@@ -38,9 +38,7 @@ recipe, so a graph starts small instead of being frozen inside a bespoke ingest 
 # Statement of need
 
 Tablassert replaces repetitive spreadsheet-ingest code with declarative YAML recipes for
-consistent formatting, resolution, and validation.
-
-Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabular biomedical
+consistent formatting, resolution, and validation. Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabular biomedical
 sources and need rigorously structured output without maintaining a transform pipeline per
 source. Extending beyond journal supplements, the same recipes apply to any relational source --
 trial registries, drug approval records, or a researcher's own tables -- and each build can emit
@@ -61,38 +59,23 @@ hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier r
 a network API. Hosted builds depend on service availability; reproducing historical results
 requires preserving responses or pinning the underlying resources.
 
-Tablassert composes declarative mapping, local resolution, and mapping-quality checks into one
-recipe-driven pipeline.
-
 # Software design
 
-Tablassert has two main trade-offs:
+Tablassert has three main trade-offs: fullmap storage enables local batched resolution without
+service calls; declarative YAML favors accessibility and validation over procedural flexibility;
+and the Maturin build system favors hot-path performance over implementation simplicity.
 
-1. **The fullmap database.** Building or downloading the entity-resolution database requires
-   up-front storage; subsequent builds resolve terms locally in batches without service
-   calls.
-2. **Declarative YAML configuration.** Pydantic models validate recipes before execution
-   with field-specific errors. Accepted YAML satisfies its schema, and successful
-   builds produce correctly formatted KGX; this guarantees structure, not biological correctness.
-   YAML requires fewer changes than source-specific code, helping nontechnical contributors and
-   AI coding agents author graphs. This trades granular control and source-specific optimizations
-   for time savings and broader participation.
-
-Recipes are compiled into TCode, an ordered sequence of (callable, arguments) operations executed
-through Polars lazy frames. Independent transformations fuse until batched resolution, quality
-control, or output writing requires materialization. Sections sharing an instruction prefix reuse
-its computed snapshot.
+## Embedded fullmap database
 
 The embedded fullmap database underpins the design. Built from BABEL [@babel] exports, it maps
 normalized synonyms and cross-vocabulary meta-identifiers onto canonical identifiers with
-category and taxon metadata. Level-one normalization trims whitespace and quotes,
-Unicode-lowercases text, Porter2-stems ASCII alphabetic tokens, then deduplicates, sorts, and
-joins tokens; level two additionally removes non-word characters.
+category and taxon metadata. Level one trims, lowercases, Porter2-stems ASCII tokens, then
+deduplicates, sorts, and joins them; level two removes non-word characters.
 
-Identical normalization is applied to synonyms and query text. The store uses redb [@redb], an
-embedded, crash-safe Rust key-value engine suited to point lookups, built in a parallel,
-memory-bounded streaming pass. The prebuilt archive for the current BABEL 22.2.0 export is 44.5
-GB compressed; the redb store used here, built from the 2026-07-22 export, occupies 92.9 GB
+Synonyms and queries share normalization. Redb [@redb] offers crash-safe NoSQL point lookups
+through one predictable, SQL-free query path. Graph builds never write to it, permitting
+read-optimized, parallel, memory-bounded construction. The prebuilt archive for the current
+BABEL 22.2.0 export is 44.5 GB compressed; the redb store used here, built from the 2026-07-22 export, occupies 92.9 GB
 across one primary and 16 shard database files. Resolution is exact-match over normalized keys
 rather than fuzzy search; approximate matches surface only in the audit stage, not in the graph.
 To keep the database smaller and query times faster, the build applies a fixed allowlist of the
@@ -100,16 +83,28 @@ top 100 experimental taxa derived from Translator knowledge-graph node frequenci
 all OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some
 rare species-specific identifiers outside the allowlist.
 
-Resolution is column-aware rather than string-in/CURIE-out. Each node column carries its own
-constraints: an NCBI taxon filter that keeps taxon-bearing matches for the declared species
-while retaining taxon-less rows, Biolink category prioritize and avoid lists (where avoid also
+Resolution is column-aware rather than string-in/CURIE-out. Each node column declares: an NCBI
+taxon filter that keeps taxon-bearing matches for the declared species while retaining taxon-less rows, Biolink category prioritize and avoid lists (where avoid also
 drops categories the installed model does not recognize), and CURIE prefix and regex exclusions.
-A priority score ranks surviving candidates -- exact preferred-name equality ranks 1,
-level-one-normalized equality at NLP level 1 ranks 5, everything else 10, multiplied by a
-category bonus of 1 for prioritized categories and 50 otherwise -- then deduplicates them to the
-best tier, retaining distinct CURIEs that tie. When column context is on, category frequency
-across the column being resolved helps break remaining ties; this is a heuristic, not a
+Candidates are ranked by exact preferred-name agreement, normalized-name agreement, and Biolink
+category priority; the best tier retains tied CURIEs. When column context is on, category frequency across the column helps break remaining
+ties; this is a heuristic, not a
 guarantee of semantic correctness.
+
+## Declarative YAML configuration
+
+Pydantic models validate recipes before execution with field-specific errors. Accepted recipes
+yield correctly formatted KGX after successful builds, guaranteeing structure, not biological
+correctness. Recipes require fewer changes than code, helping nontechnical contributors and AI
+agents author graphs. The deliberately non-Turing-complete DSL provides common, fast
+transformations rather than arbitrary computation; custom operations require extending the tool.
+
+Recipes compile into TCode, an ordered sequence of (callable, arguments) operations executed
+through Polars lazy frames. Independent transformations fuse until batched resolution, quality
+control, or output writing requires materialization; sections sharing an instruction prefix reuse
+its computed snapshot. Lazy optimization means logical recipe order need not dictate physical
+execution order. This often improves performance but can be suboptimal for particular workloads
+and prevents transformations requiring strict procedural ordering.
 
 Edges carry recipe-declared provenance, including source URLs and publications when provided;
 traceability depends on the source and configuration. Optional quality control audits each
@@ -120,44 +115,44 @@ similarity using a checkpoint fine-tuned on BABEL synonyms
 what cheaper stages could not clear. Suspect mappings are dropped and logged with their scores
 rather than silently retained.
 
-For example, a DAKP FAERS audit (2026-10-22) rejected "factor ii" mapped to `HMDB:HMDB0000607`
+For example, a DAKP FAERS audit rejected "factor ii" mapped to `HMDB:HMDB0000607`
 (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its synonym, but the
 coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin]. This is one
 rejection, not measured QC precision or recall.
 
-Structural validation is separate from scientific correctness: an optional study stage asserts
-structural invariants over the emitted NDJSON (no duplicate or isolated nodes, no empty required
-fields, no edges demoted to bare Association). Like KGX's schema-driven `validate` [@kgx],
-`validate-kgx` checks graph records; it constructs records using category-specific Biolink
-classes, knowledge-source identity is checked against the Translator infores registry offline,
-and `--prune` removes edges failing its checks in place, with the exit code gating the
-post-prune state. Passing these checks does not establish biological validity.
+Output validation complements recipe validation. An optional study stage checks structural
+invariants; `validate-kgx` checks category-specific Biolink records and Translator infores
+identity offline, while `--prune` removes failing edges and gates the post-prune exit status.
+These checks do not establish biological validity.
 
-Tablassert uses PyO3 Rust for normalization, resolution, database construction, and NDJSON
-writing. GIL-released Rust regions use Rayon workers for CPU-heavy normalization and sharded
-lookups, enabling parallel execution even on GIL-enabled Python 3.11, without requiring
-free-threaded Python. Recipes and validation use Python.
+## Maturin build system
+
+PyO3 Rust stems and normalizes terms, performs sharded fullmap lookups, streams database
+construction, and serializes NDJSON. GIL-released Rayon workers parallelize these hot paths on
+standard Python 3.11; Python retains recipe parsing, Pydantic validation, and orchestration.
+Maturin packages performant native code in PyPI wheels for Linux/macOS, standard Unix-like
+platforms for major bioinformatics ecosystems such as
+[Bioconda](https://github.com/bioconda/bioconda-recipes). Supported users need no Rust toolchain;
+Windows users need WSL or a source build. The performance gain justifies added maintenance and
+readability costs.
 
 ## Comparisons
 
-Hosted NameResolution [@nameres], a separate SRI service, supports bulk lookup, taxon and
-Biolink-type filters, and CURIE prefix inclusion/exclusion. Candidates from that separate
-service can be canonicalized through SRI's separate Node Normalization service [@nodenorm] using
-batched requests; two network stages need not mean two requests per term.
+Tablassert resolved this sample faster than the separate hosted services. On a dual-socket Intel
+Xeon Gold 6230 host (40 physical cores, 80 hardware threads, 187 GiB RAM, SSD RAID1, Ubuntu
+24.04), 113 hand-selected entries comprised 104 unique terms. Median local time was 0.886 seconds
+across three fresh-process passes, excluding startup, and 0.516 seconds across three in-process
+passes; OS caches were not cleared. Local resolution returned complete identifier, name, and
+category fields for 93 terms. One workflow using SRI NameResolution [@nameres] then the separate
+SRI Node Normalization service [@nodenorm] returned complete top-ranked canonical records for 99
+terms in 50.23 seconds: 104 lookups with four concurrent requests plus five batched normalization
+requests, without errors. Hosted lookup used `limit=5` and `only_taxa=NCBITaxon:9606`;
+NameResolution also supports bulk lookup, Biolink-type filters, and CURIE prefix
+inclusion/exclusion. Matching policies and resource versions differ; this convenience sample
+measures neither accuracy nor general service performance.
 
-Benchmarks clarify deployment: local fullmap needs substantial storage but no service calls; the
-separate hosted services avoid local storage but add network and availability dependencies. On a
-dual-socket Intel Xeon Gold 6230 host (40 physical cores, 80 hardware threads, 187 GiB RAM, SSD
-RAID1, Ubuntu 24.04), 113 hand-selected ingest entries comprised 104 unique terms. Three
-fresh-process local batch passes took a median of 0.886 seconds, excluding interpreter startup;
-three in-process passes took a median 0.516 seconds. OS caches were not cleared. Tablassert's
-local resolution returned complete identifier, name, and category fields for 93 terms. The
-alternative hosted workflow used SRI NameResolution [@nameres] for candidate lookup followed by
-the separate SRI Node Normalization service [@nodenorm] for canonical identifiers, preferred
-names, and categories. One sweep returned complete top-ranked canonical records for 99 terms in
-50.23 seconds: 104 lookups with four concurrent requests plus five batched normalization
-requests, with no request errors. Matching policies and resource versions differ; this
-convenience sample measures neither accuracy nor general service performance.
+KGX's schema-driven `validate` [@kgx] likewise checks Biolink conformance; Tablassert adds
+study-level structural invariants, offline infores checks, and in-place pruning.
 
 The Tablassert tutorial uses 56 Tablassert YAML lines of code (LOC) versus 72 Koza [@koza]
 YAML/Python LOC (1,152 versus 1,981 non-whitespace characters), excluding blanks, comments, and
