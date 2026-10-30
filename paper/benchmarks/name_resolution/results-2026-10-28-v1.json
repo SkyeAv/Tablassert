@@ -1,0 +1,3744 @@
+{
+  "date_utc": "2026-10-28T20:46:13Z",
+  "tablassert_version": "19.7.0",
+  "fullmap": "/local_raid1/sgoetz/DBSTORE/FULLMAP/fullmap",
+  "hosted_endpoint": "https://name-resolution-sri.renci.org/lookup",
+  "local": {
+    "n_terms": 113,
+    "n_unique_terms": 104,
+    "repeats": 3,
+    "resolve_wall_s": [
+      0.9372332240454853,
+      0.6076390836387873,
+      0.5484410668723285
+    ],
+    "resolve_wall_s_median": 0.6076390836387873,
+    "unique_terms_per_s_median": 171.15423085889432,
+    "per_unique_term_ms_median": 5.842683496526801,
+    "resolved_rows": [
+      136,
+      136,
+      136
+    ],
+    "process_total_s_incl_startup": 6.98783366009593,
+    "note": "resolve_batch dedups terms before the redb fetch; throughput is over unique terms"
+  },
+  "hosted": {
+    "n_terms": 113,
+    "concurrency": 4,
+    "canonicalize": false,
+    "wall_s": 19.931297813076526,
+    "ok": 113,
+    "errors": 0,
+    "coverage": 1.0,
+    "canonical_records": 0,
+    "latency_s": {
+      "median": 0.5529478010721505,
+      "p95": 1.8313573198392987,
+      "mean": 0.6997811785215033
+    },
+    "terms_per_s_effective": 5.669475267479219,
+    "records": [
+      {
+        "term": "TECEFIDERA",
+        "status": 200,
+        "latency_s": 0.5529478010721505,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "PROACTIV MD ADAPALENE ACNE TREATMENT",
+        "status": 200,
+        "latency_s": 0.6023798598907888,
+        "curies": [
+          "CHEBI:31174",
+          "MONDO:0011438",
+          "MONDO:0043468",
+          "HP:0040137",
+          "MONDO:0100486"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Acne",
+        "status": 200,
+        "latency_s": 0.6336133070290089,
+        "curies": [
+          "MONDO:0011438",
+          "MONDO:0043468",
+          "UMLS:C0718217",
+          "HP:0040137",
+          "MONDO:0100486"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.7015277328900993,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "OTEZLA",
+        "status": 200,
+        "latency_s": 0.29291520407423377,
+        "curies": [
+          "CHEBI:78540",
+          "UMLS:C6054746",
+          "UMLS:C6056148",
+          "UMLS:C6056149",
+          "UMLS:C3715230"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Psoriasis",
+        "status": 200,
+        "latency_s": 0.4564642678014934,
+        "curies": [
+          "MONDO:0005083",
+          "MP:0001193",
+          "MONDO:0013626",
+          "MONDO:0100491",
+          "MONDO:0022205"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XARELTO",
+        "status": 200,
+        "latency_s": 0.49808530509471893,
+        "curies": [
+          "CHEBI:68579",
+          "UMLS:C4699670",
+          "UMLS:C3871569",
+          "UMLS:C3856151",
+          "UNII:ESP6837WVA"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "PROACTIV MD DEEP CLEANSING FACE WASH",
+        "status": 200,
+        "latency_s": 0.6364710819907486,
+        "curies": [
+          "UNII:U4THC4MHG7",
+          "UMLS:C3204537",
+          "MONDO:0004903",
+          "MONDO:0001430",
+          "HP:0002625"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XARELTO XR",
+        "status": 200,
+        "latency_s": 0.4434441411867738,
+        "curies": [
+          "CHEBI:207316",
+          "CHEBI:209098",
+          "PUBCHEM.COMPOUND:9932718",
+          "UNII:748C75726M",
+          "CHEBI:216666"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Atrial fibrillation",
+        "status": 200,
+        "latency_s": 0.9523856230080128,
+        "curies": [
+          "MONDO:0004981",
+          "MP:0008543",
+          "MONDO:1030011",
+          "HP:0004754",
+          "MONDO:0018054"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Peritoneal dialysis",
+        "status": 200,
+        "latency_s": 0.2846020171418786,
+        "curies": [
+          "UMLS:C0031139",
+          "UMLS:C3840095",
+          "UMLS:C0274418",
+          "UMLS:C0456239",
+          "UMLS:C2315425"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Rivaroxaban",
+        "status": 200,
+        "latency_s": 0.7372435200959444,
+        "curies": [
+          "CHEBI:68579",
+          "UNII:ESP6837WVA",
+          "UNII:5KS80AIP17",
+          "UNII:RJP4GEG36M",
+          "UNII:C25RP4RHW7"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.5171178141608834,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XELJANZ",
+        "status": 200,
+        "latency_s": 0.8261600118130445,
+        "curies": [
+          "CHEBI:71197",
+          "CHEBI:71200",
+          "UMLS:C4238144"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ARELTO",
+        "status": 200,
+        "latency_s": 0.46929613780230284,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "DIANA LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE",
+        "status": 200,
+        "latency_s": 1.4494624058716,
+        "curies": [
+          "CHEBI:3311",
+          "RXCUI:804919",
+          "CHEBI:3309",
+          "CHEBI:3310",
+          "CHEBI:9679"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Thrombosis prophylaxis",
+        "status": 200,
+        "latency_s": 0.4879311821423471,
+        "curies": [
+          "UMLS:C0877156",
+          "UMLS:C0877621",
+          "UMLS:C2164678",
+          "MONDO:0002907",
+          "UMLS:C0199242"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "PROACTIV MD DAILY OIL CONTROL SPF 30",
+        "status": 200,
+        "latency_s": 1.563650513999164,
+        "curies": [
+          "PUBCHEM.COMPOUND:139291139",
+          "DRUGBANK:DB09422",
+          "UMLS:C2683411",
+          "CHEBI:140618",
+          "DRUGBANK:DB13961"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Dialysis solution",
+        "status": 200,
+        "latency_s": 0.7960356632247567,
+        "curies": [
+          "UMLS:C0569903",
+          "UMLS:C3505190",
+          "UMLS:C0571215",
+          "UMLS:C0731794",
+          "UMLS:C0353714"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "DIALUID",
+        "status": 200,
+        "latency_s": 0.5678330641239882,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "Hypermagnesemia",
+        "status": 200,
+        "latency_s": 0.2873357869684696,
+        "curies": [
+          "HP:0002918",
+          "NCIT:C37969",
+          "NCIT:C143555",
+          "MP:0010092",
+          "UMLS:C1522135"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "PAXLOVID",
+        "status": 200,
+        "latency_s": 0.46476780716329813,
+        "curies": [
+          "CHEBI:192712",
+          "UMLS:C5565871",
+          "UMLS:C5980300",
+          "UMLS:C5551350",
+          "UMLS:C5575086"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "COVID-19 treatment",
+        "status": 200,
+        "latency_s": 0.5526291611604393,
+        "curies": [
+          "UMLS:C5244048",
+          "MONDO:0100096",
+          "MONDO:0100233",
+          "RXCUI:2606075",
+          "MONDO:0100163"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "NUPLAZID",
+        "status": 200,
+        "latency_s": 0.3688545231707394,
+        "curies": [
+          "CHEBI:133014",
+          "CHEBI:133017"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Parkinson's disease psychosis",
+        "status": 200,
+        "latency_s": 0.3711595511995256,
+        "curies": [
+          "UMLS:C3805119",
+          "MONDO:0002330",
+          "MONDO:0006730",
+          "MONDO:0018623",
+          "UMLS:C4304474"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Deep vein thrombosis",
+        "status": 200,
+        "latency_s": 0.2877829112112522,
+        "curies": [
+          "UMLS:C0340708",
+          "HP:0004850",
+          "UMLS:C2717899",
+          "UMLS:C0919631",
+          "UMLS:C0340714"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XARELTO",
+        "status": 200,
+        "latency_s": 0.7374934633262455,
+        "curies": [
+          "CHEBI:68579",
+          "UMLS:C4699670",
+          "UMLS:C3871569",
+          "UMLS:C3856151",
+          "UNII:ESP6837WVA"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XARELTO XR",
+        "status": 200,
+        "latency_s": 2.470139417797327,
+        "curies": [
+          "CHEBI:207316",
+          "CHEBI:209098",
+          "PUBCHEM.COMPOUND:9932718",
+          "UNII:748C75726M",
+          "CHEBI:216666"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.28724237997084856,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "DIANEAL LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE",
+        "status": 200,
+        "latency_s": 2.811649370007217,
+        "curies": [
+          "UMLS:C2344965",
+          "CHEBI:3311",
+          "RXCUI:804919",
+          "CHEBI:3309",
+          "CHEBI:3310"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "AUBAGIO",
+        "status": 200,
+        "latency_s": 0.5739072561264038,
+        "curies": [
+          "CHEBI:68540"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "AMPYRA",
+        "status": 200,
+        "latency_s": 0.5729212709702551,
+        "curies": [
+          "CHEBI:34385",
+          "UMLS:C2732156"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.6390292993746698,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ELIGARD",
+        "status": 200,
+        "latency_s": 0.2910978179425001,
+        "curies": [
+          "UMLS:C3642287",
+          "UMLS:C3502989",
+          "UMLS:C3502848",
+          "UMLS:C3503366",
+          "UMLS:C0085272"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "MIRENA",
+        "status": 200,
+        "latency_s": 0.9797003208659589,
+        "curies": [
+          "NCBITaxon:3478219",
+          "UMLS:C0586071",
+          "UMLS:C4067609",
+          "CHEBI:6443"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Heavy menstrual bleeding",
+        "status": 200,
+        "latency_s": 0.900166928768158,
+        "curies": [
+          "HP:0000132",
+          "HP:0000225",
+          "HP:0040184",
+          "UMLS:C0341164",
+          "MONDO:0021645"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "CHANTIX",
+        "status": 200,
+        "latency_s": 0.28886960493400693,
+        "curies": [
+          "CHEBI:84500",
+          "CHEBI:84507",
+          "UMLS:C3255215",
+          "UMLS:C2364396",
+          "PUBCHEM.COMPOUND:170361"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Prostate cancer",
+        "status": 200,
+        "latency_s": 0.4464122732169926,
+        "curies": [
+          "MONDO:0008315",
+          "MONDO:0700275",
+          "UMLS:C0278838",
+          "MONDO:0011270",
+          "MONDO:0012093"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "XYREM",
+        "status": 200,
+        "latency_s": 0.41273676697164774,
+        "curies": [
+          "CHEBI:30830"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Smoking cessation",
+        "status": 200,
+        "latency_s": 0.4672035458497703,
+        "curies": [
+          "UMLS:C1692317",
+          "UMLS:C1621885",
+          "UMLS:C2586081",
+          "UMLS:C3179142",
+          "UMLS:C1145328"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "GILENYA",
+        "status": 200,
+        "latency_s": 0.6733303079381585,
+        "curies": [
+          "CHEBI:63115"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.37316434225067496,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Narcolepsy",
+        "status": 200,
+        "latency_s": 0.9516884949989617,
+        "curies": [
+          "MONDO:0021107",
+          "MP:0005279",
+          "MONDO:0008062",
+          "MONDO:0019371",
+          "MONDO:0016158"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Diabetes mellitus type 2",
+        "status": 200,
+        "latency_s": 1.2876274823211133,
+        "curies": [
+          "MONDO:0005408",
+          "MONDO:0005148",
+          "UMLS:C2874119",
+          "UMLS:C2874123",
+          "UMLS:C3853362"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "AVANDIA",
+        "status": 200,
+        "latency_s": 1.6481506368145347,
+        "curies": [
+          "UMLS:C0875967",
+          "CHEBI:8892",
+          "CHEBI:50122",
+          "UMLS:C0875726",
+          "UMLS:C0875725"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "OXYCONTIN",
+        "status": 200,
+        "latency_s": 1.4212760063819587,
+        "curies": [
+          "PUBCHEM.COMPOUND:129724475",
+          "CHEBI:7852",
+          "UMLS:C2682217",
+          "UMLS:C2682215",
+          "UMLS:C2682706"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "NUPLAZID",
+        "status": 200,
+        "latency_s": 0.2872098688967526,
+        "curies": [
+          "CHEBI:133014",
+          "CHEBI:133017"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Schizophrenia",
+        "status": 200,
+        "latency_s": 0.2860410688444972,
+        "curies": [
+          "MONDO:0005090",
+          "MONDO:0001484",
+          "MONDO:0011552",
+          "UMLS:C0036347",
+          "MONDO:0957430"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "MIRENA",
+        "status": 200,
+        "latency_s": 0.6848219688981771,
+        "curies": [
+          "NCBITaxon:3478219",
+          "UMLS:C0586071",
+          "UMLS:C4067609",
+          "CHEBI:6443"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Chronic pain",
+        "status": 200,
+        "latency_s": 1.8313573198392987,
+        "curies": [
+          "HP:0012532",
+          "MONDO:0024317",
+          "UMLS:C3178789",
+          "UMLS:C5700083",
+          "UMLS:C5818010"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ZYPREXA",
+        "status": 200,
+        "latency_s": 0.9363048998638988,
+        "curies": [
+          "CHEBI:7735",
+          "UMLS:C0876225",
+          "UMLS:C2740887"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.438716113101691,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "RINVOQ",
+        "status": 200,
+        "latency_s": 0.7248851489275694,
+        "curies": [
+          "UNII:4RA0KN46E0",
+          "UMLS:C5925994"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "CONTRACEPTION",
+        "status": 200,
+        "latency_s": 0.5746283181942999,
+        "curies": [
+          "UMLS:C4546343",
+          "UMLS:C0759527",
+          "UMLS:C3665793",
+          "UMLS:C3532599",
+          "UMLS:C3532589"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "CIIMZA",
+        "status": 200,
+        "latency_s": 0.27918069204315543,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "Contrast dye",
+        "status": 200,
+        "latency_s": 0.3843289976939559,
+        "curies": [
+          "UMLS:C0742795",
+          "UMLS:C0271777",
+          "UMLS:C0742798",
+          "UMLS:C0742797",
+          "UMLS:C0742799"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "SIMPONI",
+        "status": 200,
+        "latency_s": 0.4376099449582398,
+        "curies": [
+          "UNII:91X1KLU43E",
+          "UMLS:C3651896",
+          "UMLS:C3503717",
+          "UMLS:C3888394"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Crohn's disease",
+        "status": 200,
+        "latency_s": 0.38037811499089,
+        "curies": [
+          "UMLS:C3888864",
+          "MONDO:0005011",
+          "MONDO:0005532",
+          "UMLS:C0267382",
+          "UMLS:C1960764"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Ulcerative colitis",
+        "status": 200,
+        "latency_s": 0.8877315549179912,
+        "curies": [
+          "MONDO:0005101",
+          "UMLS:C1260710",
+          "UMLS:C3888502",
+          "UMLS:C3697010",
+          "MONDO:0030314"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "TP53",
+        "status": 200,
+        "latency_s": 0.5745012490078807,
+        "curies": [
+          "NCBIGene:397276",
+          "NCBIGene:7157",
+          "NCBIGene:30590",
+          "NCBIGene:24842",
+          "NCBIGene:105934647"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "CIMZIA",
+        "status": 200,
+        "latency_s": 1.040883671026677,
+        "curies": [
+          "UMLS:C1172157",
+          "UNII:UMD07X179E",
+          "UMLS:C6065525",
+          "UMLS:C6022569",
+          "UMLS:C6022568"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "lung cancer",
+        "status": 200,
+        "latency_s": 0.64447271078825,
+        "curies": [
+          "MONDO:0008903",
+          "UMLS:C0855005",
+          "UMLS:C0278987",
+          "UMLS:C0862802",
+          "UMLS:C0278517"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Bifidobacterium",
+        "status": 200,
+        "latency_s": 0.37768958788365126,
+        "curies": [
+          "NCBITaxon:1678",
+          "DRUGBANK:DB14222",
+          "DRUGBANK:DB16550",
+          "DRUGBANK:DB16538",
+          "RXCUI:1150099"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "metformin",
+        "status": 200,
+        "latency_s": 1.016742771025747,
+        "curies": [
+          "CHEBI:6801",
+          "CHEBI:747603",
+          "CHEBI:6802",
+          "UNII:V9AZJ7GJZ1",
+          "UNII:CG73ERQ805"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Lactobacillus",
+        "status": 200,
+        "latency_s": 0.6299486048519611,
+        "curies": [
+          "NCBITaxon:1578",
+          "DRUGBANK:DB15823",
+          "DRUGBANK:DB14224",
+          "DRUGBANK:DB16540",
+          "DRUGBANK:DB16541"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Alistipes",
+        "status": 200,
+        "latency_s": 0.3969640308059752,
+        "curies": [
+          "NCBITaxon:239759",
+          "UMLS:C1490417",
+          "NCBITaxon:28117",
+          "NCBITaxon:214856",
+          "NCBITaxon:265312"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Eubacterium rectale",
+        "status": 200,
+        "latency_s": 0.47350431699305773,
+        "curies": [
+          "UMLS:C3510361",
+          "UMLS:C3496335",
+          "UMLS:C3510362",
+          "UMLS:C0317478",
+          "NCBITaxon:657318"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Faecalibacterium prausnitzii",
+        "status": 200,
+        "latency_s": 0.28949298802763224,
+        "curies": [
+          "NCBITaxon:853",
+          "NCBITaxon:411485",
+          "NCBITaxon:657322",
+          "NCBITaxon:718252",
+          "UMLS:C3510363"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ibuprofen",
+        "status": 200,
+        "latency_s": 1.9770108480006456,
+        "curies": [
+          "CHEBI:5855",
+          "CHEBI:31685",
+          "CHEBI:132922",
+          "CHEBI:135336",
+          "CHEBI:88735"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Helicobacter pylori",
+        "status": 200,
+        "latency_s": 0.28636533999815583,
+        "curies": [
+          "NCBITaxon:210",
+          "HP:0005202",
+          "MONDO:0006781",
+          "MONDO:0010853",
+          "UMLS:C0343378"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "aspirin",
+        "status": 200,
+        "latency_s": 2.1694359462708235,
+        "curies": [
+          "RXCUI:374711",
+          "RXCUI:370643",
+          "CHEBI:15365",
+          "UNII:XAN4V337CI",
+          "RXCUI:374702"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Staphylococcus aureus",
+        "status": 200,
+        "latency_s": 0.3757313801907003,
+        "curies": [
+          "NCBITaxon:1280",
+          "MONDO:0005545",
+          "MONDO:0100073",
+          "MONDO:0041879",
+          "UMLS:C3486580"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "non-alcoholic fatty liver disease",
+        "status": 200,
+        "latency_s": 0.4714892697520554,
+        "curies": [
+          "UMLS:C5577866",
+          "UMLS:C5577867",
+          "MONDO:0013209",
+          "MONDO:0021104",
+          "MONDO:0043693"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "type 2 diabetes",
+        "status": 200,
+        "latency_s": 0.3941026912070811,
+        "curies": [
+          "MONDO:0005148",
+          "UMLS:C0877302",
+          "UMLS:C0342295",
+          "UMLS:C1279313",
+          "UMLS:C0342297"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Alzheimer disease",
+        "status": 200,
+        "latency_s": 0.7286479356698692,
+        "curies": [
+          "MONDO:0004975",
+          "MONDO:0011913",
+          "MONDO:0012153",
+          "MONDO:0007088",
+          "MONDO:0007089"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "attention deficit hyperactivity disorder",
+        "status": 200,
+        "latency_s": 0.634830532129854,
+        "curies": [
+          "MONDO:0005302",
+          "MONDO:0007743",
+          "MONDO:0859261",
+          "MONDO:0012149",
+          "MONDO:0012150"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.7965111951343715,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "inflammatory bowel disease",
+        "status": 200,
+        "latency_s": 1.2159073408693075,
+        "curies": [
+          "MONDO:0005265",
+          "MONDO:0013153",
+          "MONDO:0014338",
+          "MONDO:0008617",
+          "MONDO:0011087"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "systemic lupus erythematosus",
+        "status": 200,
+        "latency_s": 0.659281968139112,
+        "curies": [
+          "MONDO:0007915",
+          "UMLS:C0521471",
+          "MONDO:0019725",
+          "MONDO:0044113",
+          "MONDO:0859083"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Prostate cancer",
+        "status": 200,
+        "latency_s": 0.4663034388795495,
+        "curies": [
+          "MONDO:0008315",
+          "MONDO:0700275",
+          "UMLS:C0278838",
+          "MONDO:0011270",
+          "MONDO:0012093"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Colorectal cancer",
+        "status": 200,
+        "latency_s": 0.8024489963427186,
+        "curies": [
+          "MONDO:0005575",
+          "UMLS:C4544822",
+          "UMLS:C0854750",
+          "UMLS:C0677949",
+          "UMLS:C0677950"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "Breast cancer",
+        "status": 200,
+        "latency_s": 1.024838178884238,
+        "curies": [
+          "MONDO:0007254",
+          "UniProtKB:O75815-1",
+          "MONDO:0000618",
+          "UMLS:C0278493",
+          "MONDO:0006512"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "BRCA1",
+        "status": 200,
+        "latency_s": 0.7461329284124076,
+        "curies": [
+          "NCBIGene:672",
+          "NCBIGene:103566867",
+          "NCBIGene:101705460",
+          "NCBIGene:105080080",
+          "NCBIGene:109573698"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "EGFR",
+        "status": 200,
+        "latency_s": 0.3602397511713207,
+        "curies": [
+          "NCBIGene:1956",
+          "NCBIGene:101003588",
+          "NCBIGene:13649",
+          "NCBIGene:396494",
+          "NCBIGene:111555709"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "BRCA2",
+        "status": 200,
+        "latency_s": 0.6516883349977434,
+        "curies": [
+          "NCBIGene:675",
+          "NCBIGene:12190",
+          "NCBIGene:493878",
+          "NCBIGene:101698015",
+          "NCBIGene:452526"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "IL6",
+        "status": 200,
+        "latency_s": 0.36670929845422506,
+        "curies": [
+          "NCBIGene:3569",
+          "NCBIGene:16193",
+          "NCBIGene:24498",
+          "NCBIGene:399500",
+          "NCBIGene:463288"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "LEP",
+        "status": 200,
+        "latency_s": 0.46804690081626177,
+        "curies": [
+          "NCBIGene:396832",
+          "NCBIGene:3952",
+          "NCBIGene:25608",
+          "NCBIGene:16846",
+          "NCBIGene:106839522"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "TNF",
+        "status": 200,
+        "latency_s": 0.9305961490608752,
+        "curies": [
+          "NCBIGene:397086",
+          "NCBIGene:7124",
+          "NCBIGene:21926",
+          "NCBIGene:403922",
+          "NCBIGene:24835"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "APOE",
+        "status": 200,
+        "latency_s": 1.050959637388587,
+        "curies": [
+          "NCBIGene:348",
+          "NCBIGene:11816",
+          "NCBIGene:476438",
+          "NCBIGene:102170314",
+          "NCBIGene:105869509"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ADIPOQ",
+        "status": 200,
+        "latency_s": 0.2822393490932882,
+        "curies": [
+          "NCBIGene:9370",
+          "NCBIGene:282865",
+          "NCBIGene:403625",
+          "NCBIGene:397660",
+          "NCBIGene:100481319"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "cholesterol",
+        "status": 200,
+        "latency_s": 0.29796451702713966,
+        "curies": [
+          "CHEBI:16113",
+          "PUBCHEM.COMPOUND:304",
+          "CHEBI:41321",
+          "MONDO:0005568",
+          "CHEBI:17495"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "KRAS",
+        "status": 200,
+        "latency_s": 1.9909317018464208,
+        "curies": [
+          "NCBIGene:100049322",
+          "NCBIGene:3845",
+          "NCBIGene:109867582",
+          "NCBIGene:112218714",
+          "NCBIGene:16653"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "glucose",
+        "status": 200,
+        "latency_s": 0.8716534408740699,
+        "curies": [
+          "CHEBI:17234",
+          "EFO:0004468",
+          "UMLS:C5781949",
+          "UMLS:C3643617",
+          "MONDO:0001076"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "butyric acid",
+        "status": 200,
+        "latency_s": 0.3717923788353801,
+        "curies": [
+          "CHEBI:30772",
+          "CHEBI:40114",
+          "UNII:EH7DJJ4GUV",
+          "CHEBI:165404",
+          "UNII:B9QYA11V0F"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "propionic acid",
+        "status": 200,
+        "latency_s": 0.3601747020147741,
+        "curies": [
+          "CHEBI:30768",
+          "CHEBI:85487",
+          "UNII:ELW4MN66TD",
+          "CHEBI:80605",
+          "CHEBI:189725"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "tryptophan",
+        "status": 200,
+        "latency_s": 0.4179066251963377,
+        "curies": [
+          "CHEBI:16828",
+          "CHEBI:27897",
+          "UMLS:C0041249",
+          "UniProtKB:P23381-1",
+          "CHEBI:16296"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "triglycerides",
+        "status": 200,
+        "latency_s": 1.1864886078983545,
+        "curies": [
+          "CHEBI:17855",
+          "UMLS:C4554056",
+          "EFO:0004530",
+          "DRUGBANK:DB13959",
+          "MONDO:0005347"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "probiotics",
+        "status": 200,
+        "latency_s": 0.29173732781782746,
+        "curies": [
+          "MESH:D019936",
+          "UMLS:C4718264",
+          "UMLS:C5762415",
+          "UMLS:C5762184",
+          "UMLS:C4489960"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "insulin",
+        "status": 200,
+        "latency_s": 1.9035682054236531,
+        "curies": [
+          "UMLS:C0021641",
+          "PANTHER.FAMILY:PTHR11454:SF9",
+          "CHEBI:5931",
+          "NCBIGene:483665",
+          "NCBIGene:105918359"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "antibiotics",
+        "status": 200,
+        "latency_s": 0.2887298669666052,
+        "curies": [
+          "UMLS:C0003232",
+          "UMLS:C3540706",
+          "UMLS:C3540704",
+          "UMLS:C3540708",
+          "UMLS:C3540709"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "trimethoprim",
+        "status": 200,
+        "latency_s": 0.36596909910440445,
+        "curies": [
+          "CHEBI:45924",
+          "UNII:E377MF8EQ8",
+          "UNII:9XE000OU9B",
+          "UNII:P3K8GP9FDQ",
+          "PUBCHEM.COMPOUND:64931"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "atororvastatin",
+        "status": 200,
+        "latency_s": 0.28489795327186584,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "fluoxetine",
+        "status": 200,
+        "latency_s": 0.6390417041257024,
+        "curies": [
+          "CHEBI:5118",
+          "CHEBI:145458",
+          "CHEBI:86991",
+          "CHEBI:86992",
+          "CHEBI:86996"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "vitamin D",
+        "status": 200,
+        "latency_s": 0.2996954401023686,
+        "curies": [
+          "UNII:9VU1KI44GP",
+          "MONDO:0100471",
+          "UniProtKB:P02774-1",
+          "UniProtKB:A0A9J8AKB7",
+          "MONDO:0024299"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "lisinopril",
+        "status": 200,
+        "latency_s": 0.7268857141025364,
+        "curies": [
+          "CHEBI:43755",
+          "UMLS:C0065374",
+          "PUBCHEM.COMPOUND:118984969",
+          "CHEBI:6503",
+          "PUBCHEM.COMPOUND:22887897"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "fecal microbiota transplant",
+        "status": 200,
+        "latency_s": 1.6296072569675744,
+        "curies": [
+          "DRUGBANK:DB17743",
+          "UMLS:C5231239",
+          "RXCUI:2636538",
+          "MONDO:0019088",
+          "MONDO:0958127"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "folic acid",
+        "status": 200,
+        "latency_s": 0.7386786779388785,
+        "curies": [
+          "CHEBI:27470",
+          "PUBCHEM.COMPOUND:135444779",
+          "MONDO:0001860",
+          "PUBCHEM.COMPOUND:135718460",
+          "CHEBI:89846"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "hepcidin",
+        "status": 200,
+        "latency_s": 0.29823603527620435,
+        "curies": [
+          "PUBCHEM.COMPOUND:91864521",
+          "PUBCHEM.COMPOUND:139033195",
+          "UMLS:C0966897",
+          "PR:000008438",
+          "PANTHER.FAMILY:PTHR16877:SF0"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "ferritin",
+        "status": 200,
+        "latency_s": 0.28542743204161525,
+        "curies": [
+          "NCBIGene:100205436",
+          "UMLS:C0015879",
+          "CHEBI:82594",
+          "PANTHER.FAMILY:PTHR11431",
+          "EFO:0004459"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "iron",
+        "status": 200,
+        "latency_s": 0.4136885730549693,
+        "curies": [
+          "CHEBI:18248",
+          "NCBIGene:1254300",
+          "NCBIGene:93313788",
+          "NCBIGene:305629263",
+          "CHEBI:192761"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "C-reactive protein",
+        "status": 200,
+        "latency_s": 0.2868485236540437,
+        "curies": [
+          "UMLS:C0006560",
+          "PR:000005897",
+          "PANTHER.FAMILY:PTHR45869:SF7",
+          "UNII:SCI18J406O",
+          "NCBIGene:108892153"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "tumor necrosis factor",
+        "status": 200,
+        "latency_s": 0.29701876314356923,
+        "curies": [
+          "UniProtKB:Q99732-1",
+          "PR:000000134",
+          "PANTHER.FAMILY:PTHR11471:SF23",
+          "UniProtKB:Q9BXJ1-1",
+          "UniProtKB:Q92956-1"
+        ],
+        "canonical": null
+      },
+      {
+        "term": "interleukin-6",
+        "status": 200,
+        "latency_s": 0.3555158916860819,
+        "curies": [
+          "UMLS:C0021760",
+          "PR:000001393",
+          "PANTHER.FAMILY:PTHR48494:SF1",
+          "PANTHER.FAMILY:PTHR48494",
+          "NCBIGene:111545050"
+        ],
+        "canonical": null
+      }
+    ],
+    "note": "per-term HTTP GET, concurrency 4; a build would need one request per term"
+  },
+  "hosted_multihop": {
+    "n_terms": 113,
+    "concurrency": 4,
+    "canonicalize": true,
+    "wall_s": 17.399336886126548,
+    "ok": 113,
+    "errors": 0,
+    "coverage": 1.0,
+    "canonical_records": 108,
+    "latency_s": {
+      "median": 0.5756761617958546,
+      "p95": 0.8549438528716564,
+      "mean": 0.6057767617038196
+    },
+    "terms_per_s_effective": 6.494500378925426,
+    "records": [
+      {
+        "term": "TECEFIDERA",
+        "status": 200,
+        "latency_s": 0.3264003088697791,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.7246451620012522,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005301",
+          "preferred_name": "multiple sclerosis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Acne",
+        "status": 200,
+        "latency_s": 0.7264320659451187,
+        "curies": [
+          "MONDO:0011438",
+          "MONDO:0043468",
+          "UMLS:C0718217",
+          "HP:0040137",
+          "MONDO:0100486"
+        ],
+        "canonical": {
+          "curie": "MONDO:0011438",
+          "preferred_name": "acne",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "PROACTIV MD ADAPALENE ACNE TREATMENT",
+        "status": 200,
+        "latency_s": 0.8549438528716564,
+        "curies": [
+          "CHEBI:31174",
+          "MONDO:0011438",
+          "MONDO:0043468",
+          "HP:0040137",
+          "MONDO:0100486"
+        ],
+        "canonical": {
+          "curie": "CHEBI:31174",
+          "preferred_name": "Adapalene",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "OTEZLA",
+        "status": 200,
+        "latency_s": 0.8313308767974377,
+        "curies": [
+          "CHEBI:78540",
+          "UMLS:C6054746",
+          "UMLS:C6056148",
+          "UMLS:C6056149",
+          "UMLS:C3715230"
+        ],
+        "canonical": {
+          "curie": "CHEBI:78540",
+          "preferred_name": "Apremilast",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "XARELTO",
+        "status": 200,
+        "latency_s": 0.5859178439714015,
+        "curies": [
+          "CHEBI:68579",
+          "UMLS:C4699670",
+          "UMLS:C3871569",
+          "UMLS:C3856151",
+          "UNII:ESP6837WVA"
+        ],
+        "canonical": {
+          "curie": "CHEBI:68579",
+          "preferred_name": "Rivaroxaban",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Psoriasis",
+        "status": 200,
+        "latency_s": 0.5902992887422442,
+        "curies": [
+          "MONDO:0005083",
+          "MP:0001193",
+          "MONDO:0013626",
+          "MONDO:0100491",
+          "MONDO:0022205"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005083",
+          "preferred_name": "psoriasis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Atrial fibrillation",
+        "status": 200,
+        "latency_s": 0.5645037242211401,
+        "curies": [
+          "MONDO:0004981",
+          "MP:0008543",
+          "MONDO:1030011",
+          "HP:0004754",
+          "MONDO:0018054"
+        ],
+        "canonical": {
+          "curie": "MONDO:0004981",
+          "preferred_name": "atrial fibrillation",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "PROACTIV MD DEEP CLEANSING FACE WASH",
+        "status": 200,
+        "latency_s": 0.5671034641563892,
+        "curies": [
+          "UNII:U4THC4MHG7",
+          "UMLS:C3204537",
+          "MONDO:0004903",
+          "MONDO:0001430",
+          "HP:0002625"
+        ],
+        "canonical": {
+          "curie": "UNII:U4THC4MHG7",
+          "preferred_name": "MD 750819",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Rivaroxaban",
+        "status": 200,
+        "latency_s": 0.5642842901870608,
+        "curies": [
+          "CHEBI:68579",
+          "UNII:ESP6837WVA",
+          "UNII:5KS80AIP17",
+          "UNII:RJP4GEG36M",
+          "UNII:C25RP4RHW7"
+        ],
+        "canonical": {
+          "curie": "CHEBI:68579",
+          "preferred_name": "Rivaroxaban",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "XARELTO XR",
+        "status": 200,
+        "latency_s": 0.5682737822644413,
+        "curies": [
+          "CHEBI:207316",
+          "CHEBI:209098",
+          "PUBCHEM.COMPOUND:9932718",
+          "UNII:748C75726M",
+          "CHEBI:216666"
+        ],
+        "canonical": {
+          "curie": "CHEBI:207316",
+          "preferred_name": "XR-334",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Peritoneal dialysis",
+        "status": 200,
+        "latency_s": 0.5454968330450356,
+        "curies": [
+          "UMLS:C0031139",
+          "UMLS:C3840095",
+          "UMLS:C0274418",
+          "UMLS:C0456239",
+          "UMLS:C2315425"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0031139",
+          "preferred_name": "Peritoneal Dialysis",
+          "types": [
+            "Procedure",
+            "ActivityAndBehavior",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "XELJANZ",
+        "status": 200,
+        "latency_s": 0.5759973279200494,
+        "curies": [
+          "CHEBI:71197",
+          "CHEBI:71200",
+          "UMLS:C4238144"
+        ],
+        "canonical": {
+          "curie": "CHEBI:71197",
+          "preferred_name": "tofacitinib citrate",
+          "types": [
+            "MolecularMixture",
+            "ChemicalMixture",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "PROACTIV MD DAILY OIL CONTROL SPF 30",
+        "status": 200,
+        "latency_s": 0.716588597279042,
+        "curies": [
+          "PUBCHEM.COMPOUND:139291139",
+          "DRUGBANK:DB09422",
+          "UMLS:C2683411",
+          "CHEBI:140618",
+          "DRUGBANK:DB13961"
+        ],
+        "canonical": {
+          "curie": "PUBCHEM.COMPOUND:139291139",
+          "preferred_name": "Mineral oil",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "ARELTO",
+        "status": 200,
+        "latency_s": 0.26299342466518283,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "Rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.5582245802506804,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008383",
+          "preferred_name": "rheumatoid arthritis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "DIANA LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE",
+        "status": 200,
+        "latency_s": 1.413083951920271,
+        "curies": [
+          "CHEBI:3311",
+          "RXCUI:804919",
+          "CHEBI:3309",
+          "CHEBI:3310",
+          "CHEBI:9679"
+        ],
+        "canonical": {
+          "curie": "CHEBI:3311",
+          "preferred_name": "Calcium carbonate",
+          "types": [
+            "MolecularMixture",
+            "ChemicalMixture",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Thrombosis prophylaxis",
+        "status": 200,
+        "latency_s": 0.5560186239890754,
+        "curies": [
+          "UMLS:C0877156",
+          "UMLS:C0877621",
+          "UMLS:C2164678",
+          "MONDO:0002907",
+          "UMLS:C0199242"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0877156",
+          "preferred_name": "Coronary artery thrombosis prophylaxis",
+          "types": [
+            "Procedure",
+            "ActivityAndBehavior",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "XARELTO XR",
+        "status": 200,
+        "latency_s": 0.5752098788507283,
+        "curies": [
+          "CHEBI:207316",
+          "CHEBI:209098",
+          "PUBCHEM.COMPOUND:9932718",
+          "UNII:748C75726M",
+          "CHEBI:216666"
+        ],
+        "canonical": {
+          "curie": "CHEBI:207316",
+          "preferred_name": "XR-334",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "DIALUID",
+        "status": 200,
+        "latency_s": 0.2577067310921848,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "Dialysis solution",
+        "status": 200,
+        "latency_s": 0.6051379051059484,
+        "curies": [
+          "UMLS:C0569903",
+          "UMLS:C3505190",
+          "UMLS:C0571215",
+          "UMLS:C0731794",
+          "UMLS:C0353714"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0569903",
+          "preferred_name": "Peritoneal dialysis solution adverse reaction",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "DIANEAL LOW CALCIUM PERITONEAL DIALYSIS SOLUTION WITH DEXTROSE",
+        "status": 200,
+        "latency_s": 1.0354222720488906,
+        "curies": [
+          "UMLS:C2344965",
+          "CHEBI:3311",
+          "RXCUI:804919",
+          "CHEBI:3309",
+          "CHEBI:3310"
+        ],
+        "canonical": {
+          "curie": "UMLS:C2344965",
+          "preferred_name": "Dianeal PD-2/4.25",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "Hypermagnesemia",
+        "status": 200,
+        "latency_s": 0.6140792751684785,
+        "curies": [
+          "HP:0002918",
+          "NCIT:C37969",
+          "NCIT:C143555",
+          "MP:0010092",
+          "UMLS:C1522135"
+        ],
+        "canonical": {
+          "curie": "HP:0002918",
+          "preferred_name": "Hypermagnesemia",
+          "types": [
+            "PhenotypicFeature",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "PAXLOVID",
+        "status": 200,
+        "latency_s": 0.6132601778954268,
+        "curies": [
+          "CHEBI:192712",
+          "UMLS:C5565871",
+          "UMLS:C5980300",
+          "UMLS:C5551350",
+          "UMLS:C5575086"
+        ],
+        "canonical": {
+          "curie": "CHEBI:192712",
+          "preferred_name": "Paxlovid",
+          "types": [
+            "ChemicalMixture",
+            "OntologyClass",
+            "ChemicalEntity"
+          ]
+        }
+      },
+      {
+        "term": "COVID-19 treatment",
+        "status": 200,
+        "latency_s": 0.6257892958819866,
+        "curies": [
+          "UMLS:C5244048",
+          "MONDO:0100096",
+          "MONDO:0100233",
+          "RXCUI:2606075",
+          "MONDO:0100163"
+        ],
+        "canonical": {
+          "curie": "UMLS:C5244048",
+          "preferred_name": "COVID-19 treatment",
+          "types": [
+            "Procedure",
+            "ActivityAndBehavior",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "NUPLAZID",
+        "status": 200,
+        "latency_s": 0.5906385369598866,
+        "curies": [
+          "CHEBI:133014",
+          "CHEBI:133017"
+        ],
+        "canonical": {
+          "curie": "CHEBI:133014",
+          "preferred_name": "pimavanserin tartrate",
+          "types": [
+            "MolecularMixture",
+            "ChemicalMixture",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "XARELTO",
+        "status": 200,
+        "latency_s": 0.5902919769287109,
+        "curies": [
+          "CHEBI:68579",
+          "UMLS:C4699670",
+          "UMLS:C3871569",
+          "UMLS:C3856151",
+          "UNII:ESP6837WVA"
+        ],
+        "canonical": {
+          "curie": "CHEBI:68579",
+          "preferred_name": "Rivaroxaban",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Deep vein thrombosis",
+        "status": 200,
+        "latency_s": 0.5833495082333684,
+        "curies": [
+          "UMLS:C0340708",
+          "HP:0004850",
+          "UMLS:C2717899",
+          "UMLS:C0919631",
+          "UMLS:C0340714"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0340708",
+          "preferred_name": "Deep vein thrombosis of lower limb",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Parkinson's disease psychosis",
+        "status": 200,
+        "latency_s": 0.6239847079850733,
+        "curies": [
+          "UMLS:C3805119",
+          "MONDO:0002330",
+          "MONDO:0006730",
+          "MONDO:0018623",
+          "UMLS:C4304474"
+        ],
+        "canonical": {
+          "curie": "UMLS:C3805119",
+          "preferred_name": "Parkinson's disease psychosis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "AUBAGIO",
+        "status": 200,
+        "latency_s": 0.591383206192404,
+        "curies": [
+          "CHEBI:68540"
+        ],
+        "canonical": {
+          "curie": "CHEBI:68540",
+          "preferred_name": "Teriflunomide",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.5928253820165992,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005301",
+          "preferred_name": "multiple sclerosis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.5616764361038804,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005301",
+          "preferred_name": "multiple sclerosis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "AMPYRA",
+        "status": 200,
+        "latency_s": 0.5895527866668999,
+        "curies": [
+          "CHEBI:34385",
+          "UMLS:C2732156"
+        ],
+        "canonical": {
+          "curie": "CHEBI:34385",
+          "preferred_name": "Dalfampridine",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "MIRENA",
+        "status": 200,
+        "latency_s": 0.643106765113771,
+        "curies": [
+          "NCBITaxon:3478219",
+          "UMLS:C0586071",
+          "UMLS:C4067609",
+          "CHEBI:6443"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:3478219",
+          "preferred_name": "Manerebia inderena mirena",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "ELIGARD",
+        "status": 200,
+        "latency_s": 0.6099619357846677,
+        "curies": [
+          "UMLS:C3642287",
+          "UMLS:C3502989",
+          "UMLS:C3502848",
+          "UMLS:C3503366",
+          "UMLS:C0085272"
+        ],
+        "canonical": {
+          "curie": "UMLS:C3642287",
+          "preferred_name": "Depo-Eligard",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "Prostate cancer",
+        "status": 200,
+        "latency_s": 0.5917153782211244,
+        "curies": [
+          "MONDO:0008315",
+          "MONDO:0700275",
+          "UMLS:C0278838",
+          "MONDO:0011270",
+          "MONDO:0012093"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008315",
+          "preferred_name": "prostate cancer",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Heavy menstrual bleeding",
+        "status": 200,
+        "latency_s": 0.6196881290525198,
+        "curies": [
+          "HP:0000132",
+          "HP:0000225",
+          "HP:0040184",
+          "UMLS:C0341164",
+          "MONDO:0021645"
+        ],
+        "canonical": {
+          "curie": "HP:0000132",
+          "preferred_name": "Menorrhagia",
+          "types": [
+            "PhenotypicFeature",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "CHANTIX",
+        "status": 200,
+        "latency_s": 0.571230776142329,
+        "curies": [
+          "CHEBI:84500",
+          "CHEBI:84507",
+          "UMLS:C3255215",
+          "UMLS:C2364396",
+          "PUBCHEM.COMPOUND:170361"
+        ],
+        "canonical": {
+          "curie": "CHEBI:84500",
+          "preferred_name": "varenicline",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Narcolepsy",
+        "status": 200,
+        "latency_s": 0.6138423229567707,
+        "curies": [
+          "MONDO:0021107",
+          "MP:0005279",
+          "MONDO:0008062",
+          "MONDO:0019371",
+          "MONDO:0016158"
+        ],
+        "canonical": {
+          "curie": "MONDO:0021107",
+          "preferred_name": "narcolepsy",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Smoking cessation",
+        "status": 200,
+        "latency_s": 0.6368089141324162,
+        "curies": [
+          "UMLS:C1692317",
+          "UMLS:C1621885",
+          "UMLS:C2586081",
+          "UMLS:C3179142",
+          "UMLS:C1145328"
+        ],
+        "canonical": {
+          "curie": "UMLS:C1692317",
+          "preferred_name": "Smoking cessation assistance",
+          "types": [
+            "Procedure",
+            "ActivityAndBehavior",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "XYREM",
+        "status": 200,
+        "latency_s": 0.6348394611850381,
+        "curies": [
+          "CHEBI:30830"
+        ],
+        "canonical": {
+          "curie": "CHEBI:30830",
+          "preferred_name": "gamma-Hydroxybutyric acid",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "GILENYA",
+        "status": 200,
+        "latency_s": 0.5646062381565571,
+        "curies": [
+          "CHEBI:63115"
+        ],
+        "canonical": {
+          "curie": "CHEBI:63115",
+          "preferred_name": "Fingolimod",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Multiple sclerosis",
+        "status": 200,
+        "latency_s": 0.5756761617958546,
+        "curies": [
+          "MONDO:0005301",
+          "MONDO:0005314",
+          "MONDO:0000450",
+          "MONDO:0000451",
+          "MONDO:0005284"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005301",
+          "preferred_name": "multiple sclerosis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "AVANDIA",
+        "status": 200,
+        "latency_s": 0.5879191681742668,
+        "curies": [
+          "UMLS:C0875967",
+          "CHEBI:8892",
+          "CHEBI:50122",
+          "UMLS:C0875726",
+          "UMLS:C0875725"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0875967",
+          "preferred_name": "Avandia",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "Diabetes mellitus type 2",
+        "status": 200,
+        "latency_s": 0.5859574568457901,
+        "curies": [
+          "MONDO:0005408",
+          "MONDO:0005148",
+          "UMLS:C2874119",
+          "UMLS:C2874123",
+          "UMLS:C3853362"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005408",
+          "preferred_name": "diabetes mellitus type 2 associated cataract",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "OXYCONTIN",
+        "status": 200,
+        "latency_s": 0.82254928490147,
+        "curies": [
+          "PUBCHEM.COMPOUND:129724475",
+          "CHEBI:7852",
+          "UMLS:C2682217",
+          "UMLS:C2682215",
+          "UMLS:C2682706"
+        ],
+        "canonical": {
+          "curie": "PUBCHEM.COMPOUND:129724475",
+          "preferred_name": "Oxycontin hydrochloride",
+          "types": [
+            "MolecularMixture",
+            "ChemicalMixture",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Chronic pain",
+        "status": 200,
+        "latency_s": 0.558348392136395,
+        "curies": [
+          "HP:0012532",
+          "MONDO:0024317",
+          "UMLS:C3178789",
+          "UMLS:C5700083",
+          "UMLS:C5818010"
+        ],
+        "canonical": {
+          "curie": "HP:0012532",
+          "preferred_name": "Chronic pain",
+          "types": [
+            "PhenotypicFeature",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "NUPLAZID",
+        "status": 200,
+        "latency_s": 0.5358686568215489,
+        "curies": [
+          "CHEBI:133014",
+          "CHEBI:133017"
+        ],
+        "canonical": {
+          "curie": "CHEBI:133014",
+          "preferred_name": "pimavanserin tartrate",
+          "types": [
+            "MolecularMixture",
+            "ChemicalMixture",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "MIRENA",
+        "status": 200,
+        "latency_s": 0.6749249519780278,
+        "curies": [
+          "NCBITaxon:3478219",
+          "UMLS:C0586071",
+          "UMLS:C4067609",
+          "CHEBI:6443"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:3478219",
+          "preferred_name": "Manerebia inderena mirena",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "Schizophrenia",
+        "status": 200,
+        "latency_s": 0.5914084897376597,
+        "curies": [
+          "MONDO:0005090",
+          "MONDO:0001484",
+          "MONDO:0011552",
+          "UMLS:C0036347",
+          "MONDO:0957430"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005090",
+          "preferred_name": "schizophrenia",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "RINVOQ",
+        "status": 200,
+        "latency_s": 0.5974322380498052,
+        "curies": [
+          "UNII:4RA0KN46E0",
+          "UMLS:C5925994"
+        ],
+        "canonical": {
+          "curie": "UNII:4RA0KN46E0",
+          "preferred_name": "Upadacitinib",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.5350429560057819,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008383",
+          "preferred_name": "rheumatoid arthritis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "ZYPREXA",
+        "status": 200,
+        "latency_s": 0.7157016429118812,
+        "curies": [
+          "CHEBI:7735",
+          "UMLS:C0876225",
+          "UMLS:C2740887"
+        ],
+        "canonical": {
+          "curie": "CHEBI:7735",
+          "preferred_name": "Olanzapine",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "CIIMZA",
+        "status": 200,
+        "latency_s": 0.26518725557252765,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "CONTRACEPTION",
+        "status": 200,
+        "latency_s": 0.615694360807538,
+        "curies": [
+          "UMLS:C4546343",
+          "UMLS:C0759527",
+          "UMLS:C3665793",
+          "UMLS:C3532599",
+          "UMLS:C3532589"
+        ],
+        "canonical": {
+          "curie": "UMLS:C4546343",
+          "preferred_name": "Uses contraception (finding)",
+          "types": [
+            "Phenomenon",
+            "Occurrent",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "SIMPONI",
+        "status": 200,
+        "latency_s": 0.5647299606353045,
+        "curies": [
+          "UNII:91X1KLU43E",
+          "UMLS:C3651896",
+          "UMLS:C3503717",
+          "UMLS:C3888394"
+        ],
+        "canonical": {
+          "curie": "UNII:91X1KLU43E",
+          "preferred_name": "Golimumab",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "Contrast dye",
+        "status": 200,
+        "latency_s": 0.5696616298519075,
+        "curies": [
+          "UMLS:C0742795",
+          "UMLS:C0271777",
+          "UMLS:C0742798",
+          "UMLS:C0742797",
+          "UMLS:C0742799"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0742795",
+          "preferred_name": "contrast dye",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "Ulcerative colitis",
+        "status": 200,
+        "latency_s": 0.600049844942987,
+        "curies": [
+          "MONDO:0005101",
+          "UMLS:C1260710",
+          "UMLS:C3888502",
+          "UMLS:C3697010",
+          "MONDO:0030314"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005101",
+          "preferred_name": "ulcerative colitis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "CIMZIA",
+        "status": 200,
+        "latency_s": 0.559238719753921,
+        "curies": [
+          "UMLS:C1172157",
+          "UNII:UMD07X179E",
+          "UMLS:C6065525",
+          "UMLS:C6022569",
+          "UMLS:C6022568"
+        ],
+        "canonical": {
+          "curie": "UMLS:C1172157",
+          "preferred_name": "CDP870",
+          "types": [
+            "Protein",
+            "GeneProductMixin",
+            "Polypeptide"
+          ]
+        }
+      },
+      {
+        "term": "TP53",
+        "status": 200,
+        "latency_s": 0.5446268226951361,
+        "curies": [
+          "NCBIGene:397276",
+          "NCBIGene:7157",
+          "NCBIGene:30590",
+          "NCBIGene:24842",
+          "NCBIGene:105934647"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:397276",
+          "preferred_name": "TP53",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "Crohn's disease",
+        "status": 200,
+        "latency_s": 0.5763199990615249,
+        "curies": [
+          "UMLS:C3888864",
+          "MONDO:0005011",
+          "MONDO:0005532",
+          "UMLS:C0267382",
+          "UMLS:C1960764"
+        ],
+        "canonical": {
+          "curie": "UMLS:C3888864",
+          "preferred_name": "Fistulising Crohn's disease",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "lung cancer",
+        "status": 200,
+        "latency_s": 0.5573868700303137,
+        "curies": [
+          "MONDO:0008903",
+          "UMLS:C0855005",
+          "UMLS:C0278987",
+          "UMLS:C0862802",
+          "UMLS:C0278517"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008903",
+          "preferred_name": "lung cancer",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "aspirin",
+        "status": 200,
+        "latency_s": 0.7805742602795362,
+        "curies": [
+          "RXCUI:374711",
+          "RXCUI:370643",
+          "CHEBI:15365",
+          "UNII:XAN4V337CI",
+          "RXCUI:374702"
+        ],
+        "canonical": {
+          "curie": "RXCUI:374711",
+          "preferred_name": "aspirin / oxycodone Oral Tablet",
+          "types": [
+            "Drug",
+            "ChemicalOrDrugOrTreatment",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Bifidobacterium",
+        "status": 200,
+        "latency_s": 0.552369860932231,
+        "curies": [
+          "NCBITaxon:1678",
+          "DRUGBANK:DB14222",
+          "DRUGBANK:DB16550",
+          "DRUGBANK:DB16538",
+          "RXCUI:1150099"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:1678",
+          "preferred_name": "Bifidobacterium",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "metformin",
+        "status": 200,
+        "latency_s": 0.8719233549199998,
+        "curies": [
+          "CHEBI:6801",
+          "CHEBI:747603",
+          "CHEBI:6802",
+          "UNII:V9AZJ7GJZ1",
+          "UNII:CG73ERQ805"
+        ],
+        "canonical": {
+          "curie": "CHEBI:6801",
+          "preferred_name": "Metformin",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "ibuprofen",
+        "status": 200,
+        "latency_s": 1.1026332410983741,
+        "curies": [
+          "CHEBI:5855",
+          "CHEBI:31685",
+          "CHEBI:132922",
+          "CHEBI:135336",
+          "CHEBI:88735"
+        ],
+        "canonical": {
+          "curie": "CHEBI:5855",
+          "preferred_name": "Ibuprofen",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Alistipes",
+        "status": 200,
+        "latency_s": 0.5392942228354514,
+        "curies": [
+          "NCBITaxon:239759",
+          "UMLS:C1490417",
+          "NCBITaxon:28117",
+          "NCBITaxon:214856",
+          "NCBITaxon:265312"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:239759",
+          "preferred_name": "Alistipes",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "Lactobacillus",
+        "status": 200,
+        "latency_s": 0.6326348930597305,
+        "curies": [
+          "NCBITaxon:1578",
+          "DRUGBANK:DB15823",
+          "DRUGBANK:DB14224",
+          "DRUGBANK:DB16540",
+          "DRUGBANK:DB16541"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:1578",
+          "preferred_name": "Lactobacillus",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "Eubacterium rectale",
+        "status": 200,
+        "latency_s": 0.5557863432914019,
+        "curies": [
+          "UMLS:C3510361",
+          "UMLS:C3496335",
+          "UMLS:C3510362",
+          "UMLS:C0317478",
+          "NCBITaxon:657318"
+        ],
+        "canonical": {
+          "curie": "UMLS:C3510361",
+          "preferred_name": "colon microbiota eubacterium rectale (roseburia spp)",
+          "types": [
+            "Phenomenon",
+            "Occurrent",
+            "NamedThing"
+          ]
+        }
+      },
+      {
+        "term": "Faecalibacterium prausnitzii",
+        "status": 200,
+        "latency_s": 0.5467265252955258,
+        "curies": [
+          "NCBITaxon:853",
+          "NCBITaxon:411485",
+          "NCBITaxon:657322",
+          "NCBITaxon:718252",
+          "UMLS:C3510363"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:853",
+          "preferred_name": "Faecalibacterium prausnitzii",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "Helicobacter pylori",
+        "status": 200,
+        "latency_s": 0.5641009276732802,
+        "curies": [
+          "NCBITaxon:210",
+          "HP:0005202",
+          "MONDO:0006781",
+          "MONDO:0010853",
+          "UMLS:C0343378"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:210",
+          "preferred_name": "Helicobacter pylori",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "Staphylococcus aureus",
+        "status": 200,
+        "latency_s": 0.5639410680159926,
+        "curies": [
+          "NCBITaxon:1280",
+          "MONDO:0005545",
+          "MONDO:0100073",
+          "MONDO:0041879",
+          "UMLS:C3486580"
+        ],
+        "canonical": {
+          "curie": "NCBITaxon:1280",
+          "preferred_name": "Staphylococcus aureus",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "non-alcoholic fatty liver disease",
+        "status": 200,
+        "latency_s": 0.5551416948437691,
+        "curies": [
+          "UMLS:C5577866",
+          "UMLS:C5577867",
+          "MONDO:0013209",
+          "MONDO:0021104",
+          "MONDO:0043693"
+        ],
+        "canonical": {
+          "curie": "UMLS:C5577866",
+          "preferred_name": "Non-alcoholic fatty liver disease stage F3",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "type 2 diabetes",
+        "status": 200,
+        "latency_s": 0.5229084840975702,
+        "curies": [
+          "MONDO:0005148",
+          "UMLS:C0877302",
+          "UMLS:C0342295",
+          "UMLS:C1279313",
+          "UMLS:C0342297"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005148",
+          "preferred_name": "type 2 diabetes mellitus",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "inflammatory bowel disease",
+        "status": 200,
+        "latency_s": 0.5869881007820368,
+        "curies": [
+          "MONDO:0005265",
+          "MONDO:0013153",
+          "MONDO:0014338",
+          "MONDO:0008617",
+          "MONDO:0011087"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005265",
+          "preferred_name": "inflammatory bowel disease",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Alzheimer disease",
+        "status": 200,
+        "latency_s": 0.5282226712442935,
+        "curies": [
+          "MONDO:0004975",
+          "MONDO:0011913",
+          "MONDO:0012153",
+          "MONDO:0007088",
+          "MONDO:0007089"
+        ],
+        "canonical": {
+          "curie": "MONDO:0004975",
+          "preferred_name": "Alzheimer disease",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "attention deficit hyperactivity disorder",
+        "status": 200,
+        "latency_s": 0.5674779643304646,
+        "curies": [
+          "MONDO:0005302",
+          "MONDO:0007743",
+          "MONDO:0859261",
+          "MONDO:0012149",
+          "MONDO:0012150"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005302",
+          "preferred_name": "attention deficit hyperactivity disorder, inattentive type",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "rheumatoid arthritis",
+        "status": 200,
+        "latency_s": 0.5272051417268813,
+        "curies": [
+          "MONDO:0008383",
+          "MP:0003561",
+          "UMLS:C0409651",
+          "MONDO:0004586",
+          "MONDO:0011429"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008383",
+          "preferred_name": "rheumatoid arthritis",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Breast cancer",
+        "status": 200,
+        "latency_s": 0.5504166861064732,
+        "curies": [
+          "MONDO:0007254",
+          "UniProtKB:O75815-1",
+          "MONDO:0000618",
+          "UMLS:C0278493",
+          "MONDO:0006512"
+        ],
+        "canonical": {
+          "curie": "MONDO:0007254",
+          "preferred_name": "breast cancer",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "systemic lupus erythematosus",
+        "status": 200,
+        "latency_s": 0.5831968663260341,
+        "curies": [
+          "MONDO:0007915",
+          "UMLS:C0521471",
+          "MONDO:0019725",
+          "MONDO:0044113",
+          "MONDO:0859083"
+        ],
+        "canonical": {
+          "curie": "MONDO:0007915",
+          "preferred_name": "systemic lupus erythematosus",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Colorectal cancer",
+        "status": 200,
+        "latency_s": 0.530746344011277,
+        "curies": [
+          "MONDO:0005575",
+          "UMLS:C4544822",
+          "UMLS:C0854750",
+          "UMLS:C0677949",
+          "UMLS:C0677950"
+        ],
+        "canonical": {
+          "curie": "MONDO:0005575",
+          "preferred_name": "colorectal cancer",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "Prostate cancer",
+        "status": 200,
+        "latency_s": 0.5186720071360469,
+        "curies": [
+          "MONDO:0008315",
+          "MONDO:0700275",
+          "UMLS:C0278838",
+          "MONDO:0011270",
+          "MONDO:0012093"
+        ],
+        "canonical": {
+          "curie": "MONDO:0008315",
+          "preferred_name": "prostate cancer",
+          "types": [
+            "Disease",
+            "DiseaseOrPhenotypicFeature",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "BRCA2",
+        "status": 200,
+        "latency_s": 0.5436050049029291,
+        "curies": [
+          "NCBIGene:675",
+          "NCBIGene:12190",
+          "NCBIGene:493878",
+          "NCBIGene:101698015",
+          "NCBIGene:452526"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:675",
+          "preferred_name": "BRCA2",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "BRCA1",
+        "status": 200,
+        "latency_s": 0.5969173666089773,
+        "curies": [
+          "NCBIGene:672",
+          "NCBIGene:103566867",
+          "NCBIGene:101705460",
+          "NCBIGene:105080080",
+          "NCBIGene:109573698"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:672",
+          "preferred_name": "BRCA1",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "EGFR",
+        "status": 200,
+        "latency_s": 0.5442631738260388,
+        "curies": [
+          "NCBIGene:1956",
+          "NCBIGene:101003588",
+          "NCBIGene:13649",
+          "NCBIGene:396494",
+          "NCBIGene:111555709"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:1956",
+          "preferred_name": "EGFR",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "KRAS",
+        "status": 200,
+        "latency_s": 0.5624426528811455,
+        "curies": [
+          "NCBIGene:100049322",
+          "NCBIGene:3845",
+          "NCBIGene:109867582",
+          "NCBIGene:112218714",
+          "NCBIGene:16653"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:100049322",
+          "preferred_name": "kras",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "APOE",
+        "status": 200,
+        "latency_s": 0.5500657837837934,
+        "curies": [
+          "NCBIGene:348",
+          "NCBIGene:11816",
+          "NCBIGene:476438",
+          "NCBIGene:102170314",
+          "NCBIGene:105869509"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:348",
+          "preferred_name": "APOE",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "TNF",
+        "status": 200,
+        "latency_s": 0.54542515007779,
+        "curies": [
+          "NCBIGene:397086",
+          "NCBIGene:7124",
+          "NCBIGene:21926",
+          "NCBIGene:403922",
+          "NCBIGene:24835"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:397086",
+          "preferred_name": "TNF",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "IL6",
+        "status": 200,
+        "latency_s": 0.5425939629785717,
+        "curies": [
+          "NCBIGene:3569",
+          "NCBIGene:16193",
+          "NCBIGene:24498",
+          "NCBIGene:399500",
+          "NCBIGene:463288"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:3569",
+          "preferred_name": "IL6",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "LEP",
+        "status": 200,
+        "latency_s": 0.5585644007660449,
+        "curies": [
+          "NCBIGene:396832",
+          "NCBIGene:3952",
+          "NCBIGene:25608",
+          "NCBIGene:16846",
+          "NCBIGene:106839522"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:396832",
+          "preferred_name": "LEP",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "ADIPOQ",
+        "status": 200,
+        "latency_s": 0.5702806613408029,
+        "curies": [
+          "NCBIGene:9370",
+          "NCBIGene:282865",
+          "NCBIGene:403625",
+          "NCBIGene:397660",
+          "NCBIGene:100481319"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:9370",
+          "preferred_name": "ADIPOQ",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "cholesterol",
+        "status": 200,
+        "latency_s": 0.5637669791467488,
+        "curies": [
+          "CHEBI:16113",
+          "PUBCHEM.COMPOUND:304",
+          "CHEBI:41321",
+          "MONDO:0005568",
+          "CHEBI:17495"
+        ],
+        "canonical": {
+          "curie": "CHEBI:16113",
+          "preferred_name": "Cholesterol",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "glucose",
+        "status": 200,
+        "latency_s": 1.003615217283368,
+        "curies": [
+          "CHEBI:17234",
+          "EFO:0004468",
+          "UMLS:C5781949",
+          "UMLS:C3643617",
+          "MONDO:0001076"
+        ],
+        "canonical": {
+          "curie": "CHEBI:17234",
+          "preferred_name": "D-glucose",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "insulin",
+        "status": 200,
+        "latency_s": 1.0769514637067914,
+        "curies": [
+          "UMLS:C0021641",
+          "PANTHER.FAMILY:PTHR11454:SF9",
+          "CHEBI:5931",
+          "NCBIGene:483665",
+          "NCBIGene:105918359"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0021641",
+          "preferred_name": "Insulin",
+          "types": [
+            "Protein",
+            "GeneProductMixin",
+            "Polypeptide"
+          ]
+        }
+      },
+      {
+        "term": "triglycerides",
+        "status": 200,
+        "latency_s": 0.5608314769342542,
+        "curies": [
+          "CHEBI:17855",
+          "UMLS:C4554056",
+          "EFO:0004530",
+          "DRUGBANK:DB13959",
+          "MONDO:0005347"
+        ],
+        "canonical": {
+          "curie": "CHEBI:17855",
+          "preferred_name": "triglyceride",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "butyric acid",
+        "status": 200,
+        "latency_s": 0.5563503289595246,
+        "curies": [
+          "CHEBI:30772",
+          "CHEBI:40114",
+          "UNII:EH7DJJ4GUV",
+          "CHEBI:165404",
+          "UNII:B9QYA11V0F"
+        ],
+        "canonical": {
+          "curie": "CHEBI:30772",
+          "preferred_name": "Butyric Acid",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "propionic acid",
+        "status": 200,
+        "latency_s": 0.5593234249390662,
+        "curies": [
+          "CHEBI:30768",
+          "CHEBI:85487",
+          "UNII:ELW4MN66TD",
+          "CHEBI:80605",
+          "CHEBI:189725"
+        ],
+        "canonical": {
+          "curie": "CHEBI:30768",
+          "preferred_name": "Propanoic acid",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "tryptophan",
+        "status": 200,
+        "latency_s": 0.5774715817533433,
+        "curies": [
+          "CHEBI:16828",
+          "CHEBI:27897",
+          "UMLS:C0041249",
+          "UniProtKB:P23381-1",
+          "CHEBI:16296"
+        ],
+        "canonical": {
+          "curie": "CHEBI:16828",
+          "preferred_name": "Tryptophan",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "fecal microbiota transplant",
+        "status": 200,
+        "latency_s": 0.5912494990043342,
+        "curies": [
+          "DRUGBANK:DB17743",
+          "UMLS:C5231239",
+          "RXCUI:2636538",
+          "MONDO:0019088",
+          "MONDO:0958127"
+        ],
+        "canonical": {
+          "curie": "DRUGBANK:DB17743",
+          "preferred_name": "Fecal microbiota",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "probiotics",
+        "status": 200,
+        "latency_s": 0.5779990069568157,
+        "curies": [
+          "MESH:D019936",
+          "UMLS:C4718264",
+          "UMLS:C5762415",
+          "UMLS:C5762184",
+          "UMLS:C4489960"
+        ],
+        "canonical": {
+          "curie": "MESH:D019936",
+          "preferred_name": "Probiotics",
+          "types": [
+            "OrganismTaxon",
+            "NamedThing",
+            "Entity"
+          ]
+        }
+      },
+      {
+        "term": "atororvastatin",
+        "status": 200,
+        "latency_s": 0.2554439380764961,
+        "curies": [],
+        "canonical": null
+      },
+      {
+        "term": "antibiotics",
+        "status": 200,
+        "latency_s": 0.5399456550367177,
+        "curies": [
+          "UMLS:C0003232",
+          "UMLS:C3540706",
+          "UMLS:C3540704",
+          "UMLS:C3540708",
+          "UMLS:C3540709"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0003232",
+          "preferred_name": "Antibiotics",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "trimethoprim",
+        "status": 200,
+        "latency_s": 0.5520304250530899,
+        "curies": [
+          "CHEBI:45924",
+          "UNII:E377MF8EQ8",
+          "UNII:9XE000OU9B",
+          "UNII:P3K8GP9FDQ",
+          "PUBCHEM.COMPOUND:64931"
+        ],
+        "canonical": {
+          "curie": "CHEBI:45924",
+          "preferred_name": "Trimethoprim",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "fluoxetine",
+        "status": 200,
+        "latency_s": 0.6980557153001428,
+        "curies": [
+          "CHEBI:5118",
+          "CHEBI:145458",
+          "CHEBI:86991",
+          "CHEBI:86992",
+          "CHEBI:86996"
+        ],
+        "canonical": {
+          "curie": "CHEBI:5118",
+          "preferred_name": "Fluoxetine",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "lisinopril",
+        "status": 200,
+        "latency_s": 0.6044839429669082,
+        "curies": [
+          "CHEBI:43755",
+          "UMLS:C0065374",
+          "PUBCHEM.COMPOUND:118984969",
+          "CHEBI:6503",
+          "PUBCHEM.COMPOUND:22887897"
+        ],
+        "canonical": {
+          "curie": "CHEBI:43755",
+          "preferred_name": "Lisinopril",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "vitamin D",
+        "status": 200,
+        "latency_s": 0.5659632701426744,
+        "curies": [
+          "UNII:9VU1KI44GP",
+          "MONDO:0100471",
+          "UniProtKB:P02774-1",
+          "UniProtKB:A0A9J8AKB7",
+          "MONDO:0024299"
+        ],
+        "canonical": {
+          "curie": "UNII:9VU1KI44GP",
+          "preferred_name": "VITAMIN D",
+          "types": [
+            "ChemicalEntity",
+            "PhysicalEssence",
+            "ChemicalOrDrugOrTreatment"
+          ]
+        }
+      },
+      {
+        "term": "folic acid",
+        "status": 200,
+        "latency_s": 0.651567171793431,
+        "curies": [
+          "CHEBI:27470",
+          "PUBCHEM.COMPOUND:135444779",
+          "MONDO:0001860",
+          "PUBCHEM.COMPOUND:135718460",
+          "CHEBI:89846"
+        ],
+        "canonical": {
+          "curie": "CHEBI:27470",
+          "preferred_name": "Folic acid",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "iron",
+        "status": 200,
+        "latency_s": 0.7586536318995059,
+        "curies": [
+          "CHEBI:18248",
+          "NCBIGene:1254300",
+          "NCBIGene:93313788",
+          "NCBIGene:305629263",
+          "CHEBI:192761"
+        ],
+        "canonical": {
+          "curie": "CHEBI:18248",
+          "preferred_name": "Iron",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "hepcidin",
+        "status": 200,
+        "latency_s": 0.5664786309935153,
+        "curies": [
+          "PUBCHEM.COMPOUND:91864521",
+          "PUBCHEM.COMPOUND:139033195",
+          "UMLS:C0966897",
+          "PR:000008438",
+          "PANTHER.FAMILY:PTHR16877:SF0"
+        ],
+        "canonical": {
+          "curie": "PUBCHEM.COMPOUND:91864521",
+          "preferred_name": "Hepcidin",
+          "types": [
+            "SmallMolecule",
+            "MolecularEntity",
+            "OntologyClass"
+          ]
+        }
+      },
+      {
+        "term": "C-reactive protein",
+        "status": 200,
+        "latency_s": 0.5787405050359666,
+        "curies": [
+          "UMLS:C0006560",
+          "PR:000005897",
+          "PANTHER.FAMILY:PTHR45869:SF7",
+          "UNII:SCI18J406O",
+          "NCBIGene:108892153"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0006560",
+          "preferred_name": "C-reactive protein",
+          "types": [
+            "Protein",
+            "GeneProductMixin",
+            "Polypeptide"
+          ]
+        }
+      },
+      {
+        "term": "ferritin",
+        "status": 200,
+        "latency_s": 0.5910400957800448,
+        "curies": [
+          "NCBIGene:100205436",
+          "UMLS:C0015879",
+          "CHEBI:82594",
+          "PANTHER.FAMILY:PTHR11431",
+          "EFO:0004459"
+        ],
+        "canonical": {
+          "curie": "NCBIGene:100205436",
+          "preferred_name": "ferritin",
+          "types": [
+            "Gene",
+            "GeneOrGeneProduct",
+            "GeneOrGeneProductOrGeneFamily"
+          ]
+        }
+      },
+      {
+        "term": "interleukin-6",
+        "status": 200,
+        "latency_s": 0.5613872949033976,
+        "curies": [
+          "UMLS:C0021760",
+          "PR:000001393",
+          "PANTHER.FAMILY:PTHR48494:SF1",
+          "PANTHER.FAMILY:PTHR48494",
+          "NCBIGene:111545050"
+        ],
+        "canonical": {
+          "curie": "UMLS:C0021760",
+          "preferred_name": "interleukin-6",
+          "types": [
+            "Protein",
+            "GeneProductMixin",
+            "Polypeptide"
+          ]
+        }
+      },
+      {
+        "term": "tumor necrosis factor",
+        "status": 200,
+        "latency_s": 0.5639351420104504,
+        "curies": [
+          "UniProtKB:Q99732-1",
+          "PR:000000134",
+          "PANTHER.FAMILY:PTHR11471:SF23",
+          "UniProtKB:Q9BXJ1-1",
+          "UniProtKB:Q92956-1"
+        ],
+        "canonical": {
+          "curie": "UniProtKB:Q99732-1",
+          "preferred_name": "lipopolysaccharide-induced tumor necrosis factor-alpha factor isoform 1 (human)",
+          "types": [
+            "Protein",
+            "GeneProductMixin",
+            "Polypeptide"
+          ]
+        }
+      }
+    ],
+    "note": "per-term /lookup + /synonyms, the full identifier-record workflow"
+  }
+}

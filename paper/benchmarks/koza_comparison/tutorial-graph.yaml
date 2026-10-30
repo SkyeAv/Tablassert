@@ -1,0 +1,24 @@
+name: TUTORIAL_KG
+version: 1.0.0
+tables:
+  - ./tutorial-table.yaml
+fullmap: /local_raid1/sgoetz/DBSTORE/FULLMAP/fullmap
+rig:
+  source_info:
+    infores_id: infores:tutorial-kg
+    name: Tutorial tabular source
+    description: Example source data used by the Tablassert tutorial graph.
+    terms_of_use_info:
+      license_name: CC0 1.0 Universal
+      license_url: https://creativecommons.org/publicdomain/zero/1.0/
+    data_access_locations:
+      - Tutorial data - https://example.com/data.csv
+    source_status: unknown
+  ingest_info:
+    utility: Demonstrates how Tablassert turns configured tabular records into Translator-ready KGX.
+    scope: Gene-disease associations from the tutorial table, one edge per configured row.
+  provenance_info:
+    contributions:
+      - "Tutorial author: config author, data modeling"
+  artifact_base_url: https://example.com/tutorial-kg
+  artifact_base_path: ./tutorial-output
