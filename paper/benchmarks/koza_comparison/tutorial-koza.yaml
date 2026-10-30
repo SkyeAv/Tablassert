@@ -2,7 +2,7 @@ name: tutorial-koza
 
 reader:
   files:
-    - ./tutorial-data-10k.csv
+    - ./tutorial-data.csv
   format: csv
   delimiter: ","
 

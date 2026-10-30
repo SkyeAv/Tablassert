@@ -140,11 +140,11 @@ for normalization, resolution, database construction, and NDJSON writing. GIL-re
 regions use Rayon workers for CPU-heavy normalization and sharded lookups, enabling parallel
 execution even on GIL-enabled Python 3.11, without requiring free-threaded Python. This removes
 per-term Python callbacks and serial lookup bottlenecks; recipes and validation remain Python.
-The tutorial uses 29 recipe lines plus a 24-line graph wrapper; Koza's mapping-only version uses
-25 YAML and 31 Python lines, excluding comments and docstrings. Koza supports custom hosted
-resolution, avoiding local storage but adding code and service dependencies. Tablassert
-integrates resolution but requires the fullmap. Its retained ties differ from the hosted
-transform's top-hit policy, precluding identical-graph runtime claims.
+In the tutorial, Tablassert uses a 32-line table recipe and a 24-line graph wrapper (1,152
+non-whitespace characters). A mapping-only Koza example uses 25 YAML and 31 Python lines (1,275
+characters), excluding blank lines, comments, and docstrings. Line counts tie; Tablassert also
+configures resolution declaratively. The Koza example omits resolution,
+so this compares configuration size, not equivalent workflows.
 
 # Research impact statement
 

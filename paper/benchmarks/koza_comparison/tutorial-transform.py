@@ -1,8 +1,8 @@
 """Koza 2.7.0 transform equivalent of the Tablassert tutorial example.
 
 Emits one associated_with edge per row plus its two nodes. Entity resolution is
-NOT included in this mapping-only arm. The companion resolved transform adds
-hosted NameResolution and NodeNormalization (see README).
+NOT included in this mapping-only example.
+Koza mapping tables or custom code would be required.
 """
 
 from dataclasses import dataclass, field
