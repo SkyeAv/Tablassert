@@ -132,7 +132,7 @@ construction, and serializes NDJSON. GIL-released Rayon workers parallelize thes
 standard Python 3.11; Python retains recipe parsing, Pydantic validation, and orchestration.
 Maturin packages performant native code in PyPI wheels for Linux/macOS, standard Unix-like
 platforms for major bioinformatics ecosystems such as
-[Bioconda](https://github.com/bioconda/bioconda-recipes). Supported users need no Rust toolchain;
+Bioconda [@bioconda]. Supported users need no Rust toolchain;
 Windows users need WSL or a source build. The performance gain justifies added maintenance and
 readability costs.
 
