@@ -1,5 +1,5 @@
 ---
-title: 'Tablassert: Declarative Construction of NCATS Translator Knowledge Graphs from Biomedical Tables'
+title: 'Tablassert: Declarative Extraction of NCATS Translator Complicate Knowledge Graphs from Biomedical Tables'
 tags:
   - knowledge graph
   - KGX
@@ -44,9 +44,7 @@ Tablassert targets knowledge-graph engineers and bioinformaticians who hold tabu
 sources and need rigorously structured output without maintaining a transform pipeline per
 source. Extending beyond journal supplements, the same recipes apply to any relational source --
 trial registries, drug approval records, or a researcher's own tables -- and each build can emit
-the Resource Ingest Guide metadata required for integration with Translator. Recipes are
-validated before a build starts, so configuration errors fail early with field-specific
-messages.
+the Resource Ingest Guide metadata required for integration with Translator.
 
 # State of the field
 
@@ -57,11 +55,11 @@ pairs YAML configuration with semi-declarative Python transforms and outputs KGX
 resolution supplied through mappings or additional code. LinkML [@linkml] provides schema
 modeling and validation rather than Tablassert's integrated resolution pipeline. BioCypher
 [@biocypher] standardizes biomedical graph construction; OntoWeaver [@ontoweaver] provides
-declarative tabular mappings for BioCypher. These are related approaches for research tables. SPIRES [@spires] extracts knowledge from free text by zero-shot
-prompting, while Tablassert's sources are already structured tables. Finally, the hosted SRI
-name resolution service [@nameres] serves BABEL [@babel] identifier resources through a network
-API. Hosted builds depend on service availability; reproducing historical results requires
-preserving responses or pinning the underlying resources.
+declarative tabular mappings for BioCypher. sPIRES [@spires] extracts knowledge from free text
+by zero-shot prompting, while Tablassert's sources are already structured tables. Finally, the
+hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier resources through
+a network API. Hosted builds depend on service availability; reproducing historical results
+requires preserving responses or pinning the underlying resources.
 
 Tablassert composes declarative mapping, local resolution, and mapping-quality checks into one
 recipe-driven pipeline.
@@ -75,6 +73,13 @@ arguments) operations, executed through Polars lazy frames. Independent transfor
 until batched resolution, quality control, or output writing requires materialization. Sections
 sharing an instruction prefix reuse its computed snapshot.
 
+Pydantic models validate every recipe before execution with field-specific errors. Accepted YAML
+satisfies the configuration schema, and successful builds produce correctly formatted KGX; this
+guarantees structure, not biological correctness. YAML requires fewer changes than
+source-specific code, helping nontechnical contributors and AI coding agents author graphs. This
+trades granular control and source-specific optimizations for time savings and broader
+participation.
+
 The embedded fullmap database underpins the design. Built from BABEL [@babel] exports, it maps
 normalized synonyms and cross-vocabulary meta-identifiers onto canonical identifiers with
 category and taxon metadata. Level-one normalization trims whitespace and quotes,
@@ -85,12 +90,12 @@ Identical normalization is applied to synonyms and query text. The store uses re
 embedded, crash-safe Rust key-value engine suited to point lookups, built in a parallel,
 memory-bounded streaming pass. The prebuilt archive for the current BABEL 22.2.0 export is 44.5
 GB compressed; the redb store used here, built from the 2026-07-22 export, occupies 92.9 GB
-across one primary and 16 shard files. Resolution is exact-match over normalized keys rather
-than fuzzy search; approximate matches surface only in the audit stage, not in the graph. To
-keep the database smaller and query times faster, the build applies a fixed allowlist of the top
-100 experimental taxa derived from Translator knowledge-graph node frequencies, alongside all
-OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some rare
-species-specific identifiers outside the allowlist.
+across one primary and 16 shard database files. Resolution is exact-match over normalized keys
+rather than fuzzy search; approximate matches surface only in the audit stage, not in the graph.
+To keep the database smaller and query times faster, the build applies a fixed allowlist of the
+top 100 experimental taxa derived from Translator knowledge-graph node frequencies, alongside
+all OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some
+rare species-specific identifiers outside the allowlist.
 
 Resolution constraints
 
@@ -104,11 +109,6 @@ category bonus of 1 for prioritized categories and 50 otherwise -- then deduplic
 best tier, retaining distinct CURIEs that tie. When column context is on, category frequency
 across the column being resolved helps break remaining ties; this is a heuristic, not a
 guarantee of semantic correctness.
-
-Hosted NameResolution [@nameres], a separate SRI service, supports bulk lookup, taxon and
-Biolink-type filters, and CURIE prefix inclusion/exclusion. Candidates from that separate
-service can be canonicalized through SRI's separate Node Normalization service [@nodenorm] using
-batched requests; two network stages need not mean two requests per term.
 
 Edges carry recipe-declared provenance, including source URLs and publications when provided;
 traceability depends on the source and configuration. Optional quality control audits each
@@ -135,47 +135,49 @@ post-prune state. Passing these checks does not establish biological validity.
 Tablassert uses PyO3 Rust for normalization, resolution, database construction, and NDJSON
 writing. GIL-released Rust regions use Rayon workers for CPU-heavy normalization and sharded
 lookups, enabling parallel execution even on GIL-enabled Python 3.11, without requiring
-free-threaded Python.
-recipes and validation use Python.
+free-threaded Python. recipes and validation use Python.
 
-The tutorial uses 56 Tablassert YAML lines versus 72 Koza [@koza] YAML/Python lines (1,152
-versus 1,981 non-whitespace characters), excluding blanks, comments, and docstrings. Koza calls
-Tablassert's API with identical resolution settings: both produce five edge pairs and nine
-matching nodes. Tablassert additionally emits a Resource Ingest Guide, deduplicated nodes,
-structured provenance, and supporting-study metadata. This compares verbosity, not runtime or
-capability.
+## Comparisons
+
+Hosted NameResolution [@nameres], a separate SRI service, supports bulk lookup, taxon and
+Biolink-type filters, and CURIE prefix inclusion/exclusion. Candidates from that separate
+service can be canonicalized through SRI's separate Node Normalization service [@nodenorm] using
+batched requests; two network stages need not mean two requests per term.
+
+Benchmarks clarify deployment: local fullmap needs substantial storage but no service calls; the
+separate hosted services avoid local storage but add network and availability dependencies. On a
+dual-socket Intel Xeon Gold 6230 host (40 physical cores, 80 hardware threads, 187 GiB RAM, SSD
+RAID1, Ubuntu 24.04), 113 hand-selected ingest entries comprised 104 unique terms. Three
+fresh-process local batch passes took a median of 0.886 seconds, excluding interpreter startup;
+three in-process passes took a median 0.516 seconds. OS caches were not cleared. Tablassert's
+local resolution returned complete identifier, name, and category fields for 93 terms. The
+alternative hosted workflow used SRI NameResolution [@nameres] for candidate lookup followed by
+the separate SRI Node Normalization service [@nodenorm] for canonical identifiers, preferred
+names, and categories. One sweep returned complete top-ranked canonical records for 99 terms in
+50.23 seconds: 104 lookups with four concurrent requests plus five batched normalization
+requests, with no request errors. Matching policies and resource versions differ; this
+convenience sample measures neither accuracy nor general service performance.
+
+The Tablassert tutorial uses 56 Tablassert YAML lines of code (LOC) versus 72 Koza [@koza]
+YAML/Python LOC (1,152 versus 1,981 non-whitespace characters), excluding blanks, comments, and
+docstrings. Koza calls Tablassert's API with identical resolution settings: both produce five
+edge pairs and nine matching nodes. Tablassert additionally emits a Resource Ingest Guide,
+deduplicated nodes, structured provenance, and supporting-study metadata. This compares
+verbosity, not runtime or capability.
 
 # Research impact statement
 
-Benchmarks clarify deployment: local fullmap needs substantial storage but no service calls;
-the separate hosted services avoid local storage but add network and availability dependencies. On a dual-socket Intel Xeon Gold 6230 host (40
-physical cores, 80 hardware threads, 187 GiB RAM, SSD RAID1, Ubuntu 24.04), 113 hand-selected
-ingest entries comprised 104 unique terms. Three fresh-process local batch passes took a median of
-0.886 seconds, excluding interpreter startup; three in-process passes took a median 0.516
-seconds. OS caches were not cleared. Tablassert's local resolution returned complete identifier,
-name, and category fields for 93 terms. The alternative hosted workflow used SRI NameResolution
-[@nameres] for candidate lookup followed by the separate SRI Node Normalization service
-[@nodenorm] for canonical identifiers, preferred names, and categories. One sweep returned
-complete top-ranked canonical records for 99 terms in 50.23 seconds: 104 lookups with four
-concurrent requests plus five batched normalization requests, with no request errors. Matching
-policies and resource versions differ; this convenience sample measures neither accuracy nor
-general service performance.
-
-Tablassert and its declarative precursor underlie several production knowledge graphs. The
-published MicrobiomeKG [@microbiomekg], a Translator-deployed graph built from supplementary
-tables of 40 publications, was produced with an early unnamed precursor; the deployed Microbiome
-and Multiomics knowledge graphs [@multiomics-kp] and their maintenance builds use present-day
-Tablassert. Multiomics 3.1.3 contains 222,994 nodes and 18,206,965 edges from 2,136 PMC
-publications [@multiomics-kp]; DAKP 1.26.0 contains 16,257 nodes and 135,263 edges
-[@drug-approvals]. DAKP [@dakp], the Drug Approvals Knowledge Provider (now developed in the
-glusman-team graph monorepo [@graph-monorepo]), applies Tablassert to regulatory drug-approval
-sources and publishes validated, versioned releases to a public dataset archive
-[@drug-approvals]; a public linkouts interface exposes its per-edge evidence, and integration
-into the Translator ingest infrastructure is under review [@ingests], beginning with a
-Tablassert passthrough for the Multiomics graph [@ingests-mokg]. KRAKEN [@kraken], Phenome
-Health's unified knowledge graph, integrates the Microbiome, Multiomics, and Drug Approvals
-graphs as domain-specific sources. A rare-disease multiomics knowledge graph built with
-Tablassert is in preparation.
+Tablassert and its declarative precursor underlie several production knowledge graphs.
+MicrobiomeKG [@microbiomekg] used an early precursor; deployed Microbiome and Multiomics graphs
+[@multiomics-kp] and their maintenance builds use Tablassert. Multiomics 3.1.3 contains 222,994
+nodes and 18,206,965 edges from 2,136 PMC publications [@multiomics-kp]; DAKP 1.26.0 contains
+16,257 nodes and 135,263 edges [@drug-approvals]. The Drug Approvals Knowledge Provider (DAKP)
+[@dakp], developed in the glusman-team monorepo [@graph-monorepo], publishes validated,
+versioned drug-approval graphs [@drug-approvals] and per-edge evidence linkouts. Translator
+ingest integration is under review [@ingests], starting with a Multiomics passthrough
+[@ingests-mokg]. KRAKEN [@kraken], Phenome Health's unified knowledge graph, integrates the
+Microbiome, Multiomics, and Drug Approvals graphs as domain-specific sources. A rare-disease
+multiomics knowledge graph built with Tablassert is in preparation.
 
 # AI usage disclosure
 
@@ -207,7 +209,7 @@ manuscript.
 
 # Author contributions
 
-Skye Lane Goetz developed the software, led design, and performed analyses. Jared C. Roach and
+Skye L. Goetz developed the software, led design, and performed analyses. Jared C. Roach and
 Gwênlyn Glusman helped design the software and analyses and provided detailed project feedback.
 All authors wrote, revised, and proofread the manuscript.
 
