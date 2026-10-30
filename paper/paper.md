@@ -1,5 +1,5 @@
 ---
-title: 'Tablassert: Declarative Extraction of NCATS Translator Complicate Knowledge Graphs from Biomedical Tables'
+title: 'Tablassert: Declarative Extraction of NCATS Translator Compliant Knowledge Graphs from Biomedical Tables'
 tags:
   - knowledge graph
   - KGX
@@ -83,7 +83,7 @@ top 100 experimental taxa derived from Translator knowledge-graph node frequenci
 all OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some
 rare species-specific identifiers outside the allowlist.
 
-Resolution is column-aware rather than string-in/CURIE-out. Each node column declares: an NCBI
+Resolution is column-aware rather than string-in/CURIE-out. Each node column declares an NCBI
 taxon filter that keeps taxon-bearing matches for the declared species while retaining taxon-less rows, Biolink category prioritize and avoid lists (where avoid also
 drops categories the installed model does not recognize), and CURIE prefix and regex exclusions.
 Candidates are ranked by exact preferred-name agreement, normalized-name agreement, and Biolink
@@ -143,7 +143,7 @@ Xeon Gold 6230 host (40 physical cores, 80 hardware threads, 187 GiB RAM, SSD RA
 24.04), 113 hand-selected entries comprised 104 unique terms. Median local time was 0.886 seconds
 across three fresh-process passes, excluding startup, and 0.516 seconds across three in-process
 passes; OS caches were not cleared. Local resolution returned complete identifier, name, and
-category fields for 93 terms. One workflow using SRI NameResolution [@nameres] then the separate
+category fields for 93 terms. One workflow using SRI NameResolution [@nameres], then the separate
 SRI Node Normalization service [@nodenorm] returned complete top-ranked canonical records for 99
 terms in 50.23 seconds: 104 lookups with four concurrent requests plus five batched normalization
 requests, without errors. Hosted lookup used `limit=5` and `only_taxa=NCBITaxon:9606`;
