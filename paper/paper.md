@@ -26,7 +26,7 @@ bibliography: paper.bib
 
 # Summary
 
-The majority of information in biomedical research papers is published in tables, particularly supplemental tables. These tables include association statistics, assay readouts, curated gene lists, omics, and other data. Much of this information encodes relationships between biological entities (e.g., between row and column labels). Tablassert converts such spreadsheets (Excel, CSV, TSV) into knowledge graphs ready for the NCATS Biomedical Data Translator [@translator]. A user declares in YAML how each table's data map to subject–predicate–object statements; Tablassert resolves free text (e.g., "lung cancer") to standard identifiers, attaches provenance and statistics, and emits graph files conforming to community standards [@kgx; @biolink-model].  You can inspect, reuse, and refine the same recipe, so a graph starts small instead of being frozen inside a bespoke ingest script.
+The majority of information in biomedical research papers is published in tables, particularly supplemental tables. These tables include association statistics, assay readouts, curated gene lists, omics, and other data. Much of this information encodes relationships between biological entities (e.g., between row and column labels). Tablassert converts such spreadsheets (Excel, CSV, TSV) into knowledge graphs ready for the NCATS Biomedical Data Translator [@translator]. A user declares in YAML how each table's data map to subject–predicate–object statements; Tablassert resolves free text (e.g., "lung cancer") to standard identifiers, attaches provenance and statistics, and emits graph files conforming to community standards [@kgx; @biolink-model].  
 
 # Statement of need
 
