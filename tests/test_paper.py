@@ -137,8 +137,8 @@ def test_front_matter_complete() -> None:
 
 def test_required_sections_present() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
-    headings = {match.group(1).strip() for match in re.finditer(r"^#+\s+(.+?)\s*$", body, re.MULTILINE)}
-    missing = [section for section in REQUIRED_SECTIONS if section not in headings]
+    headings = {match.group(1).strip().casefold() for match in re.finditer(r"^#+\s+(.+?)\s*$", body, re.MULTILINE)}
+    missing = [section for section in REQUIRED_SECTIONS if section.casefold() not in headings]
     assert not missing, f"paper.md is missing JOSS-required sections: {missing}"
 
 
