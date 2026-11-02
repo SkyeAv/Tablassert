@@ -105,11 +105,7 @@ from tablassert.biolink import Categories
 fullmap: Path = Path("/path/to/fullmap")
 
 result: list[dict[str, Any]] = resolve_many(
-    col="gene",
-    entities=["TP53", "BRCA1", "EGFR", "KRAS"],
-    fullmap=fullmap,
-    taxon="9606",
-    prioritize=[Categories.GENE],
+    col="gene", entities=["TP53", "BRCA1", "EGFR", "KRAS"], fullmap=fullmap, taxon="9606", prioritize=[Categories.GENE]
 )
 
 # result[0]: {"original_gene": "TP53", "gene": "HGNC:11998", "gene_name": "TP53", ...}
@@ -126,12 +122,7 @@ from tablassert.lib import resolve_many
 
 fullmap: Path = Path("/path/to/fullmap")
 
-result: list[dict[str, Any]] = resolve_many(
-    col="gene",
-    entities=["TP53", "BRCA1"],
-    fullmap=fullmap,
-    taxon="9606",
-)
+result: list[dict[str, Any]] = resolve_many(col="gene", entities=["TP53", "BRCA1"], fullmap=fullmap, taxon="9606")
 
 # Convert back to a Polars DataFrame
 df: pl.DataFrame = pl.DataFrame(result)

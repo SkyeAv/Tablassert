@@ -166,12 +166,7 @@ per-command preflight behavior, and the
 from pathlib import Path
 from tablassert.lib import resolve_many
 
-results = resolve_many(
-    col="gene",
-    entities=["TP53", "BRCA1"],
-    fullmap=Path("/path/to/fullmap"),
-    taxon="9606",
-)
+results = resolve_many(col="gene", entities=["TP53", "BRCA1"], fullmap=Path("/path/to/fullmap"), taxon="9606")
 # [{"original_gene": "TP53", "gene": "HGNC:11998", "gene_name": "TP53", ...}, ...]
 ```
 

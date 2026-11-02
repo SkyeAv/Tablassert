@@ -169,12 +169,7 @@ lf = pl.scan_parquet("resolved.parquet")
 # - subject_name
 
 # Run QC
-validated = fullmap_audit(
-  lf,
-  col="subject",
-  section_hash="tutorial-section",
-  config_file="tutorial-table.yaml",
-)
+validated = fullmap_audit(lf, col="subject", section_hash="tutorial-section", config_file="tutorial-table.yaml")
 
 # Only rows that passed QC remain
 # Rows with low-confidence mappings removed

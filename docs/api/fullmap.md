@@ -152,16 +152,16 @@ from tablassert.nlp import level_one, level_two
 lf = level_one(lf, "gene_symbol")
 lf = level_two(lf, "gene_symbol")
 result = resolve(
-  lf=lf,
-  col="gene_symbol",
-  db=db,
-  taxon="9606",  # Human only
-  prioritize=[Categories.GENE],
-  avoid=[Categories.PROTEIN],
-  log=True,
-  section_hash="tutorial-section",
-  config_file="tutorial-table.yaml",
-  column_context=True,
+    lf=lf,
+    col="gene_symbol",
+    db=db,
+    taxon="9606",  # Human only
+    prioritize=[Categories.GENE],
+    avoid=[Categories.PROTEIN],
+    log=True,
+    section_hash="tutorial-section",
+    config_file="tutorial-table.yaml",
+    column_context=True,
 )
 
 # Result LazyFrame includes:
@@ -184,11 +184,10 @@ from tablassert.biolink import Categories
 
 db = Path("/path/to/fullmap/data/fullmap.redb")
 lf = pl.LazyFrame({"gene": ["TP53", "BRCA1", "EGFR", "KRAS"]})
-lf = level_one(lf, "gene")   # canonical tokenize, stem, deduplicate, and sort
-lf = level_two(lf, "gene")   # strips non-word chars into the "gene_two" column
+lf = level_one(lf, "gene")  # canonical tokenize, stem, deduplicate, and sort
+lf = level_two(lf, "gene")  # strips non-word chars into the "gene_two" column
 
-result = resolve(lf=lf, col="gene", db=db, taxon="9606",
-                 prioritize=[Categories.GENE], log=False).collect()
+result = resolve(lf=lf, col="gene", db=db, taxon="9606", prioritize=[Categories.GENE], log=False).collect()
 print(result.select(["gene", "gene_name", "gene_category"]))
 ```
 
