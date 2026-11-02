@@ -96,7 +96,9 @@ def test_comparisons_membership() -> None:
     assert "le" in names
     assert "eq" in names
     assert "ne" in names
-    assert len(names) == 6
+    assert "join" in names
+    assert "antijoin" in names
+    assert len(names) == 8
 
 
 def test_fill_methods_membership() -> None:

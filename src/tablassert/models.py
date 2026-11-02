@@ -119,21 +119,119 @@ class TablaBase(BaseModel):
 class Reindex(TablaBase):
     column: str = Field(..., pattern=r"^[A-Z]{1,3}$", description="Source column letters used for row filtering.", examples=["A", "AA"])
     comparison: Comparisons = Field(
-        Comparisons.NE, description="Comparison operator used in reindex filtering.", examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT]
+        Comparisons.NE,
+        description="Comparison operator used in reindex filtering.",
+        examples=[Comparisons.NE, Comparisons.EQ, Comparisons.GT, Comparisons.JOIN, Comparisons.ANTIJOIN],
     )
-    comparator: str | int | float = Field(..., description="Right-side value compared against the selected column.", examples=["N/A", 0, 1.5])
+    comparator: str | int | float | list[str] = Field(
+        ...,
+        description=(
+            "Right-side value compared against the selected column. For `join`/`antijoin` this is the list of "
+            "identifiers matched exactly against the raw (pre-resolution) cell value."
+        ),
+        examples=["N/A", 0, 1.5, ["CHEBI:41774", "CHEBI:48217"]],
+    )
+    regex: bool = Field(
+        False,
+        description=(
+            "When true, `comparator` is a polars-compatible regex matched against the cell instead of a literal "
+            "value: `eq` keeps rows whose cell matches, `ne` keeps rows that do not. Matching is case-sensitive and "
+            "unanchored (add `^`/`$` to pin the whole cell), the column is compared as text, and a null cell never "
+            "matches, so null rows drop under both operators. Only valid with `eq`/`ne`; an invalid or empty pattern "
+            "is rejected at config time (`regex-bad-pattern`)."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def membership_members_are_strings(cls, data: Any) -> Any:
+        """Reject an identifier list whose members are not strings, with a code rather than a field type error.
+
+        Args:
+            data: Raw config value for one ``Reindex`` entry.
+
+        Returns:
+            ``data`` unchanged when the entry is not a membership list, or when every member is a
+            string.
+
+        Raises:
+            TablassertValidationError: ``comparison-membership-member-not-a-string`` when a
+                ``join``/``antijoin`` list holds a non-string member.
+
+        Notes:
+            Without this guard the pydantic union rejects `comparator: [3, 4]` (the natural spelling
+            against an `Int64` column, whose string form is `3`) as a bare `string_type` field error
+            with no stable code and no docs URL, while every other failure in this family is coded.
+            The fix stays "quote the identifiers": membership is textual, so an unquoted number is a
+            config error rather than something to coerce silently.
+        """
+        if not isinstance(data, dict):
+            return data
+        comparison = data.get("comparison")
+        comparator = data.get("comparator")
+        if comparison not in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value) or not isinstance(comparator, list):
+            return data
+        for index, member in enumerate(comparator):
+            if not isinstance(member, str):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` identifier lists must hold quoted strings: member {index} is {type(member).__name__} ({member!r}). "
+                    f'Quote it (for example ["{member}"]) to match the cell as text.',
+                    code="comparison-membership-member-not-a-string",
+                )
+        return data
 
     @model_validator(mode="after")
     def comparison_datatypes(self: Self) -> Self:
         x: Comparisons = self.comparison
-        y: str | int | float = self.comparator
+        y: str | int | float | list[str] = self.comparator
 
-        if x == Comparisons.NE or x == Comparisons.EQ:
+        if x == Comparisons.JOIN or x == Comparisons.ANTIJOIN:
+            if self.regex:
+                raise TablassertValidationError(
+                    "`regex` is only meaningful with the `eq`/`ne` comparisons; `join`/`antijoin` match identifiers by exact string identity against a list.",
+                    code="comparison-regex-requires-eq-ne",
+                )
+            if not isinstance(y, list):
+                raise TablassertValidationError(
+                    f"`join`/`antijoin` comparisons require a list of identifier strings, got {type(y).__name__}.",
+                    code="comparison-membership-comparator-required",
+                )
+            if not y:
+                raise TablassertValidationError(
+                    "`join`/`antijoin` comparators must hold at least one identifier.", code="comparison-membership-empty"
+                )
+        elif x == Comparisons.NE or x == Comparisons.EQ:
             if not isinstance(y, str):
                 raise TablassertValidationError(
                     f"`eq`/`ne` comparisons require a str comparator, got {type(y).__name__}.", code="comparison-bad-comparator-type"
                 )
+            if self.regex:
+                # An empty-or-everything pattern compiles, but it matches EVERY cell, so a `ne` filter
+                # would silently drop the whole table. Reject whitespace-only spellings and any pattern
+                # that can match the empty string (`^`, `()`, `.*`, `x*`) with the same code the
+                # `exclude_regex` probe uses.
+                if not y.strip():
+                    raise TablassertValidationError(
+                        f"`comparator` must be a non-empty pattern when `regex` is true (an empty pattern matches every cell), got {y!r}.",
+                        code="regex-bad-pattern",
+                    )
+                try:
+                    pl.Series([""]).str.contains(y)
+                except Exception as e:
+                    raise TablassertValidationError(
+                        f"`comparator` must be a polars-compatible regex when `regex` is true, got {y!r}: {e}", code="regex-bad-pattern"
+                    ) from e
+                if pl.Series([""]).str.contains(y).item():
+                    raise TablassertValidationError(
+                        f"`comparator` must not match an empty cell when `regex` is true (it would match every cell, so an `ne` filter would drop the whole table), got {y!r}.",
+                        code="regex-bad-pattern",
+                    )
         else:
+            if self.regex:
+                raise TablassertValidationError(
+                    "`regex` is only meaningful with the `eq`/`ne` comparisons; ordering comparisons cast the column to Float64 and compare numerically.",
+                    code="comparison-regex-requires-eq-ne",
+                )
             if not isinstance(y, (int, float)):
                 raise TablassertValidationError(
                     f"Comparisons other than `eq`/`ne` require a float or int comparator, got {type(y).__name__}.",
@@ -307,6 +405,36 @@ class NodeEncoding(Encoding):
         ),
         examples=[9606, 10090],
     )
+    taxon_from: str | None = Field(
+        None,
+        description=(
+            "Per-row taxon scoping: name another resolved node column of the same statement (a CURIE-ranged qualifier key, "
+            "or `subject`/`object`) whose resolved NCBITaxon CURIE scopes this column's entity resolution row by row, instead of "
+            "the static `taxon`. The named column is resolved first; rows whose taxon cell is blank fall back to the 9606 "
+            "default, and a non-null cell that does not resolve to an NCBITaxon CURIE fails the build (`taxon-from-not-ncbitaxon`). "
+            "Mutually exclusive with an explicit `taxon`."
+        ),
+        examples=["species_context_qualifier"],
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def taxon_from_excludes_explicit_taxon(cls, data: Any) -> Any:
+        """Reject `taxon_from` set together with an explicit `taxon`.
+
+        Two taxon knobs on one encoding would compete for the same filter, and the
+        winner would depend on evaluation order. `taxon` defaults to 9606, so the
+        check must run on the raw input: only an author-written `taxon` conflicts,
+        and `taxon_from` supplies its own default (9606 for blank taxon cells).
+        """
+        if isinstance(data, dict) and data.get("taxon_from") is not None and "taxon" in data:
+            raise TablassertValidationError(
+                "`taxon_from` and an explicit `taxon` are mutually exclusive; remove one. `taxon_from` scopes resolution "
+                "per row from the named column and falls back to the 9606 default for blank taxon cells.",
+                code="taxon-from-conflict",
+            )
+        return data
+
     prioritize: list[Categories] | None = Field(
         None, description="Biolink categories ranked higher during entity resolution.", examples=[[Categories.GENE, Categories.PROTEIN]]
     )
@@ -482,6 +610,53 @@ class Statement(TablaBase):
                     code="qualifier-duplicated",
                 )
             seen.add(key)
+        return self
+
+    @model_validator(mode="after")
+    def validate_taxon_from_targets(self: Self) -> Self:
+        """Validate every `taxon_from` reference before a build can run.
+
+        `taxon_from` scopes one node column's resolution by another resolved node
+        column of the same statement, so the target must exist, must itself resolve
+        (enum-ranged qualifiers never resolve), must not be the column carrying the
+        reference, and must not participate in a reference cycle -- a cyclic pair
+        would have no valid resolution order. All four failures are config-time so a
+        bad reference dies at load, not hours into a build.
+        """
+        resolved: dict[str, NodeEncoding | Qualifier] = {
+            "subject": self.subject,
+            "object": self.object,
+            **{str(q.qualifier): q for q in self.qualifiers or [] if q.resolved},
+        }
+        for name, encoding in resolved.items():
+            target: str | None = getattr(encoding, "taxon_from", None)
+            if target is None:
+                continue
+            if target not in resolved:
+                raise TablassertValidationError(
+                    f"`taxon_from: {target}` on `{name}` does not name a resolved node column of this statement; "
+                    "expected `subject`, `object`, or a CURIE-ranged qualifier key.",
+                    code="taxon-from-unknown-column",
+                )
+            if target == name:
+                raise TablassertValidationError(
+                    f"`taxon_from: {target}` on `{name}` references itself; a column cannot be scoped by its own resolution.", code="taxon-from-self"
+                )
+            # Chase the reference chain from the target: any path back to a column that
+            # already carries a reference is a cycle with no valid resolution order.
+            seen: set[str] = {name}
+            cursor: str = target
+            while cursor in resolved:
+                if cursor in seen:
+                    raise TablassertValidationError(
+                        f"`taxon_from` references form a cycle through `{cursor}`; there is no column that can resolve first.",
+                        code="taxon-from-cycle",
+                    )
+                seen.add(cursor)
+                nxt: str | None = getattr(resolved[cursor], "taxon_from", None)
+                if nxt is None:
+                    break
+                cursor = nxt
         return self
 
     @model_validator(mode="after")

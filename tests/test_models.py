@@ -352,18 +352,43 @@ def test_node_encoding_explicit_null_disables_taxon() -> None:
     assert node.taxon is None
 
 
-def test_qualifier_rejects_disabled_species_context_qualifier() -> None:
-    """species_context_qualifier is disabled and cannot be manually declared."""
-    with pytest.raises(ValidationError) as exc_info:
-        models.Qualifier(qualifier="species_context_qualifier", method="value", encoding="Homo sapiens")  # pyright: ignore
-    assert "field-disabled" in str(exc_info.value)
+def test_qualifier_accepts_species_context_qualifier() -> None:
+    """species_context_qualifier is a declarable CURIE-ranged qualifier (no auto-derivation).
+
+    Biolink Model 4.4.6 declares the slot on the root ``association`` class (range
+    ``organism taxon``, NCBITaxon CURIE values), so every association class can hold
+    it. Values resolve through fullmap like any other CURIE-ranged qualifier: a CURIE
+    cell (e.g. NCBITaxon:9606) resolves back to itself, species text (e.g. "dogs")
+    resolves to the NCBITaxon clique.
+    """
+    qualifier: models.Qualifier = models.Qualifier(qualifier="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
+    assert qualifier.resolved
 
 
-def test_annotation_rejects_disabled_species_context_qualifier() -> None:
-    """The disabled field cannot re-enter through the generic annotation entry point."""
-    with pytest.raises(ValidationError) as exc_info:
-        Annotation(annotation="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
-    assert "field-disabled" in str(exc_info.value)
+def test_annotation_accepts_species_context_qualifier() -> None:
+    """The re-enabled field also enters through the generic annotation entry point."""
+    annotation: Annotation = Annotation(annotation="species_context_qualifier", method="value", encoding="NCBITaxon:9606")  # pyright: ignore
+    assert annotation.annotation == "species_context_qualifier"
+
+
+def test_graph_uuid_fields_accept_species_context_qualifier(rig_factory: Any) -> None:
+    """species_context_qualifier is an emittable edge field, so it may pin edge identity.
+
+    This is the DAKP no-cross-species-fold contract: edges differing only in their
+    species context must derive distinct ids instead of merging, which requires the
+    field to be legal in uuid_fields.
+    """
+    graph: Graph = Graph.model_validate(
+        {
+            "name": "TEST",
+            "version": "1.0.0",
+            "tables": [Path("./table.yaml")],
+            "fullmap": Path("./fullmap"),
+            "rig": rig_factory(),
+            "uuid_fields": ["subject", "predicate", "object", "species_context_qualifier"],
+        }
+    )
+    assert graph.uuid_fields == ["subject", "predicate", "object", "species_context_qualifier"]
 
 
 def test_qualifier_nullable_defaults_false() -> None:
@@ -684,6 +709,72 @@ def test_reindex_numeric_comparator() -> None:
     """reindex with numeric comparator."""
     ri: Reindex = Reindex(column="B", comparison="gt", comparator=0)  # pyright: ignore
     assert ri.comparator == 0
+
+
+def test_reindex_join_valid() -> None:
+    """join reindex holds the identifier list verbatim.
+
+    WHY: the membership list is the whole point of the new comparison, so the field must accept
+    ``list[str]`` and the pipeline must see the plain enum *value* (``use_enum_values=True``), not
+    a ``Comparisons`` member; branching on the member would silently miss every config.
+    """
+    ri: Reindex = Reindex(column="A", comparison="join", comparator=["CHEBI:41774", "CHEBI:48217"])  # pyright: ignore
+    assert ri.comparison == "join"
+    assert isinstance(ri.comparison, str)
+    assert ri.comparator == ["CHEBI:41774", "CHEBI:48217"]
+
+
+def test_reindex_antijoin_valid() -> None:
+    """antijoin reindex constructs, including a single identifier and an empty-string member."""
+    ri: Reindex = Reindex(column="A", comparison="antijoin", comparator=[""])  # pyright: ignore
+    assert ri.comparison == "antijoin"
+    assert ri.comparator == [""]
+
+
+def test_reindex_join_rejects_scalar_comparator() -> None:
+    """Negative: join with a bare string instead of the identifier list."""
+    with pytest.raises(ValidationError, match="comparison-membership-comparator-required"):
+        Reindex(column="A", comparison="join", comparator="CHEBI:41774")  # pyright: ignore
+
+
+def test_reindex_join_rejects_empty_list() -> None:
+    """Negative: an empty identifier list would drop every row silently, so it is refused."""
+    with pytest.raises(ValidationError, match="comparison-membership-empty"):
+        Reindex(column="A", comparison="join", comparator=[])  # pyright: ignore
+
+
+def test_reindex_antijoin_rejects_numeric_comparator() -> None:
+    """Negative: antijoin with a numeric comparator (list is the only accepted shape)."""
+    with pytest.raises(ValidationError, match="comparison-membership-comparator-required"):
+        Reindex(column="A", comparison="antijoin", comparator=5)  # pyright: ignore
+
+
+def test_reindex_join_rejects_non_string_members() -> None:
+    """Negative: identifier members must be strings, and the rejection carries its own code.
+
+    WHY: ``comparator: [3, 4]`` is the natural spelling against an ``Int64`` column whose string form
+    is ``3``, so it is the most likely membership mistake. Left to the field union it surfaces as a
+    bare ``string_type`` type error with no stable code and no docs URL, unlike every other failure in
+    this family, so a ``mode="before"`` validator names the member and tells the user to quote it.
+    """
+    with pytest.raises(ValidationError, match="comparison-membership-member-not-a-string"):
+        Reindex(column="A", comparison="join", comparator=[1, 2])  # pyright: ignore
+    with pytest.raises(ValidationError, match="comparison-membership-member-not-a-string"):
+        Reindex(column="A", comparison="antijoin", comparator=["CHEBI:1", 2.5])  # pyright: ignore
+
+
+def test_reindex_scalar_rejects_list_comparator() -> None:
+    """Negative: the six scalar comparisons still refuse a list (pre-existing codes unchanged).
+
+    WHY: widening ``comparator`` to ``list[str]`` must not let a scalar comparison silently take a
+    set. A list of *strings* passes the field union, so the after-validator is the only guard.
+    (A list of non-strings on a scalar entry never reaches it either: the field union rejects it as a
+    type error, and the membership validator only fires for ``join``/``antijoin``.)
+    """
+    with pytest.raises(ValidationError, match="comparison-bad-comparator-type"):
+        Reindex(column="A", comparison="eq", comparator=["a"])  # pyright: ignore
+    with pytest.raises(ValidationError, match="comparison-nonnumeric-comparator"):
+        Reindex(column="A", comparison="lt", comparator=["0.05"])  # pyright: ignore
 
 
 def test_provenance_valid() -> None:
@@ -1022,7 +1113,7 @@ def test_reindex_eq_with_non_string_comparator_rejected() -> None:
     Catches a misconfigured row filter at config time instead of deep inside a multi-hour build.
     """
     with pytest.raises(ValidationError) as exc_info:
-        Reindex(column="A", comparison=Comparisons.EQ, comparator=5)
+        Reindex(column="A", comparison=Comparisons.EQ, comparator=5)  # pyright: ignore
     assert "comparison-bad-comparator-type" in str(exc_info.value)
 
 
@@ -1032,8 +1123,96 @@ def test_reindex_ordering_with_non_numeric_comparator_rejected() -> None:
     Catches a misconfigured row filter at config time instead of deep inside a multi-hour build.
     """
     with pytest.raises(ValidationError) as exc_info:
-        Reindex(column="A", comparison=Comparisons.GT, comparator="x")
+        Reindex(column="A", comparison=Comparisons.GT, comparator="x")  # pyright: ignore
     assert "comparison-nonnumeric-comparator" in str(exc_info.value)
+
+
+def test_reindex_regex_defaults_to_literal_comparison() -> None:
+    """`regex` defaults to False and round-trips, so every pre-existing config keeps literal `eq`/`ne`.
+
+    Why: the regex comparator is opt-in. A config that never names the key must validate, dump, and
+    later emit exactly the ops it emitted before the feature existed, or shipped TableConfigs would
+    silently change which rows survive a build.
+    """
+    ri: Reindex = Reindex(column="A", comparison=Comparisons.NE, comparator="N/A")  # pyright: ignore
+    assert ri.regex is False
+    assert ri.model_dump()["regex"] is False
+
+
+@pytest.mark.parametrize("comparison", [Comparisons.EQ, Comparisons.NE], ids=["eq", "ne"])
+def test_reindex_regex_accepts_polars_compatible_pattern(comparison: Comparisons) -> None:
+    """`eq`/`ne` accept a polars-compatible regex `comparator` when `regex` is true.
+
+    Why: this is the feature's happy path -- dropping whole families of junk cells
+    (``N/A``, ``n/a``, ``--``) without enumerating every spelling.
+    """
+    ri: Reindex = Reindex(column="A", comparison=comparison, comparator="^(?:n/?a|-{1,2})$", regex=True)
+    assert ri.regex is True
+    assert ri.comparator == "^(?:n/?a|-{1,2})$"
+
+
+@pytest.mark.parametrize("comparison", [Comparisons.LT, Comparisons.LE, Comparisons.GT, Comparisons.GE])
+def test_reindex_regex_with_ordering_comparison_rejected(comparison: Comparisons) -> None:
+    """Guard: `regex` is only meaningful with `eq`/`ne`.
+
+    Why: ordering comparisons cast the column to Float64 and compare numerically, so a regex
+    comparator there would be ignored. Failing at config time beats a filter that quietly does
+    something else. Also fires before the comparator-type guard, so a mixed-up config reports the
+    operator mismatch rather than a type complaint.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=comparison, comparator=5, regex=True)
+    assert "comparison-regex-requires-eq-ne" in str(exc_info.value)
+
+
+def test_reindex_regex_invalid_pattern_rejected() -> None:
+    """Guard: a regex `comparator` must compile in the polars regex engine.
+
+    Catches an uncompilable row filter at config time instead of mid-build, reusing the
+    `regex-bad-pattern` code from the `Regex.pattern` and `exclude_regex` probes.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.NE, comparator="(", regex=True)
+    assert "regex-bad-pattern" in str(exc_info.value)
+
+
+def test_reindex_regex_empty_comparator_rejected() -> None:
+    """Guard: an empty or whitespace-only regex `comparator` is rejected.
+
+    An empty pattern compiles, but polars ``str.contains("")`` matches EVERY cell, so a `ne`
+    filter would silently drop the whole table (data loss). Literal `ne` keeps its empty
+    comparator (see `test_reindex_valid`, the shipped TableConfig idiom), so the gate is
+    regex-mode only.
+    """
+    for bad in ("", "   "):
+        with pytest.raises(ValidationError) as exc_info:
+            Reindex(column="A", comparison=Comparisons.NE, comparator=bad, regex=True)  # pyright: ignore
+        assert "regex-bad-pattern" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("bad", ["^", "()", ".*", "x*"])
+def test_reindex_regex_every_cell_match_rejected(bad: str) -> None:
+    """Guard: a pattern that can match the empty string matches EVERY cell, so it is rejected.
+
+    Why: whitespace-only is only one spelling of the data-loss hole. `^`, `()`, `.*`, and `x*` all
+    compile cleanly and match every cell, so under `ne` each would silently drop the whole table;
+    the probe (``str.contains`` against an empty string) catches exactly that class without false
+    positives on anchored real patterns or on `\b`.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.NE, comparator=bad, regex=True)  # pyright: ignore
+    assert "regex-bad-pattern" in str(exc_info.value)
+
+
+def test_reindex_regex_still_requires_str_comparator() -> None:
+    """Guard: `regex` does not relax the `eq`/`ne` str-comparator rule.
+
+    Why: a number under `regex: true` has no textual meaning for a pattern probe, so the existing
+    `comparison-bad-comparator-type` code still owns that mistake.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        Reindex(column="A", comparison=Comparisons.EQ, comparator=5, regex=True)
+    assert "comparison-bad-comparator-type" in str(exc_info.value)
 
 
 def test_source_with_both_rows_and_row_slice_rejected() -> None:
@@ -1335,3 +1514,70 @@ def test_graph_uuid_on_collision_rejects_unknown_values(rig_factory: Any) -> Non
     }
     with pytest.raises(ValidationError):
         Graph.model_validate(data)
+
+
+def test_node_encoding_accepts_taxon_from() -> None:
+    """taxon_from names another resolved column for per-row taxon scoping."""
+    node: NodeEncoding = NodeEncoding(method="value", encoding="BRCA1", taxon_from="species_context_qualifier")  # pyright: ignore
+    assert node.taxon_from == "species_context_qualifier"
+    assert node.taxon == 9606  # untouched default; the conflict is on the raw input only
+
+
+def test_node_encoding_rejects_taxon_from_with_explicit_taxon() -> None:
+    """An explicit taxon next to taxon_from is a config-time conflict, whatever the value.
+
+    Two taxon knobs on one encoding would compete for the same filter, and because
+    `taxon` defaults to 9606 the check must run on the author-written raw input:
+    only an explicitly declared taxon conflicts, including an explicit null.
+    """
+    with pytest.raises(ValidationError) as exc_info:
+        NodeEncoding(method="value", encoding="BRCA1", taxon=10090, taxon_from="species_context_qualifier")  # pyright: ignore
+    assert "taxon-from-conflict" in str(exc_info.value)
+    with pytest.raises(ValidationError):
+        NodeEncoding(method="value", encoding="BRCA1", taxon=None, taxon_from="species_context_qualifier")  # pyright: ignore
+
+
+def _statement_dict(taxon_from: str | None) -> dict[str, object]:
+    return {
+        "subject": {"method": "value", "encoding": "A", **({"taxon_from": taxon_from} if taxon_from else {})},
+        "object": {"method": "value", "encoding": "B"},
+        "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C"}],
+    }
+
+
+def test_statement_rejects_taxon_from_targeting_unknown_column() -> None:
+    """taxon_from must name subject, object, or a CURIE-ranged qualifier of this statement."""
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(_statement_dict("not_a_column"))
+    assert "taxon-from-unknown-column" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_targeting_enum_qualifier() -> None:
+    """Enum-ranged qualifiers never resolve, so they cannot scope another column's taxon."""
+    data: dict[str, object] = _statement_dict("object_direction_qualifier")
+    data["qualifiers"] = [{"qualifier": "object_direction_qualifier", "method": "value", "encoding": "increased"}]
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(data)
+    assert "taxon-from-unknown-column" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_self_reference() -> None:
+    """A column cannot be scoped by its own resolution."""
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(_statement_dict("subject"))
+    assert "taxon-from-self" in str(exc_info.value)
+
+
+def test_statement_rejects_taxon_from_cycles() -> None:
+    """A taxon_from cycle has no valid resolution order and dies at config time."""
+    data: dict[str, object] = _statement_dict("species_context_qualifier")
+    data["qualifiers"] = [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C", "taxon_from": "subject"}]
+    with pytest.raises(ValidationError) as exc_info:
+        models.Statement.model_validate(data)
+    assert "taxon-from-cycle" in str(exc_info.value)
+
+
+def test_statement_accepts_taxon_from_resolved_qualifier() -> None:
+    """The DAKP shape: subject/object scoped by the species context qualifier."""
+    statement: models.Statement = models.Statement.model_validate(_statement_dict("species_context_qualifier"))
+    assert statement.subject.taxon_from == "species_context_qualifier"

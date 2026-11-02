@@ -34,7 +34,7 @@
       "style": "compact"
     }
   },
-  "customRules": ["./.markdownlint/no-unicode-chars.cjs"],
+  "customRules": ["./.markdownlint/no-unicode-chars.cjs", "./.markdownlint/no-double-hyphen.cjs"],
   "globs": ["**/*.md"],
   // The JOSS paper template puts every required section (Summary, Statement of need,
   // ...) at heading level 1 below the YAML front-matter title; multiple H1s are the

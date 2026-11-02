@@ -42,6 +42,10 @@ class Comparisons(str, Enum):
     LE = "le"
     EQ = "eq"
     NE = "ne"
+    # Membership comparisons: the comparator is a list of identifiers, matched against the
+    # raw (pre-resolution) cell value. JOIN keeps matching rows, ANTIJOIN drops them.
+    JOIN = "join"
+    ANTIJOIN = "antijoin"
 
 
 class Functions(str, Enum):

@@ -20,6 +20,7 @@ import tablassert.lib as lib
 from tablassert.enums import Functions, Tokens
 from tablassert.ingests import from_yaml
 from tablassert.lib import Tcode
+from tablassert.runcache import prefix_digest
 
 
 def test_math_op_copysign_applies_values_token() -> None:
@@ -179,6 +180,118 @@ def test_reindex_filters_without_cast() -> None:
     lf: pl.LazyFrame = pl.LazyFrame({"c": ["a", "b", "a"]})
     result: list[str] = lib.reindex(lf, "c", operator.eq, "a", cast=False).collect()["c"].to_list()
     assert result == ["a", "a"]
+
+
+def test_reindex_regex_keeps_matching_rows() -> None:
+    """``reindex_regex`` keeps only rows whose cell matches (the ``eq`` filter arm).
+
+    Why: the regex comparator exists so one filter drops a whole family of junk cells; an ``eq``
+    that matched nothing would emit an empty graph, and one that matched everything would keep the
+    ``N/A`` rows the config was written to remove.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"c": ["N/A", "n/a", "ok1", "ok2"]})
+    assert lib.reindex_regex(lf, "c", r"(?i)^n/?a$").collect()["c"].to_list() == ["N/A", "n/a"]
+
+
+def test_reindex_regex_negate_keeps_non_matching_rows() -> None:
+    """``negate=True`` is the ``ne`` arm: matching rows drop, every other row survives."""
+    lf: pl.LazyFrame = pl.LazyFrame({"c": ["N/A", "n/a", "ok1", "ok2"]})
+    assert lib.reindex_regex(lf, "c", r"(?i)^n/?a$", negate=True).collect()["c"].to_list() == ["ok1", "ok2"]
+
+
+def test_reindex_regex_is_unanchored_without_markers() -> None:
+    """Polars ``str.contains`` is a search, so anchoring stays the config author's job.
+
+    Why: this is the documented contract shared with ``NodeEncoding.exclude_regex``. Assuming an
+    implicit full-cell match here would drop rows a reviewer cannot see being dropped.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"c": ["N/A", "NA", "N/A2"]})
+    assert lib.reindex_regex(lf, "c", "^N/A$").collect()["c"].to_list() == ["N/A"]
+    assert lib.reindex_regex(lf, "c", "N/A").collect()["c"].to_list() == ["N/A", "N/A2"]
+
+
+def test_reindex_regex_compares_typed_columns_as_text() -> None:
+    """A numeric column filters on its cast string form instead of raising.
+
+    Why: polars ``str.contains`` on a Float64 column is an ``InvalidOperationError``, and a
+    self-describing ``parquet`` source can hand the pipeline typed columns, so the op casts to
+    String first and matches text like ``22.0``.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"c": [1.5, 2.0, 22.0]})
+    assert lib.reindex_regex(lf, "c", r"^2\d?\.0$").collect()["c"].to_list() == [2.0, 22.0]
+
+
+def test_reindex_regex_drops_null_rows_in_both_directions() -> None:
+    """A null cell matches nothing, so ``eq`` drops it and ``ne`` (``not_``) drops it too.
+
+    Why: literal ``eq``/``ne`` already drop nulls (a null comparison is never true), so opting a
+    filter into regex must not quietly change which rows survive for a reason nobody documented.
+    """
+    lf: pl.LazyFrame = pl.LazyFrame({"c": ["ok", None, "junk"]})
+    assert lib.reindex_regex(lf, "c", "junk").collect()["c"].to_list() == ["junk"]
+    assert lib.reindex_regex(lf, "c", "junk", negate=True).collect()["c"].to_list() == ["ok"]
+
+
+def _reindex_ops(tmp_path: Path, fixtures_path: Path, reindex: list[dict[str, Any]]) -> list[tuple[Any, tuple[Any, ...]]]:
+    """Return just the row-filter ops a config emits, in pipeline order.
+
+    Args:
+        tmp_path: Scratch directory for the section store path.
+        fixtures_path: Repo fixture directory holding ``minimal_section.yaml``.
+        reindex: The ``source.reindex`` entries to attach to that section.
+
+    Returns:
+        The ``(callable, args)`` pairs for ``reindex``/``reindex_regex`` only.
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {
+            **data,
+            "source": {**data["source"], "reindex": reindex},
+            "config": fixtures_path / "minimal_section.yaml",
+            "store": tmp_path / "out.parquet",
+        }
+    )
+    # ``_source_ops`` returns nested groups (the reindex block is one list), and ``clean`` is the
+    # flattener the pipeline itself uses before dispatching ops.
+    return [op for op in tcode_model.clean(tcode_model._source_ops()) if op[0] in (lib.reindex, lib.reindex_regex)]
+
+
+def test_reindex_dispatch_keeps_legacy_ops_and_digests(tmp_path: Path, fixtures_path: Path) -> None:
+    """Backwards compatibility: a `reindex` entry without `regex` emits exactly the pre-feature op.
+
+    Why: run-cache keys are digests of these op tuples, so a legacy config whose tuple shape moved
+    would rebuild every section for no reason, and a config whose filter *semantics* moved would
+    change which rows survive a shipped build. Both are pinned against the literal tuples the code
+    emitted before `Reindex.regex` existed, including the ``cast=False`` slot ``eq``/``ne`` already
+    passed and the absent fourth slot the numeric operators never passed.
+    """
+    ops: list[tuple[Any, tuple[Any, ...]]] = _reindex_ops(
+        tmp_path, fixtures_path, [{"column": "A", "comparison": "ne", "comparator": "N/A"}, {"column": "C", "comparison": "lt", "comparator": 0.05}]
+    )
+    legacy: list[tuple[Any, tuple[Any, ...]]] = [
+        (lib.reindex, ("column_1", operator.ne, "N/A", False)),
+        (lib.reindex, ("column_3", operator.lt, 0.05)),
+    ]
+    assert ops == legacy
+    assert prefix_digest(ops) == prefix_digest(legacy), "a regex-less config must keep its pre-feature run-cache digest"
+
+
+def test_reindex_dispatch_emits_regex_op_per_comparison(tmp_path: Path, fixtures_path: Path) -> None:
+    """A `regex: true` entry emits `reindex_regex` with the negate flag derived from the comparison.
+
+    Why: the negate slot is what separates `ne` (drop the junk rows) from `eq` (keep only the junk
+    rows); a dispatch that mapped them alike would invert a section's row filter.
+    """
+    ops: list[tuple[Any, tuple[Any, ...]]] = _reindex_ops(
+        tmp_path,
+        fixtures_path,
+        [
+            {"column": "B", "comparison": "ne", "comparator": "^(?:n/?a|-{1,2})$", "regex": True},
+            {"column": "A", "comparison": "eq", "comparator": "^ok\\d$", "regex": True},
+        ],
+    )
+    assert ops == [(lib.reindex_regex, ("column_2", "^(?:n/?a|-{1,2})$", True)), (lib.reindex_regex, ("column_1", "^ok\\d$", False))]
 
 
 def test_tcode_collect_quick_exit_returns_existing_store(fixtures_path: Path, tmp_path: Path) -> None:

@@ -850,17 +850,24 @@ def test_tcode_collect_does_not_schedule_species_context_derivation(fixtures_pat
     assert "derive_species_context" not in [op[0].__name__ for op in collected]
 
 
-def test_disabled_species_context_is_dropped_before_study_or_supporting_text() -> None:
-    """Legacy/direct frames cannot relocate the disabled field into study text or supporting text."""
+def test_species_context_stays_an_edge_field_not_study_or_supporting_text() -> None:
+    """The re-enabled species qualifier stays a plain edge field end to end.
+
+    It must never relocate into the inlined Study (it is not study metadata) nor be
+    folded into supporting_text (it is an allow-listed edge field), because a species
+    qualifier that left the edge would let cross-species edges silently merge.
+    """
     lf: pl.LazyFrame = pl.DataFrame({"subject": ["A"], "species_context_qualifier": ["NCBITaxon:9606"]}).lazy()
 
     study_frame: pl.DataFrame = lib.inline_supporting_study(lf, "study", None).collect()
     folded_frame: pl.DataFrame = fold_unknown_to_supporting_text(lf).collect()
 
-    assert "species_context_qualifier" not in study_frame.columns
-    assert "species_context_qualifier" not in json.dumps(study_frame.to_dicts())
-    assert "species_context_qualifier" not in folded_frame.columns
-    assert "species_context_qualifier" not in json.dumps(folded_frame.to_dicts())
+    assert study_frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    studies: list[object] = study_frame["has_supporting_studies"].to_list() if "has_supporting_studies" in study_frame.columns else []
+    assert "NCBITaxon:9606" not in json.dumps(studies)
+    assert folded_frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    supporting: list[object] = folded_frame["supporting_text"].to_list() if "supporting_text" in folded_frame.columns else []
+    assert "NCBITaxon:9606" not in json.dumps(supporting)
 
 
 def test_tcode_collect_emits_primary_sources_entry_with_explicit_infores(fixtures_path: Path) -> None:
@@ -3644,8 +3651,14 @@ def test_compile_subgraph_e2e_head_caps_rows_to_five(monkeypatch: Any, tmp_path:
     assert diseases <= {f"disease{i}" for i in range(1, 9)}
 
 
-def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
-    """Species context is absent from section, study, and final edge output."""
+def test_compile_subgraph_and_graph_e2e_emits_species_context_qualifier(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
+    """A declared species qualifier resolves through fullmap and lands on the edge only.
+
+    The value resolves like any CURIE-ranged qualifier (here "Homo sapiens" through the
+    fake fullmap's NCBITaxon clique), never mints a node, never rides the inlined Study,
+    and the pre-resolution snapshot is stripped from final edges. This is the shape the
+    DAKP species-context edges depend on.
+    """
     monkeypatch.chdir(tmp_path)
     rows: dict[str, list[dict[str, object]]] = {
         "brca1": [fake_fullmap_row("brca1", "HGNC:1100", "BRCA1", "Gene", 9606)],
@@ -3661,11 +3674,11 @@ def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatc
             "statement": {
                 "subject": {"method": "value", "encoding": "BRCA1"},
                 "object": {"method": "value", "encoding": "Disease X"},
-                "qualifiers": [],
+                "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "A"}],
             },
             "provenance": {"repo": "PMC", "publication": "PMC0000000"},
         },
-        ["ignored"],
+        ["Homo sapiens"],
     )
     data: Any = from_yaml(table_path)
     store: Path = tmp_path / "qualifier.parquet"
@@ -3673,14 +3686,15 @@ def test_compile_subgraph_and_graph_e2e_does_not_emit_species_context(monkeypatc
 
     subgraph: Path = lib.compile_subgraph(tcode_model.collect(tmp_path / "fullmap.redb"))  # pyright: ignore
     frame: pl.DataFrame = pl.read_parquet(subgraph)
-    assert "species_context_qualifier" not in frame.columns
-    assert "species_context_qualifier" not in json.dumps(frame["has_supporting_studies"].to_list())
+    assert frame["species_context_qualifier"].to_list() == ["NCBITaxon:9606"]
+    studies: list[object] = frame["has_supporting_studies"].to_list() if "has_supporting_studies" in frame.columns else []
+    assert "species_context_qualifier" not in json.dumps(studies)
 
     lib.compile_graph([subgraph], "qual", "1.0.0", rig_factory(tmp_path, infores_id="infores:qual-kg"))
     edges: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "qual_1.0.0.edges.ndjson").read_text().splitlines()]
     nodes: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "qual_1.0.0.nodes.ndjson").read_text().splitlines()]
 
-    assert "species_context_qualifier" not in json.dumps(edges[0])
+    assert edges[0]["species_context_qualifier"] == "NCBITaxon:9606"
     assert all("species_context_qualifier_pre_resolution" not in edge for edge in edges)
     assert {node["id"] for node in nodes} == {"HGNC:1100", "MONDO:0000001"}
     assert "NCBITaxon:9606" not in {node["id"] for node in nodes}
@@ -4250,3 +4264,80 @@ def test_dedup_stream_edges_default_mode_still_aborts_on_divergence(tmp_path: Pa
     p_in.write_text('{"subject":"A","object":"B","predicate":"r","p_value":"0.01"}\n{"subject":"A","object":"B","predicate":"r","p_value":"0.99"}\n')
     with pytest.raises(RuntimeError, match="uuid-fields-not-a-key"):
         lib.dedup_stream(p_in, is_edges=True, domain="infores:test-kg", uuid_fields=["subject", "object", "predicate"], on_collision="error")
+
+
+def test_tcode_collect_layers_taxon_from_sources_first(fixtures_path: Path) -> None:
+    """A taxon_from reference splits resolve_batch: the taxon source resolves first.
+
+    Per-row scoping reads the source column's resolved taxon metadata, so the source
+    must come back before any column scoped by it. With no taxon_from the op list
+    keeps exactly one shared resolve_batch (the neighboring batch tests pin that).
+    """
+    data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
+    store: Path = Path("/tmp/sectionhash_taxon_from.parquet")
+    data["statement"]["qualifiers"] = [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "C"}]
+    data["statement"]["subject"] = {"method": "column", "encoding": "A", "taxon_from": "species_context_qualifier"}
+
+    tcode_model: Tcode = Tcode.model_validate(  # pyright: ignore
+        {**data, "config": fixtures_path / "minimal_section.yaml", "store": store}
+    )
+
+    collected: list[tuple[Any, tuple[Any]]] = tcode_model.collect(Path("/tmp/fullmap.redb"))  # pyright: ignore
+    batches: list[list[str]] = [[spec.col for spec in op[1][0]] for op in collected if op[0].__name__ == "resolve_batch"]
+
+    # Minimal layering: columns with no taxon_from ride the first batch (object plus
+    # the taxon source), and only the scoped column waits for the second.
+    assert batches == [["object", "species_context_qualifier"], ["subject"]]
+    scoped_specs: list[Any] = [spec for op in collected if op[0].__name__ == "resolve_batch" for spec in op[1][0] if spec.col == "subject"]
+    assert scoped_specs[0].taxon_from == "species_context_qualifier"
+
+
+def test_compile_e2e_taxon_from_resolves_each_row_under_its_own_species(monkeypatch: Any, tmp_path: Path, rig_factory: Any) -> None:
+    """One section mixing species resolves the same term per row under that row's taxon.
+
+    This is the DAKP animal-label shape: a species_context_qualifier column carries
+    the organism each row occurred in; the subject term resolves to the
+    species-appropriate concept (human disease vs wrong-taxon disease) instead of one
+    static answer, and each edge carries its own NCBITaxon qualifier. A blank-9606
+    control row proves the default scope still applies.
+    """
+    monkeypatch.chdir(tmp_path)
+    rows: dict[str, list[dict[str, object]]] = {
+        # level_one keys (Porter2 stems): "Disease Taxon" -> "diseas taxon",
+        # "Homo sapiens" -> "homo sapien", "Mus musculus" -> "mus musculus".
+        "diseas taxon": [
+            fake_fullmap_row("diseas taxon", "MONDO:50", "Human disease", "Disease", 9606),
+            fake_fullmap_row("diseas taxon", "MONDO:51", "Mouse disease", "Disease", 10090),
+        ],
+        "homo sapien": [fake_fullmap_row("homo sapien", "NCBITaxon:9606", "Homo sapiens", "OrganismTaxon", 9606)],
+        "mus musculus": [fake_fullmap_row("mus musculus", "NCBITaxon:10090", "Mus musculus", "OrganismTaxon", 10090)],
+        "diseas x": [fake_fullmap_row("diseas x", "MONDO:0000001", "Disease X", "Disease", 0)],
+    }
+    install_fake_fullmap(monkeypatch, rows)
+    table_path, _ = write_text_section(
+        tmp_path,
+        "taxon_scope",
+        {
+            "statement": {
+                "subject": {"method": "value", "encoding": "Disease Taxon", "taxon_from": "species_context_qualifier"},
+                "object": {"method": "value", "encoding": "Disease X"},
+                "qualifiers": [{"qualifier": "species_context_qualifier", "method": "column", "encoding": "A", "taxon": None}],
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        },
+        ["Homo sapiens", "Mus musculus", ""],
+    )
+    data: Any = from_yaml(table_path)
+    store: Path = tmp_path / "taxon_scope.parquet"
+    tcode_model: Tcode = Tcode.model_validate({**data, "config": table_path, "store": store, "name": "TAXON_KG", "infores": "infores:taxon-kg"})  # pyright: ignore
+
+    subgraph: Path = lib.compile_subgraph(tcode_model.collect(tmp_path / "fullmap.redb"))  # pyright: ignore
+    lib.compile_graph([subgraph], "taxon", "1.0.0", rig_factory(tmp_path, infores_id="infores:taxon-kg"))
+    edges: list[dict[str, Any]] = [json.loads(line) for line in (tmp_path / "taxon_1.0.0.edges.ndjson").read_text().splitlines()]
+
+    by_species: dict[str, dict[str, Any]] = {edge["species_context_qualifier"]: edge for edge in edges}
+    assert set(by_species) == {"NCBITaxon:9606", "NCBITaxon:10090"}
+    assert by_species["NCBITaxon:9606"]["subject"] == "MONDO:50"
+    assert by_species["NCBITaxon:10090"]["subject"] == "MONDO:51"
+    # The blank-tax third row resolved under the default 9606 scope and merged with the human row.
+    assert len(edges) == 2

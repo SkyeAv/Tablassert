@@ -582,13 +582,17 @@ description dump.
 """
 
 
-DISABLED_EDGE_FIELDS: frozenset[str] = frozenset({"species_context_qualifier"})
-"""Edge fields Tablassert intentionally never emits or accepts.
+DISABLED_EDGE_FIELDS: frozenset[str] = frozenset()
+"""Edge fields Tablassert intentionally never emits or accepts, whatever the model says.
 
 This policy is separate from :data:`UNSATISFIABLE_EDGE_FIELDS`: the latter tracks
 Biolink Model attachment and may change with a dependency release, while this set is
-a stable Tablassert product decision. Keeping it separate prevents a future Biolink
-release from making ``species_context_qualifier`` silently emittable again.
+a stable Tablassert product decision. It is currently empty: the one entry it ever
+held, ``species_context_qualifier``, was re-enabled as a declarable, CURIE-ranged
+qualifier (Biolink Model 4.4.6 declares the slot on the root ``association`` class,
+range ``organism taxon``) after its old node-taxonomy auto-derivation was removed; no
+derivation returns, so the field only appears when a config declares it. The empty
+set keeps the policy mechanism alive for future product decisions.
 """
 
 

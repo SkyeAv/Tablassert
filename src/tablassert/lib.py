@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Iterable
 from functools import cache
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Literal, Self
 
 from pydantic import Field, NonNegativeInt
@@ -44,11 +45,11 @@ from tablassert.coerce import (
     sig,
     study_size_target,
 )
-from tablassert.enums import EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
+from tablassert.enums import Comparisons, EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
 from tablassert.errors import TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
-from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, RIGConfig, Section
+from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, Reindex, RIGConfig, Section
 from tablassert.nlp import level_one, level_two
 from tablassert.qc import fullmap_audit
 from tablassert.rig import (
@@ -1069,6 +1070,178 @@ def reindex(df: pl.LazyFrame, col: str, op: Callable, comp: str | int | float, c
     return df.filter(op(expr, comp))
 
 
+MEMBERSHIP_KEY_COLUMN: str = "_reindex_membership_key"
+"""Base name for the throwaway join key column on the cast branch; extended with underscores until
+it is unused if a source frame already carries it, and dropped again before the op returns."""
+
+MEMBERSHIP_UNCASTABLE_DTYPES: frozenset[str] = frozenset({"List", "Array", "Struct", "Object", "Binary"})
+"""polars dtype class NAMES whose cells have no single-string identity, so membership is refused.
+
+Matched by name because a module-level ``pl.List`` reference would resolve the lazy proxy and import
+polars at ``import tablassert.lib``, which is exactly what :mod:`tablassert._lazy` exists to avoid.
+Every parametrized variant reports its base name (``List(String)`` is named ``List``).
+
+A ``List``/``Array`` cell cannot be cast to ``String`` at all (``InvalidOperationError``), an
+``Object`` cell casts through python and never compares equal to an identifier, a ``Struct`` casts to
+a brace literal no identifier is spelled to match, and a ``Binary`` cell casts only when it happens to
+be valid UTF-8, so one list would match some rows and raise on the rest. Joining list cells on a
+separator instead would make a multi-value cell never match a single identifier, a silent wrong
+answer, so these dtypes raise a coded error.
+"""
+
+
+def _membership_key_column(schema: pl.Schema) -> str:
+    """Return a join key column name the frame does not already use.
+
+    Args:
+        schema: Collected schema of the frame being filtered.
+
+    Returns:
+        :data:`MEMBERSHIP_KEY_COLUMN`, or that name extended with underscores until it is free.
+    """
+    key_col: str = MEMBERSHIP_KEY_COLUMN
+    while key_col in schema:
+        key_col = f"{key_col}_"
+    return key_col
+
+
+def reindex_membership(df: pl.LazyFrame, col: str, keys: list[str], anti: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by exact membership in a list of identifiers (join / antijoin).
+
+    Args:
+        df: Source LazyFrame.
+        col: Column whose raw (pre-resolution) cell values are tested.
+        keys: Identifier list. Duplicates are ignored: a semi/anti join cannot multiply left
+            rows, and the join build side is cheaper once deduplicated.
+        anti: ``False`` (join) keeps rows whose value is in ``keys``; ``True`` (antijoin) keeps
+            the rows that are not.
+
+    Returns:
+        Filtered LazyFrame keeping the surviving rows in left-frame order, with every original
+        column and its original dtype.
+
+    Raises:
+        TablassertError: ``comparison-membership-empty`` for an empty list,
+            ``reindex-membership-column-missing`` when the source lacks ``col``, and
+            ``reindex-membership-column-dtype-unsupported`` for cells with no single string form
+            (``List``, ``Array``, ``Struct``, ``Object``, ``Binary``).
+
+    Notes:
+        Why a join and not ``is_in``: on the pinned polars (``>=2.0.0rc2``) a semi/anti hash join
+        against a once-built key frame is the faster measured path once the list is non-trivial (1M
+        rows, median of three collects: 100k keys 0.018s vs 0.029s filtered; 1k keys 0.003s vs
+        0.004s; a tie at ten keys), and it is the membership idiom already used in
+        :mod:`tablassert.qc`. No ``is_in`` fast path exists for tiny lists: it propagates nulls
+        differently from antijoin, and the gap is milliseconds per million rows.
+
+        ``maintain_order="left"`` is explicit, not incidental: polars documents the default order as
+        unspecified ("might differ across Polars versions or even between different runs"), and the
+        dependency is an open range, so a future 2.x must not be able to reshuffle a section's rows.
+        Measured free here (1M rows / 100k keys, five runs, median): semi 5.1ms -> 4.6ms, anti 5.4ms
+        -> 5.4ms.
+
+        The string path joins straight on ``col``, because semi/anti joins emit only the left frame's
+        columns. Only the cast path adds a throwaway helper column, and it is dropped again, so
+        entity resolution downstream sees the cell exactly as the source produced it.
+
+        Null semantics are join semantics and deliberately differ from ``ne``: a null cell never
+        matches, so join drops it while antijoin KEEPS it.
+
+        Membership is textual, so an identifier must be spelled the way polars' cast renders it.
+        Measured forms: ``Int64`` 3 -> ``"3"``; ``Float64`` 3.0 -> ``"3.0"`` (1e+20 keeps scientific
+        form); ``Bool`` -> ``"true"``/``"false"``; ``Date`` -> ``"2024-01-15"``; ``Datetime`` ->
+        ``"2024-01-15 06:24:30.000000"`` (space, not ``T``, with microsecond precision); ``Time`` ->
+        ``"01:02:03"``; ``Decimal(10,2)`` 1.5 -> ``"1.50"`` (scale kept). A misspelled list is not an
+        error: join emits an empty section and antijoin emits every row. No zero-match warning is
+        emitted, because detecting it would cost an extra pass over the frame on every build.
+    """
+    if not keys:
+        raise TablassertError("`join`/`antijoin` reindex requires at least one identifier.", code="comparison-membership-empty")
+
+    schema: pl.Schema = df.collect_schema()
+    if col not in schema:
+        raise TablassertError(f"`join`/`antijoin` reindex targets `{col}`, which the source does not have.", code="reindex-membership-column-missing")
+    if type(schema[col]).__name__ in MEMBERSHIP_UNCASTABLE_DTYPES:
+        raise TablassertError(
+            f"`join`/`antijoin` reindex cannot test `{col}`: {schema[col]} cells have no single string form to match identifiers against.",
+            code="reindex-membership-column-dtype-unsupported",
+        )
+
+    unique: list[str] = list(dict.fromkeys(keys))
+    how: Literal["semi", "anti"] = "anti" if anti else "semi"
+    if isinstance(schema[col], pl.String):
+        # No helper column: the join returns the left frame's columns unchanged.
+        return df.join(pl.DataFrame({col: unique}).lazy(), on=col, how=how, maintain_order="left")
+    key_col: str = _membership_key_column(schema)
+    left: pl.LazyFrame = df.with_columns(pl.col(col).cast(pl.String, strict=False).alias(key_col))
+    return left.join(pl.DataFrame({key_col: unique}).lazy(), on=key_col, how=how, maintain_order="left").drop(key_col)
+
+
+def reindex_regex(df: pl.LazyFrame, col: str, pattern: str, negate: bool = False) -> pl.LazyFrame:
+    """Reindex a LazyFrame by filtering rows on a polars regex match against a column.
+
+    Args:
+        df: Source LazyFrame.
+        col: Column to test.
+        pattern: Polars-compatible regex, matched unanchored and case-sensitively (write `^`/`$`
+            to pin a whole cell).
+        negate: When True keep the rows that do NOT match (the `ne` filter); when False keep the
+            matches (the `eq` filter).
+
+    Returns:
+        LazyFrame containing only rows whose predicate is true.
+
+    Notes:
+        The column is cast to String first, so a typed source (parquet, or a numeric column in a
+        text table) filters on its text form instead of raising polars' ``InvalidOperationError:
+        expected String type``. A null cell matches nothing and ``not_()`` leaves it null, so null
+        rows drop under both directions -- the same null rule literal `eq`/`ne` already have, since
+        a null comparison is never true.
+    """
+    match: pl.Expr = pl.col(col).cast(pl.String).str.contains(pattern)
+    return df.filter(match.not_() if negate else match)
+
+
+def reindex_op(entry: Reindex) -> tuple[Callable, tuple[Any, ...]]:
+    """Compile one ``Reindex`` config entry into its Tcode op tuple.
+
+    Args:
+        entry: Validated ``Reindex`` model. The validator guarantees the pairing: a membership entry
+            carries a non-empty ``list[str]`` comparator, ``regex`` only ever sits on ``eq``/``ne``,
+            and a scalar entry carries a scalar comparator.
+
+    Returns:
+        ``(callable, args)`` for the pipeline: :func:`reindex_membership` for ``join``/``antijoin``,
+        :func:`reindex_regex` for a ``regex`` entry, otherwise :func:`reindex` with the ``operator``
+        module callable and the same ``cast`` choice it has always used (numeric comparisons cast to
+        Float64, ``eq``/``ne`` do not).
+
+    Notes:
+        Legacy entries keep emitting exactly the tuples they always did, so their run-cache op digests
+        do not move; membership is the only new shape.
+
+        ``Reindex.comparison`` carries the plain enum *value* at runtime because ``TablaBase`` sets
+        ``use_enum_values=True``, so this branches on the strings, exactly as the inline comprehension
+        it replaces did.
+    """
+    col: str = idxname(entry.column)
+    comparison: str = entry.comparison
+    if comparison in (Comparisons.JOIN.value, Comparisons.ANTIJOIN.value):
+        if not isinstance(entry.comparator, list):
+            raise TablassertError(
+                f"`{comparison}` reindex requires a list of identifiers, got {type(entry.comparator).__name__}.",
+                code="comparison-membership-comparator-required",
+            )
+        return (reindex_membership, (col, entry.comparator, comparison == Comparisons.ANTIJOIN.value))
+    if entry.regex:
+        # models.Reindex rejects `regex` off eq/ne, so this arm never needs the numeric cast or an
+        # operator lookup.
+        return (reindex_regex, (col, entry.comparator, comparison == Comparisons.NE.value))
+    if comparison in (Comparisons.NE.value, Comparisons.EQ.value):
+        return (reindex, (col, getattr(operator, comparison), entry.comparator, False))
+    return (reindex, (col, getattr(operator, comparison), entry.comparator))
+
+
 def drop_not_significant(lf: pl.LazyFrame, col: str = "statistical_significance_qualifier") -> pl.LazyFrame:
     """Drop release-mode edges whose significance qualifier is ``not_significant``.
 
@@ -1337,14 +1510,7 @@ class Tcode(Section):
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
-            [
-                (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator))
-                if x.comparison not in ["ne", "eq"]
-                else (reindex, (idxname(x.column), getattr(operator, x.comparison), x.comparator, False))
-                for x in self.source.reindex
-            ]
-            if self.source.reindex
-            else None,
+            [reindex_op(x) for x in self.source.reindex] if self.source.reindex else None,
             # --head preview: randomly sample min(HEAD_ROWS, height) rows before any encoding/resolve.
             (head, (HEAD_ROWS,)) if self.head else None,
             [
@@ -1400,9 +1566,32 @@ class Tcode(Section):
                 x.exclude_prefixes,
                 x.exclude_regex,
                 x.nullable if isinstance(x, Qualifier) else False,
+                x.taxon_from,
             )
             for x, col in node_columns
         ]
+        # Per-row taxon scoping (ResolveSpec.taxon_from): a scoped column reads the
+        # taxon metadata its source column's resolution emits, so sources must resolve
+        # first. Layer the specs by dependency (config validation has already rejected
+        # cycles and unknown targets); with no taxon_from anywhere this is one batch
+        # and the op list is exactly what it always was.
+        spec_cols: set[str] = {spec.col for spec in specs}
+        batches: list[list[ResolveSpec]] = []
+        placed: set[str] = set()
+        pending: list[ResolveSpec] = list(specs)
+        while pending:
+            ready: list[ResolveSpec] = [s for s in pending if s.taxon_from is None or s.taxon_from in placed or s.taxon_from not in spec_cols]
+            if not ready:
+                raise TablassertError(
+                    f"taxon_from references form a cycle among {', '.join(sorted(s.col for s in pending))}; "
+                    "no column can resolve first. This is rejected at config time, so a build reaching here means the "
+                    "section was assembled programmatically -- fix the spec layering.",
+                    code="taxon-from-cycle",
+                )
+            batches.append(ready)
+            placed.update(s.col for s in ready)
+            pending = [s for s in pending if s.col not in placed]
+        resolve_ops: list[Any] = [(resolve_batch, (batch, db, self.log, self.store.stem, self.config.name, True, "_two")) for batch in batches]
         return [
             [self.node_prep(x, col) for x, col in node_columns],
             # Encode only: no pre-resolution snapshot and no NLP normalization, both of
@@ -1414,7 +1603,7 @@ class Tcode(Section):
             # copied them into named slots; trim before resolution so the frame that
             # resolve_batch materializes and joins stays narrow.
             (trim, ()),
-            (resolve_batch, (specs, db, self.log, self.store.stem, self.config.name, True, "_two")),
+            *resolve_ops,
             # QC audits only the strict columns: a nullable qualifier's nulls are expected
             # (blank cell / no match), not resolution errors for the audit to delete.
             [
@@ -1564,6 +1753,8 @@ PHASE_OF: dict[Callable, str] = {
     crop: "filter",
     pick: "filter",
     reindex: "filter",
+    reindex_membership: "filter",
+    reindex_regex: "filter",
     head: "filter",
     coerce_columns: "clean",
     clean_numeric: "clean",
@@ -1844,15 +2035,24 @@ def dedup_stream(p_in: Path, is_edges: bool, domain: str = "TABLASSERT", uuid_fi
         so it never ships in the final NDJSON.
 
     Returns:
-        ``None``; writes the deduplicated stream alongside ``p_in`` with no
-        ``.tmp`` suffix, then deletes ``p_in``.
+        ``None``; atomically replaces the deduplicated stream alongside ``p_in`` with no
+        ``.tmp`` suffix, then deletes ``p_in``. Parsing, collision, and native writer
+        failures preserve the existing output and the input for diagnosis.
     """
     p_out: Path = p_in.with_suffix("")
+    if p_out == p_in:
+        raise ValueError("dedup_stream requires an input filename with a removable suffix")
 
-    if p_out.is_file():
-        p_out.unlink()
-
-    merged, scalar_conflicts = rs.dedup_ndjson(p_in, p_out, is_edges, domain, uuid_fields, on_collision)
+    # Keep the previous artifact intact until native parsing/dedup completes.
+    # A sibling directory keeps replacement on the same filesystem and retains
+    # the public basename for native collision diagnostics and fold reports.
+    with TemporaryDirectory(prefix=f".{p_out.name}.dedup-", dir=p_out.parent) as stage_dir:
+        staged: Path = Path(stage_dir) / p_out.name
+        merged, scalar_conflicts = rs.dedup_ndjson(p_in, staged, is_edges, domain, uuid_fields, on_collision)
+        report: Path = staged.with_name(staged.name + ".foldreport.json")
+        staged.replace(p_out)
+        if report.exists():
+            report.replace(p_out.with_name(p_out.name + ".foldreport.json"))
     if merged:
         logger.warning(
             "uuid_on_collision=merge folded {merged} divergent edge records into their first-seen edges; {conflicts} conflicting scalar fields kept the first value",

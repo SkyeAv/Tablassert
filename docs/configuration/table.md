@@ -174,8 +174,9 @@ Filter rows based on column values.
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
 | `column` | String | Yes | Source column letters to evaluate; constrained to `^[A-Z]{1,3}$` (`A`-`ZZZ`). |
-| `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`. |
-| `comparator` | String\|Int\|Float | Yes | Value to compare against. Must be a string for `"eq"`/`"ne"`, or a number for `"lt"`/`"le"`/`"gt"`/`"ge"`. |
+| `comparison` | String | No | Operator. Defaults to `"ne"`; allowed values are `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`, `"join"`, `"antijoin"`. |
+| `comparator` | String\|Int\|Float\|List[String] | Yes | Value to compare against. A string for `"eq"`/`"ne"`, a number for `"lt"`/`"le"`/`"gt"`/`"ge"`, or a non-empty list of identifiers for `"join"`/`"antijoin"`. Membership members must be quoted strings: `comparator: [3, 4]` is rejected (`comparison-membership-member-not-a-string`) because membership tests the cell as text, so write `["3", "4"]`. With `regex: true` it is a pattern instead of a literal, so it must be a string. |
+| `regex` | Boolean | No | Treat `comparator` as a Polars-compatible regular expression searched in the cell instead of a literal value: `"eq"` keeps rows whose cell matches, `"ne"` keeps rows that do not. Case-sensitive and unanchored (anchor with `^`/`$` to pin a whole cell), the cell is compared as text, and a null cell never matches, so blank rows drop under either operator. Only valid with `"eq"`/`"ne"` (`comparison-regex-requires-eq-ne`); a pattern that is invalid, whitespace-only, or can match an empty cell (`^`, `()`, `.*`) is rejected at config time (`regex-bad-pattern`) because such a pattern matches every cell, so an `"ne"` filter would silently drop the whole table. Defaults to `false` (literal comparison), so existing configs are unchanged. |
 
 **Example:**
 
@@ -183,6 +184,70 @@ Filter rows based on column values.
 reindex:
   - {column: C, comparison: lt, comparator: 0.05}  # Keep rows where column C < 0.05
 ```
+
+**Regex comparators (`regex: true`).** One anchored pattern replaces a stack of literal `"ne"` filters for the same missing-value family:
+
+```yaml
+reindex:
+  - {column: A, comparison: ne, comparator: '^(?:n/?a|-{1,2}|not reported)$', regex: true}  # drop every placeholder spelling
+  - {column: B, comparison: eq, comparator: '^\d{4}$', regex: true}  # keep only cells that are exactly four digits
+  - {column: C, comparison: ne, comparator: "N/A"}  # literal comparison: `regex` defaults to false
+```
+
+- Matching is Polars `str.contains`, so it is **unanchored**: `n/?a` matches the `na` inside `bona fide` and drops that row. Write `^...$` to pin the whole cell.
+- The dialect is the Rust `regex` crate, the same constraints documented under [Text Transformations](#text-transformations): no backreferences, no lookarounds, groups and character classes fine, and inline flags such as `(?i)` work.
+- Cells are compared as text (the column is cast to String), so a typed `parquet` column matches its string form (`22.0` matches `^2\d?\.0$`). Use `"lt"`/`"le"`/`"gt"`/`"ge"` to compare numbers.
+- A null cell matches nothing, so blank rows drop under both `"eq"` and `"ne"`, exactly as the literal `"eq"`/`"ne"` filters already drop them.
+- Config-time guards: `regex: true` on an ordering comparison is rejected (`comparison-regex-requires-eq-ne`), and a pattern the Polars engine cannot compile, or one that can match an empty cell (`^`, `()`, `.*`, `x*`), is rejected (`regex-bad-pattern`) because both match every cell and an `"ne"` filter would then silently drop the whole table.
+
+**Membership comparisons (`join` / `antijoin`).** The two membership comparisons test a column against a list of
+identifiers instead of a single value: `join` keeps the rows whose cell is in the list, `antijoin` keeps the rows
+that are not.
+Use them for a curated allow-list, or to split one table into a section that keeps a set of
+subjects and a section that drops it. Duplicate identifiers in the list are ignored, surviving rows
+keep their source order, and every column keeps the type the reader gave it.
+
+The comparison runs at the same stage as the other `reindex` conditions, before encoding, NLP
+normalization, and entity resolution, so it tests the cell exactly as the source file wrote it. A
+`join` list of `HGNC:1100` therefore matches a cell that already reads `HGNC:1100`, not a `BRCA1`
+symbol column: resolve first (a different section, or a `prefix` encoding) if the list is in CURIE
+form and the column is not.
+
+Because the test is textual, a column the reader typed (a parquet `Int64`, a date, a boolean) is
+compared against its string form, and that form must be spelled as polars renders it. Measured
+forms: `3` for the integer `3`, `"3.0"` for the float `3.0`, `true` for a boolean, `2024-01-15` for
+a date, `06:24:30` for a time, `1.50` for a decimal (polars renders `Decimal` at the column's scale,
+so `Decimal("1.5")` in a scale-2 column reads `1.50`), and `2024-01-15 06:24:30.000000+00:00` for a
+datetime (a space and microsecond precision, not ISO `T`; timezone-aware cells render shifted to
+UTC with a `+00:00` offset). Quote the members of the list to match: membership is textual, so an
+unquoted number is rejected at config time
+(`comparison-membership-member-not-a-string`). A cell of a dtype with no usable single string form
+(`List`, `Array`, `Struct`, `Object`, or `Binary`) is refused at build time with
+`reindex-membership-column-dtype-unsupported`; `Binary` is refused because it casts only when it
+happens to be valid UTF-8, which would match some rows and raise on the rest.
+Matching is exact textual identity, never a pattern: `regex: true`
+on a membership entry is rejected at config time (`comparison-regex-requires-eq-ne`), so use the regex comparator
+above when a pattern rather than a fixed identifier set defines the rows you want.
+
+Null cells follow join rules, and that is the one place membership differs from `ne`: a null never
+matches, so `join` drops it while `antijoin` keeps it. An empty list, an unknown `column`, and a
+membership entry whose comparator is not a list of quoted strings are config or build errors rather
+than silent no-ops; a list that matches nothing is a valid empty filter and produces no rows without
+warning.
+
+**Example:** one section that keeps a gene allow-list and drops one retired gene inside it. The two
+conditions are ANDed, the same way the scalar conditions above are.
+
+```yaml
+reindex:
+  # Keep only the curated genes (column A holds gene CURIEs)...
+  - {column: A, comparison: join, comparator: ["HGNC:1100", "HGNC:11998"]}
+  # ...and drop the retired one even though it is on the allow-list.
+  - {column: A, comparison: antijoin, comparator: ["HGNC:37133"]}
+```
+
+To split one file into two complementary sections, use the same list under `join` in one section and
+under `antijoin` in the other; see [Identifier Allow-list and Deny-list](../examples.md#identifier-allow-list-and-deny-list).
 
 ### Statement (Triple Definition)
 
@@ -194,7 +259,7 @@ Defines subject-predicate-object relationships.
 | `predicate` | String | No | Biolink predicate. Defaults to `"related_to"`. Three DAKP prevention predicates are deliberate local extensions ahead of Biolink support (see `biolink.PREDICATE_OVERRIDES`): `prevents`, `applied_to_prevent`, `contraindicated_in_the_prevention_of`. |
 | `object` | NodeEncoding | Yes | Object entity configuration |
 | `qualifiers` | List[Qualifier] | No | Edge qualifiers (context) |
-| `category_override` | Map[Categories, EdgeCategories] | No | Pin the association class per resolved object category (bare names, no `biolink:` prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose `predicate` slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. `Disease` and `PhenotypicFeature` both derive to `ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`, but only `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` declare slots like `regulatory_approvals` and `number_of_cases`. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on the disease side (`population_context_qualifier` needed a grant only until biolink-model 4.4.6 declared it natively on both pinned classes). Deliberately ungranted: `species_context_qualifier` (disabled, never emittable) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable: attached to no class, so a grant could never validate). |
+| `category_override` | Map[Categories, EdgeCategories] | No | Pin the association class per resolved object category (bare names, no `biolink:` prefix), replacing the derived (subject, object) pair lookup for those rows. Rows whose object category is absent from the map derive as before. Pinned classes are still reconciled against the section predicate (a class whose `predicate` slot rejects it is walked up the association hierarchy, with a warning at config time). Use it when one section mixes object categories the pair lookup merges: e.g. `Disease` and `PhenotypicFeature` both derive to `ChemicalEntityToDiseaseOrPhenotypicFeatureAssociation`, but only `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` declare slots like `regulatory_approvals` and `number_of_cases`. Rows pinned to either of those classes may additionally carry DAKP's sparse qualifier stack ahead of the model under deliberate Tablassert policy grants: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on the disease side (`population_context_qualifier` needed a grant only until biolink-model 4.4.6 declared it natively on both pinned classes). Deliberately ungranted: `species_context_qualifier` (needs no grant: the root `association` class declares the slot, so every pinned class inherits it) plus `temporal_interval_qualifier` and `severity_qualifier` (unsatisfiable: attached to no class, so a grant could never validate). |
 
 **Example:**
 
@@ -237,6 +302,7 @@ Defines how to extract and resolve entities.
 | `method` | String | No | `"value"` (literal) or `"column"` (source column letters). Defaults to `"value"`. |
 | `encoding` | String\|Int\|Float | Yes | Literal value or source column letters, depending on `method` |
 | `taxon` | PositiveInt | No | NCBI Taxon ID for filtering (e.g., `9606` for human); defaults to `9606` (Homo sapiens), set null to disable |
+| `taxon_from` | String | No | Per-row taxon scoping: name another resolved node column of the same statement (a CURIE-ranged qualifier key, or `subject`/`object`) whose resolved NCBITaxon CURIE scopes this column's entity resolution row by row, instead of the static `taxon`. The named column is resolved first; rows whose taxon cell is blank fall back to the `9606` default, and a non-null cell that does not resolve to an NCBITaxon CURIE fails the build (`taxon-from-not-ncbitaxon`). Mutually exclusive with an explicit `taxon` (`taxon-from-conflict`); an unknown, self-referencing, or cyclic target is rejected at config time (`taxon-from-unknown-column` / `taxon-from-self` / `taxon-from-cycle`). The source column itself usually wants `taxon: null` (see [Taxonomic Filtering](#taxonomic-filtering)) |
 | `prioritize` | List[String] | No | Preferred Biolink categories (must be valid `Categories` enum values such as `Gene`, `Protein`) |
 | `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
 | `exclude_prefixes` | List[String] | No | CURIE namespace prefixes excluded during entity resolution: the prefix is the text before the first `:` of a resolved CURIE, and every candidate whose prefix is listed is dropped. Matching is exact and case-sensitive (`OMIM` drops `OMIM:100100` but not `OMIMPS:100` or `omim:100100`). Optional; defaults to null (no prefix filtering). See [Resolution Filters](#resolution-filters). |
@@ -316,6 +382,34 @@ Common taxon IDs:
 - `9606` - Homo sapiens (human)
 - `10090` - Mus musculus (mouse)
 - `7227` - Drosophila melanogaster (fruit fly)
+
+**`taxon_from: str`** - Scope entity resolution per row by another resolved column's taxon
+
+```yaml
+statement:
+  subject:
+    encoding: A
+    taxon_from: species_context_qualifier  # each row resolves under its own species
+  object:
+    encoding: B
+    taxon_from: species_context_qualifier
+  qualifiers:
+    - qualifier: species_context_qualifier
+      encoding: C
+```
+
+The named column (here the `species_context_qualifier` qualifier key) is resolved
+first, and each row's subject/object resolution is then constrained by that row's
+resolved `NCBITaxon:<id>` exactly as a static `taxon` would constrain the whole
+column: same filter (`TAXON_ID == <id> or 0`), same ranking, applied per bucket of
+rows sharing a taxon. Rows whose taxon cell is blank fall back to the `9606`
+default; a non-null cell that resolves to a non-NCBITaxon concept fails the build
+(`taxon-from-not-ncbitaxon`) rather than silently resolving everything under one
+species. Use it when one section mixes species (human and animal drug labels) so a
+term resolves to the species-appropriate concept row by row. The source column
+itself usually wants `taxon: null`: NCBITaxon cliques carry their own taxon ids, so
+a source left at the `9606` default would taxon-filter away every non-human species
+value before it can scope anything.
 
 #### Category Prioritization
 
@@ -449,13 +543,17 @@ Use the `"values"` token to reference column values in transformations.
 ### Qualifiers
 
 Add context to edges (anatomical location, disease context, etc.).
-`species_context_qualifier` is intentionally disabled: it is neither derived from
-node taxon metadata nor accepted as a qualifier or annotation. Taxon metadata is
-still emitted on resolved nodes.
+`species_context_qualifier` is a declarable, CURIE-ranged qualifier: Biolink Model
+declares the slot on the root `association` class (range `organism taxon`, NCBITaxon
+CURIE values such as `NCBITaxon:9606` for human), so values resolve through fullmap
+like any other CURIE-ranged qualifier (a CURIE cell resolves back to itself; species
+text such as `dogs` resolves to the NCBITaxon clique). It is never auto-derived from
+node taxon metadata, so it appears on an edge only when a config declares it; taxon
+metadata is still emitted on resolved nodes.
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `qualifier` | String | Yes | Biolink qualifier from the `Qualifiers` enum (e.g., `"anatomical_context_qualifier"`). Each qualifier key may be declared at most once per statement (`qualifier-duplicated`). |
+| `qualifier` | String | Yes | Biolink qualifier from the `Qualifiers` enum (e.g., `"anatomical_context_qualifier"`, `"species_context_qualifier"`). Each qualifier key may be declared at most once per statement (`qualifier-duplicated`). |
 | `nullable` | Boolean | No | Default `false`. When `true`, a blank or unresolvable `method: column` cell **keeps the edge** and omits the qualifier for that row; when `false` (the default) such a row is dropped, exactly like an unresolved subject/object. Only valid with `method: column`; a literal qualifier can never be null (`qualifier-nullable-literal`). |
 | (inherits NodeEncoding) | | | All NodeEncoding fields available |
 
@@ -604,7 +702,7 @@ annotations:
 
 Annotation names fall into three groups at build time:
 
-- **Allowed edge fields:** names on the edge allow-list: [Biolink Association](https://biolink.github.io/biolink-model/) slots, qualifier slots, and curated KGX/Tablassert edge fields (e.g. `p_value`, `adjusted_p_value`, `knowledge_level`, `supporting_text`, `publications`, `effect_size`, `effect_type`, `statistical_significance_qualifier`, qualifier slots like `severity_qualifier` / `disease_context_qualifier`) are written to edges verbatim. `effect_size` and `effect_type` became real Association slots in biolink-model 4.4.4 (PR #1774) and emit as real JSON numbers and enum tokens. Annotation names are matched case-insensitively against the allow-list and emitted under the canonical slot spelling. `regulatory_approvals` (multivalued, so declare [`split_by`](#split_by) for pipe-joined cells like `011111|022222`), `disease_context_qualifier`, `anatomical_context_qualifier`, and `frequency_qualifier` are declared natively on `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` by biolink-model 4.4.5, and `sex_qualifier` on the phenotypic-feature class; biolink-model 4.4.6 added `population_context_qualifier` to both classes, so those rows keep them without any override. The remaining class-scoped grants cover DAKP's sparse qualifier stack ahead of the model: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on `EntityToDiseaseAssociation`; without a grant `prune_to_class` nulls those qualifiers off the pinned rows. `species_context_qualifier` stays disabled, and `temporal_interval_qualifier` / `severity_qualifier` stay unsatisfiable, so none of the three is granted.
+- **Allowed edge fields:** names on the edge allow-list: [Biolink Association](https://biolink.github.io/biolink-model/) slots, qualifier slots, and curated KGX/Tablassert edge fields (e.g. `p_value`, `adjusted_p_value`, `knowledge_level`, `supporting_text`, `publications`, `effect_size`, `effect_type`, `statistical_significance_qualifier`, qualifier slots like `severity_qualifier` / `disease_context_qualifier`) are written to edges verbatim. `effect_size` and `effect_type` became real Association slots in biolink-model 4.4.4 (PR #1774) and emit as real JSON numbers and enum tokens. Annotation names are matched case-insensitively against the allow-list and emitted under the canonical slot spelling. `regulatory_approvals` (multivalued, so declare [`split_by`](#split_by) for pipe-joined cells like `011111|022222`), `disease_context_qualifier`, `anatomical_context_qualifier`, and `frequency_qualifier` are declared natively on `EntityToDiseaseAssociation` / `EntityToPhenotypicFeatureAssociation` by biolink-model 4.4.5, and `sex_qualifier` on the phenotypic-feature class; biolink-model 4.4.6 added `population_context_qualifier` to both classes, so those rows keep them without any override. The remaining class-scoped grants cover DAKP's sparse qualifier stack ahead of the model: `temporal_context_qualifier` on both classes, plus `sex_qualifier` on `EntityToDiseaseAssociation`; without a grant `prune_to_class` nulls those qualifiers off the pinned rows. `species_context_qualifier` needs no grant (the root `association` class declares it, and it is a declarable qualifier since its re-enablement), while `temporal_interval_qualifier` / `severity_qualifier` stay unsatisfiable, so neither of those two is granted.
 - **Study metadata:** `study_size`, `study_cohort`, `study_context`, `study_date_range`, `study_method_description`, and `study_method_types` are current Biolink `Study` node properties ([biolink-model PR #1770](https://github.com/biolink/biolink-model/pull/1770)). They describe the study itself, not an association, so their values are carried on the edge's **inlined supporting Study** (`has_supporting_studies` to `Study`, the COHD/ICEES pattern) rather than emitted as edge fields. Deprecated `supporting_study_*` spellings and `sample_size` are accepted as aliases and renamed onto canonical `study_*` names by coercion. They never appear in final JSON. Declaring any of them is legal and emits a `BiolinkRelocationWarning` naming where the value went.
 - **Unsatisfiable slots:** names the Biolink LinkML schema declares but attaches to **no** Pydantic class, derived from the installed `biolink-model`. A record carrying one could never validate, so its value is preserved in the inlined supporting study's `StudyResult.description`. A slot leaves the set automatically once a release attaches it.
 
