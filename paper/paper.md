@@ -28,13 +28,13 @@ bibliography: paper.bib
 
 The majority of information in biomedical research papers is published in tables, particularly supplemental tables. These tables include association statistics, assay readouts, curated gene lists, omics, and other data. Much of this information encodes relationships between biological entities (e.g., between row and column labels). Tablassert converts such spreadsheets (Excel, CSV, TSV) into knowledge graphs ready for the NCATS Biomedical Data Translator [@translator]. A user declares in YAML how each table's data map to subject–predicate–object statements; Tablassert resolves free text (e.g., "lung cancer") to standard identifiers, attaches provenance and statistics, and emits graph files conforming to community standards [@kgx; @biolink-model].  
 
-# Statement of need
+# Statement of Need
 
 Biomedical knowledge graphs classically rely on bespoke ingest scripts for each source. When these data sources lack standardization, such as across the millions of tables published in the biomedical literature, bespoke scripts impose three costs which limit scalability. First, mapping from each table's rows, columns, and cells to biological assertions is idiosyncratically encoded, so it cannot easily be inspected, reviewed, or reused. Second, entity resolution may depend on hosted network services, so graph builds may not be reproducible. Third—and most importantly—because every source requires a new pipeline, most published tables are never ingested at all. The process is not currently scalable.
 
 Tablassert targets knowledge-graph engineers and bioinformaticians with tabular biomedical information sources and need rigorously structured output. Declarative YAML recipes make data-to-statement mapping scalable, inspectable, and reusable. Batched resolution against an embedded identifier database removes the runtime service dependency. The same recipes extend beyond journal supplemental tables to any relational source — trial registries, drug approval records, or a researcher's own tables — and each build can emit the Resource Ingest Guide metadata required for integration with Translator.
 
-# State of the field
+# State of the Field
 
 Translator ingests commonly use source-specific Python with tools for exchange, schema modeling,
 and transformation. KGX [@kgx] exchanges and validates graphs but provides no
@@ -49,7 +49,7 @@ hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier r
 a network API. Hosted builds depend on service availability; reproducing historical results
 requires preserving responses or pinning the underlying resources.
 
-# Software design
+# Software Design
 
 Tablassert has three main trade-offs: fullmap storage enables local batched resolution without
 service calls; declarative YAML favors accessibility and validation over procedural flexibility;
@@ -151,7 +151,7 @@ edge pairs and nine matching nodes. Tablassert additionally emits a Resource Ing
 deduplicated nodes, structured provenance, and supporting-study metadata. This compares
 verbosity, not runtime or capability.
 
-# Research impact statement
+# Research Impact Statement
 
 Tablassert and its declarative precursor underlie several production knowledge graphs.
 MicrobiomeKG [@microbiomekg] used an early precursor; deployed Microbiome and Multiomics graphs
@@ -165,16 +165,15 @@ ingest integration is under review [@ingests], starting with a Multiomics passth
 Microbiome, Multiomics, and Drug Approvals graphs as domain-specific sources. A rare-disease
 multiomics knowledge graph built with Tablassert is in preparation.
 
-# AI usage disclosure
+# AI Usage Disclosure
 
 Generative AI assisted with code generation, test writing, documentation, drafting, and
 revising. Coding-agent use began on 27 January 2026 (`50f29e8`). Models used included Grammarly, a customized Pi coding agent (version 0.81.1), `claude-opus-5`, `claude-sonnet-5`, `deepseek-v4`, `gemini-3.8-flash`, `glm-5.3`, `gpt-5.6`, `gpt-6`, `kimi-k2`, `kimi-k3`, `muse-spark-1.3-contributor-free`, `nemotron-3-ultra-550b-a55b:free`, `laguna-s-2.1`, `qwen3.8`, `mimo-v2.5`, and `mimo-v2.6-pro`. Detailed prompt engineering used promptfoo (0.121.17) and GEPA (0.1.4). Prompt optimization and AI evaluation supplemented human review without independently proving correctness. Authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
 
-# Author contributions
+# Author Contributions
 
-Skye L. Goetz developed the software, led design, and performed analyses. Jared C. Roach and
-Gwênlyn Glusman helped design the software and analyses and provided detailed project feedback.
-All authors wrote, revised, and proofread the manuscript.
+Skye Goetz developed the software, led design, and performed analyses. Jared Roach and
+Gwênlyn Glusman helped design the software and analyses and provided feedback. All authors wrote the manuscript.
 
 # Acknowledgements
 
