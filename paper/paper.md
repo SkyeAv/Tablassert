@@ -170,31 +170,8 @@ multiomics knowledge graph built with Tablassert is in preparation.
 
 # AI usage disclosure
 
-Generative AI assisted with code generation, test writing, documentation, and drafting and
-revising this manuscript, primarily through a customized Pi coding agent (version 0.81.1). AI
-spelling and grammar checks covered documentation and the manuscript, including Grammarly for
-the manuscript. Coding-agent use began on 27 January 2026 (`50f29e8`); co-author credits record
-Claude Sonnet 4.5 and Opus 4.5/4.6 (context variants grouped). Initial versions used no coding
-agents.
-
-Models used included `claude-opus-5`, `claude-opus-5-5`, `claude-sonnet-5`, `claude-sonnet-5-5`,
-`deepseek-v4-pro`, `deepseek-v4-flash`, `gemini-3.8-flash`, `glm-5.3`, `glm-5.3-flash`,
-`gpt-5.6-luna`, `gpt-5.6-sol-review`, `gpt-5.6-terra`, `gpt-6-astra`, `gpt-6-luna`, `gpt-6-sol`,
-`gpt-6.1-sol`, `kimi-k2.5`, `kimi-k2.6`, `kimi-k2.7-pro`, `kimi-k2.8-preview`, `kimi-k3`,
-`kimi-k3.1-pro`, `muse-spark-1.3-contributor-free`, `nemotron-3-ultra-550b-a55b:free`,
-`laguna-s-2.1`, `qwen3.8-flash`, `qwen3.8-max`, `qwen3.8-max-preview`, `mimo-v2.5`, and
-`mimo-v2.6-pro`.
-
-A bespoke LLM-as-judge implementation reviewed code before pull requests; CodeRabbit
-occasionally reviewed pull requests before Goetz. Validation combined manual auditing, automated
-tests, CI/CD, Goetz's custom linting rules, scripted inclusion checks, Git pre-commit hooks, and
-language-server diagnostics. Detailed prompt engineering used promptfoo (0.121.17) and GEPA
-(0.1.4) to optimize outputs, evaluated with LLM judges and inclusion checks. Prompt optimization
-and AI evaluation supplemented human review without independently proving correctness. The
-authors made all software architecture decisions and manually reviewed and audited all changes,
-including AI-assisted outputs. The authors retain full responsibility for the accuracy,
-originality, licensing, and ethical and legal compliance of the submitted software and
-manuscript.
+Generative AI assisted with code generation, test writing, documentation, drafting, and
+revising. Coding-agent use began on 27 January 2026 (`50f29e8`). Models used included Grammarly, a customized Pi coding agent (version 0.81.1), `claude-opus-5`, `claude-sonnet-5`, `deepseek-v4`, `gemini-3.8-flash`, `glm-5.3`, `gpt-5.6`, `gpt-6`, `kimi-k2`, `kimi-k3`, `muse-spark-1.3-contributor-free`, `nemotron-3-ultra-550b-a55b:free`, `laguna-s-2.1`, `qwen3.8`, `mimo-v2.5`, and `mimo-v2.6-pro`. Detailed prompt engineering used promptfoo (0.121.17) and GEPA (0.1.4). Prompt optimization and AI evaluation supplemented human review without independently proving correctness. Authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
 
 # Author contributions
 
