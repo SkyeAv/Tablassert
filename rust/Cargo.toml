@@ -12,7 +12,7 @@ default = []
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-bincode = "1"
+bincode = "3"
 # `zlib-rs` backend: the fastest api-compatible DEFLATE decompressor (pure
 # Rust, runtime SIMD multiversioning — no C toolchain needed for wheels).
 # The fullmap build's producer threads decompress ~30-40 GB of BABEL `.gz`;
@@ -51,7 +51,7 @@ xxhash-rust = { version = "0.8", features = ["xxh64", "xxh3"] }
 zstd = "0.13"
 
 [dev-dependencies]
-bincode = "1"
+bincode = "3"
 flate2 = { version = "1", features = ["zlib-rs"], default-features = false }
 redb = { git = "https://github.com/cberner/redb.git", rev = "a35e7cc86f191d08a444d5973469b34673d586fc", features = ["experimental_cursor"] }
 serde = { version = "1", features = ["derive"] }
