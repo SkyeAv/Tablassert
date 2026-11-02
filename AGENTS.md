@@ -1,13 +1,13 @@
-# AGENTS.md -- Tablassert
+# AGENTS.md: Tablassert
 
 Tablassert turns biomedical spreadsheets into KGX knowledge graphs for NCATS Translator. Python package in `src/tablassert/` plus a PyO3 Rust extension in `rust/` built with maturin; uv-managed. Guidance below is evidence-keyed; fix anything stale when touched.
 
 ## Build / Test / Lint
 
-- One-time setup: `make setup` (uv sync --group dev --extra cli --extra qc --extra log, then debug `maturin develop`).  [verified]
+- One-time setup: `make setup` (`uv sync --group dev --extra cli --extra qc --extra log`, then debug `maturin develop`).  [verified]
 - After any Rust change, or when the extension may be stale: `make dev` (debug build; `make build` for release-mode performance checks only).  [verified]
 - Full local gate before a PR: `make check` (ruff lint + format check + pyright + pytest + cargo test + clippy -D warnings).  [verified]
-- Python tests: `uv run pytest`  [verified]  -- parallel via pytest-xdist (`-n auto` in pyproject addopts, coverage inline); use `-n 0` for one serial test while debugging.
+- Python tests: `uv run pytest`  [verified]; parallel via pytest-xdist (`-n auto` in pyproject addopts, coverage inline); use `-n 0` for one serial test while debugging.
 - Rust tests: `cargo test --manifest-path rust/Cargo.toml`  (evidence: ci)
 - CI jobs are exactly: `ruff check`, `ruff format --check`, `uv run pyright`, `uv run pytest` (after `uv run maturin develop`), `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`.  (evidence: ci)
 - After editing `pyproject.toml`, relock; `uv lock --check` runs in pre-commit and catches a stale lockfile.  [verified]

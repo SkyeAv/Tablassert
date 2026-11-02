@@ -33,7 +33,7 @@
       "style": "compact"
     }
   },
-  "customRules": ["./.markdownlint/no-unicode-chars.cjs"],
+  "customRules": ["./.markdownlint/no-unicode-chars.cjs", "./.markdownlint/no-double-hyphen.cjs"],
   "globs": ["**/*.md"],
   "ignores": [
     "**/.git/**",
