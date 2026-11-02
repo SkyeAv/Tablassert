@@ -21,7 +21,7 @@ bincode = "1"
 flate2 = { version = "1", features = ["zlib-rs"], default-features = false }
 memmap2 = "0.9"
 mimalloc = { version = "0.1", default-features = false }
-pyo3 = "0.29"
+pyo3 = "0.30"
 rayon = "1"
 # Pinned to cberner/redb master (the 4.2.0-to-be, rev a35e7cc 2026-08-10) for
 # two Phase-4 wins not yet published on crates.io (latest stable is 4.1.0):
