@@ -1601,15 +1601,10 @@ costly stage of the cascade.</p>
 <a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="c1"># - subject_name</span>
 <a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
 <a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="c1"># Run QC</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">validated</span> <span class="o">=</span> <span class="n">fullmap_audit</span><span class="p">(</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>  <span class="n">lf</span><span class="p">,</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>  <span class="n">col</span><span class="o">=</span><span class="s2">&quot;subject&quot;</span><span class="p">,</span>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>  <span class="n">section_hash</span><span class="o">=</span><span class="s2">&quot;tutorial-section&quot;</span><span class="p">,</span>
-<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>  <span class="n">config_file</span><span class="o">=</span><span class="s2">&quot;tutorial-table.yaml&quot;</span><span class="p">,</span>
-<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="p">)</span>
-<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>
-<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="c1"># Only rows that passed QC remain</span>
-<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="c1"># Rows with low-confidence mappings removed</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">validated</span> <span class="o">=</span> <span class="n">fullmap_audit</span><span class="p">(</span><span class="n">lf</span><span class="p">,</span> <span class="n">col</span><span class="o">=</span><span class="s2">&quot;subject&quot;</span><span class="p">,</span> <span class="n">section_hash</span><span class="o">=</span><span class="s2">&quot;tutorial-section&quot;</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="s2">&quot;tutorial-table.yaml&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="c1"># Only rows that passed QC remain</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="c1"># Rows with low-confidence mappings removed</span>
 </code></pre></div>
 <h3 id="pipeline-flow">Pipeline Flow<a class="headerlink" href="#pipeline-flow" title="Permanent link">&para;</a></h3>
 <p>The cascade runs on unique <code>(original, preferred)</code> pairs, deduplicated before scoring, so the counts
