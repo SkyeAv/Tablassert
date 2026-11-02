@@ -49,6 +49,15 @@ hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier r
 a network API. Hosted builds depend on service availability; reproducing historical results
 requires preserving responses or pinning the underlying resources.
 
+Tablassert was built rather than contributed upstream for three reasons. First, its precursor
+predates the Translator ingests repository [@translator-ingests], which deployed its graphs
+through PloverDB [@plover]; existing infrastructure made migration costly. Second, it targets
+many small heterogeneous tables: new predicates or edge annotations need recipe changes, not
+transform code and Biolink boilerplate. Third, builds run locally on demand, whereas shared
+ingests run as periodic batch jobs, slowing iteration. Translator-specific requirements also
+fall outside BioCypher's and OntoWeaver's scope; Tablassert interoperates through KGX and an
+ingest passthrough [@ingests].
+
 # Software Design
 
 Tablassert has three main trade-offs: fullmap storage enables local batched resolution without
