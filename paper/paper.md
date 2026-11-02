@@ -31,6 +31,7 @@ The majority of information in biomedical research papers is published in tables
 # Statement of need
 
 Biomedical knowledge graphs classically rely on bespoke ingest scripts for each source. When these data sources lack standardization, such as across the millions of tables published in the biomedical literature, bespoke scripts impose three costs which limit scalability. First, mapping from each table's rows, columns, and cells to biological assertions is idiosyncratically encoded, so it cannot easily be inspected, reviewed, or reused. Second, entity resolution may depend on hosted network services, so graph builds may not be reproducible. Third—and most importantly—because every source requires a new pipeline, most published tables are never ingested at all. The process is not currently scalable.
+
 Tablassert targets knowledge-graph engineers and bioinformaticians with tabular biomedical information sources and need rigorously structured output. Declarative YAML recipes make data-to-statement mapping scalable, inspectable, and reusable. Batched resolution against an embedded identifier database removes the runtime service dependency. The same recipes extend beyond journal supplemental tables to any relational source — trial registries, drug approval records, or a researcher's own tables — and each build can emit the Resource Ingest Guide metadata required for integration with Translator.
 
 # State of the field
