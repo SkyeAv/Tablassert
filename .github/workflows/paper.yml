@@ -1,0 +1,61 @@
+name: Paper
+
+# JOSS paper preview: compiles paper/paper.md to PDF whenever paper content changes, so a
+# broken front matter, malformed bibtex, or unresolvable citation fails here instead of at
+# submission. The paper's structural gates (citation resolution, word budgets, front
+# matter) live in tests/test_paper.py and run in ci.yml's python-test job on every PR;
+# this workflow deliberately adds only the compiled artifact, path-filtered so untouched
+# PRs pay nothing.
+#
+# Compilation uses the official JOSS paperdraft resources from the archived (frozen
+# 2024-04-16) openjournals/whedon repository. The prebuilt openjournals/whedon Docker Hub
+# image is gone, so the image is built per run; the Dockerfile needs three patches,
+# identical to the Makefile's paper-image target (keep the two in sync):
+#   1. fully-qualify the pandoc/latex base image registry,
+#   2. pin tlmgr to the frozen TeXLive 2021 historic repo (the live tlnet now serves a
+#      newer TeXLive, so the stock install commands silently install nothing),
+#   3. strip the vestigial biblatex block from the JOSS latex template (frozen polyglossia
+#      forbids the template's load order; pandoc citeproc renders references anyway).
+on:
+  pull_request:
+    paths:
+      - "paper/**"
+      - ".github/workflows/paper.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "paper/**"
+      - ".github/workflows/paper.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Clone and patch JOSS paperdraft sources
+        run: |
+          git clone --depth 1 https://github.com/openjournals/whedon.git /tmp/whedon
+          sed -i 's|^FROM pandoc/latex|FROM docker.io/pandoc/latex|' /tmp/whedon/paperdraft.Dockerfile
+          sed -i '/^RUN tlmgr update --self/i RUN tlmgr option repository https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2021/tlnet-final' /tmp/whedon/paperdraft.Dockerfile
+          perl -0pi -e 's/\\usepackage\[\n  backend=biber,\n%[^\n]*\n%[^\n]*\n\]\{biblatex\}\n\\bibliography\{[^}]*\}\n//; s/\\renewcommand\{\\bibfont\}\{[^{}]*\}\n//' /tmp/whedon/resources/joss/latex.template
+      - name: Build paperdraft image
+        run: docker build -f /tmp/whedon/paperdraft.Dockerfile -t paperdraft /tmp/whedon
+      # paperdraft writes paper.pdf next to paper.md (fail-if-warnings: on), so an
+      # unresolvable citation or latex warning fails the job.
+      - name: Compile the JOSS paper PDF (test build, fails on warnings)
+        run: docker run --rm -v "$PWD/paper:/paper" -w /paper paperdraft paper.md
+      - name: Upload PDF preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: paper/paper.pdf
+          retention-days: 14

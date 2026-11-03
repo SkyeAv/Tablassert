@@ -1,0 +1,62 @@
+{
+  "edge_subject_object_pairs_equal": true,
+  "unique_node_id_name_category_equal": true,
+  "tablassert": {
+    "edges": 5,
+    "unique_nodes": 9,
+    "rig": true,
+    "edge_fields": [
+      "agent_type",
+      "category",
+      "has_supporting_studies",
+      "id",
+      "knowledge_level",
+      "object",
+      "original_object",
+      "original_subject",
+      "p_value",
+      "predicate",
+      "publications",
+      "sources",
+      "statistical_significance_qualifier",
+      "subject",
+      "supporting_text"
+    ]
+  },
+  "koza": {
+    "edges": 5,
+    "node_rows": 10,
+    "unique_nodes": 9,
+    "edge_fields": [
+      "object",
+      "p_value",
+      "predicate",
+      "primary_knowledge_source",
+      "publications",
+      "sample_size",
+      "subject"
+    ]
+  },
+  "edge_pairs": [
+    [
+      "NCBIGene:1956",
+      "MONDO:0005575"
+    ],
+    [
+      "NCBIGene:3845",
+      "MONDO:0005192"
+    ],
+    [
+      "NCBIGene:3845",
+      "MONDO:0009831"
+    ],
+    [
+      "NCBIGene:672",
+      "MONDO:0007254"
+    ],
+    [
+      "NCBIGene:7157",
+      "MONDO:0008903"
+    ]
+  ]
+}

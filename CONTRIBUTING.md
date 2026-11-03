@@ -59,6 +59,10 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make fmt-check` | Ruff format check and `cargo fmt --check` |
 | `make typecheck` | Pyright |
 | `make check` | Lint, format check, typecheck, Python tests, Rust tests, and clippy with `-D warnings` |
+| `make paper-check` | JOSS paper gate: front matter, citation resolution, word budgets |
+| `make paper-image` | Build the JOSS paperdraft compiler image (local Docker layer cache) |
+| `make paper-pdf` | Compile `paper/paper.pdf` from `paper/paper.md` with Docker |
+| `make paper` | JOSS paper gate plus PDF compile |
 | `make clean` | Local build/test/doc artifacts |
 
 ## Project layout

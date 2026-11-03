@@ -62,6 +62,17 @@ repos:
           - html-validate@11.16.4
           - html-validate-markdown@6.0.0
         pass_filenames: false
+      # JOSS paper integrity gate (front matter, citation resolution, word budgets).
+      # Scoped to one stdlib-only test file so it stays fast enough for the pre-commit
+      # stage, unlike the full suite (see the two-stage design comment above); the
+      # regular CI suite also runs it in python-test. markdownlint-cli2 above already
+      # lints paper/*.md via its **/*.md globs, so no paper scope is added there.
+      - id: paper-checks
+        name: paper-checks
+        entry: uv run pytest tests/test_paper.py -q -p no:cacheprovider
+        language: system
+        files: ^(paper/|tests/test_paper\.py$)
+        pass_filenames: false
       - id: pyright
         name: pyright
         entry: uv run pyright

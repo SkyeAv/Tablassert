@@ -1,0 +1,26 @@
+{
+  "tablassert_table_yaml": {
+    "lines": 32,
+    "non_whitespace_characters": 385
+  },
+  "tablassert_graph_wrapper_yaml": {
+    "lines": 24,
+    "non_whitespace_characters": 767
+  },
+  "koza_yaml": {
+    "lines": 25,
+    "non_whitespace_characters": 392
+  },
+  "koza_transform_py": {
+    "lines": 47,
+    "non_whitespace_characters": 1589
+  },
+  "tablassert_total": {
+    "lines": 56,
+    "non_whitespace_characters": 1152
+  },
+  "koza_total": {
+    "lines": 72,
+    "non_whitespace_characters": 1981
+  }
+}
