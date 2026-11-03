@@ -94,6 +94,30 @@ jobs:
       - name: html-validate (```html fences in markdown)
         run: npx -y -p html-validate@11.16.4 -p html-validate-markdown@6.0.0 html-validate "**/*.md"
 
+  # PR gate for the docs site: the same build docs.yml deploys from main, minus the Pages
+  # publish. mkdocs builds without installing the project (the API pages are hand-written
+  # markdown), so no Rust/maturin build is needed here.
+  docs:
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.docs == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: docs
+      - name: Sync docs dependencies
+        run: uv sync --frozen --no-default-groups --group docs --no-install-project
+      - name: Build documentation
+        run: uv run --no-sync mkdocs build --strict
+
   python-type:
     runs-on: ubuntu-latest
     needs: [changes]
