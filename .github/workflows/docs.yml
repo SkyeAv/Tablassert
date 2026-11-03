@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    # Deploy only when a docs input changed (site content, nav, or the docs dependency
+    # group resolved in uv.lock). `paths` gates push events only, so workflow_dispatch
+    # above still triggers a manual rebuild at any time.
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
 permissions:
   contents: write
 jobs:

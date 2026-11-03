@@ -11,48 +11,163 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Both syncing jobs install this EXACT set, so they share one warm uv cache instead of
-  # racing to save mutually-useless ones. See the `ci` group in pyproject.toml.
+  # The Python-syncing jobs install this EXACT set, so they share one warm uv cache instead
+  # of racing to save mutually-useless ones. See the `ci` group in pyproject.toml.
   SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log
 
 jobs:
-  python-lint:
+  # Detect which paths a pull request changed so each check below runs only when it can
+  # actually fail. Uses the PR files API via gh (no checkout, no third-party action):
+  # authoritative changed names, no git-history edge cases, nothing new to trust or pin.
+  # A PR touching only unrelated paths skips every job. The API reports at most 3000
+  # files per pull request, which is far above this repo's size.
+  changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      rust: ${{ steps.filter.outputs.rust }}
+      docs: ${{ steps.filter.outputs.docs }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+      smoke: ${{ steps.filter.outputs.smoke }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-      # Ruff runs standalone: `ruff check` measures 0s, so a full `uv sync` in front of it was
-      # ~40s of pure overhead. `version-file` reads the resolved pin (0.15.12) out of uv.lock,
-      # which is the same version .pre-commit-config.yaml pins, so local and CI cannot drift.
-      - name: Ruff lint
-        uses: astral-sh/ruff-action@v4.1.0
-        with:
-          version-file: uv.lock
-          args: check --output-format=github
-      - name: Ruff format check
-        uses: astral-sh/ruff-action@v4.1.0
-        with:
-          version-file: uv.lock
-          args: format --check
+      - name: List changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # pipefail is load-bearing: a swallowed gh api failure would leave an empty
+          # file, every filter false, and a green PR with zero checks.
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename' | tee changed_files.txt
+      - name: Compute path filters
+        id: filter
+        run: |
+          set -euo pipefail
+          has() { grep -E -q "$1" changed_files.txt; }
+          # python includes rust/: python-test rebuilds the extension, and pyright runs
+          # against the installed package.
+          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$)'; then python=true; else python=false; fi
+          if has '^rust/'; then rust=true; else rust=false; fi
+          if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$|llms\.txt$)'; then docs=true; else docs=false; fi
+          if has '(^|/)[^/]+\.md$|^\.markdownlint-cli2\.jsonc$|^\.htmlvalidate\.json$'; then markdown=true; else markdown=false; fi
+          if { [ "$docs" = true ] || [ "$markdown" = true ]; } && [ "$python" = false ] && [ "$rust" = false ]; then
+            smoke=true
+          else
+            smoke=false
+          fi
+          printf 'python=%s\nrust=%s\ndocs=%s\nmarkdown=%s\nsmoke=%s\n' \
+            "$python" "$rust" "$docs" "$markdown" "$smoke" >> "$GITHUB_OUTPUT"
 
-  # Markdown gates, standalone like ruff above (node is preinstalled on ubuntu runners, so no
-  # setup step). Same two checks the pre-commit hooks run; pins must stay in sync with
-  # .pre-commit-config.yaml (markdownlint-cli2 rev and the html-validate additional_dependencies).
-  # File scope: markdownlint-cli2 reads its globs/ignores from .markdownlint-cli2.jsonc;
-  # html-validate validates ONLY ```html fences inside markdown (see the pre-commit comment for
-  # why) via the transform in .htmlvalidate.json.
+  # Self-healing formatting gate, modelled on the local pre-commit hooks: the same
+  # auto-fixers (ruff check --fix, ruff format, markdownlint-cli2 --fix, cargo fmt) run on
+  # the PR branch and are committed back when they change anything, so fixable style
+  # issues never fail CI -- they land as a `chore:` commit instead. Unfixable violations
+  # still fail this job (each fixer exits non-zero on them). Safe to push with
+  # GITHUB_TOKEN: fork PRs get a read-only token (job skips), and pushes made with
+  # GITHUB_TOKEN never trigger new workflow runs, so this cannot recurse. Fork PRs
+  # therefore have no fixable-style gate in CI at all; that gap is accepted -- this repo
+  # merges only same-repo branches, and review covers the rest. Other jobs in the same
+  # run checkout the pre-fix commit, so they may flag issues this job just fixed; the
+  # next push re-runs them on the fixed tree.
+  autofix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [changes]
+    if: >-
+      github.event.pull_request.head.repo.fork != true &&
+      (needs.changes.outputs.python == 'true' ||
+       needs.changes.outputs.rust == 'true' ||
+       needs.changes.outputs.markdown == 'true')
+    steps:
+      # persist-credentials stays true (the checkout default): the last step pushes to the
+      # PR branch. This is the ONLY job in this workflow with write access.
+      - name: Checkout PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      # Ruff runs standalone: `ruff check` measures 0s, so a full `uv sync` in front of it
+      # was ~40s of pure overhead. `version-file` reads the resolved pin out of uv.lock --
+      # the same rev .pre-commit-config.yaml pins -- so local and CI cannot drift.
+      - name: Ruff lint autofix
+        uses: astral-sh/ruff-action@v4.1.0
+        with:
+          version-file: uv.lock
+          args: check --fix --output-format=github
+      - name: Ruff format
+        uses: astral-sh/ruff-action@v4.1.0
+        with:
+          version-file: uv.lock
+          args: format
+      - name: markdownlint autofix
+        run: npx -y markdownlint-cli2@0.23.3 --fix
+      - name: Cargo fmt
+        run: cargo fmt --manifest-path rust/Cargo.toml
+      - name: Commit autofixes to the PR branch
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          # A maintainer push racing this step makes the push below a non-fast-forward and
+          # turns this job red; re-running the job after the real push resolves it.
+          if git diff --quiet; then
+            echo "Tree already clean; nothing to autofix."
+          else
+            git add -A
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "chore: apply automated lint and formatting fixes"
+            git push origin "HEAD:refs/heads/$BRANCH"
+            echo "Autofixes committed and pushed; a later push re-runs checks on the fixed tree."
+          fi
+
+  # Markdown gate, standalone (node is preinstalled on ubuntu runners, so no setup step).
+  # html-validate has no autofixer, so it stays a hard gate here; the markdownlint-cli2
+  # half of the pre-commit parity moved to the autofix job, which runs it with --fix. The
+  # html-validate pins must stay in sync with the .pre-commit-config.yaml
+  # additional_dependencies.
+  # File scope: html-validate validates ONLY ```html fences inside markdown (see the
+  # pre-commit comment for why) via the transform in .htmlvalidate.json.
   markdown-lint:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.markdown == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-      - name: markdownlint-cli2
-        run: npx -y markdownlint-cli2@0.23.3
       - name: html-validate (```html fences in markdown)
         run: npx -y -p html-validate@11.16.4 -p html-validate-markdown@6.0.0 html-validate "**/*.md"
 
+  # PR gate for the docs site: the same build docs.yml deploys from main, minus the Pages
+  # publish. mkdocs builds without installing the project (the API pages are hand-written
+  # markdown), so no Rust/maturin build is needed here.
+  docs:
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.docs == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: docs
+      - name: Sync docs dependencies
+        run: uv sync --frozen --no-default-groups --group docs --no-install-project
+      - name: Build documentation
+        run: uv run --no-sync mkdocs build --strict
+
   python-type:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -74,8 +189,12 @@ jobs:
   # run is fixed overhead (interpreter start, imports, xdist workers, coverage init) against
   # only ~15s of actual test execution, so a 4-way split saved ~12s of test time while the
   # slowest-of-four sync straggler plus a coverage-combine job cost ~20s more than it saved.
+  # The full suite also covers docs-consistency tests; python-smoke runs a small subset
+  # instead when ONLY docs/markdown changed (see that job).
   python-test:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -100,8 +219,42 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+  # Small docs-consistency subset for PRs that touch ONLY docs/markdown: these tests keep
+  # the rendered docs aligned with the live CLI and validate the docs YAML sources. They
+  # still need the built extension, but skip the rest of the suite and coverage.
+  python-smoke:
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.smoke == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: ci-cli-qc
+      - name: Sync dependencies
+        run: uv sync --frozen ${{ env.SYNC_ARGS }}
+      - name: Build Rust extension
+        run: uv run maturin develop --manifest-path rust/Cargo.toml
+      - name: Docs-consistency tests
+        run: uv run pytest --no-cov tests/test_docs_cli_coverage.py tests/test_docs_examples.py tests/test_docs_source_of_truth.py tests/test_docs_style.py tests/test_cli_help_friendly.py
+
   rust:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -113,8 +266,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
-      - name: Cargo fmt
-        run: cargo fmt --check --manifest-path rust/Cargo.toml
+      # cargo fmt is enforced by the autofix job, which can also fix it automatically.
       - name: Cargo clippy
         run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - name: Cargo test

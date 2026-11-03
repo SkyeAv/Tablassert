@@ -11,7 +11,7 @@ default_install_hook_types: [pre-commit, pre-push]
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Keep in sync with the ruff pin resolved in uv.lock, which CI reads via `version-file`.
-    rev: v0.15.12
+    rev: v0.17.3
     hooks:
       # No `files:` filter: CI runs `ruff check .` over the whole tree, so scoping these to
       # src/ and tests/ meant new top-level directories could only ever fail in CI. Ruff's own
