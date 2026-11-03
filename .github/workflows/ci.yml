@@ -173,6 +173,38 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+  # Small docs-consistency subset for PRs that touch ONLY docs/markdown: these tests keep
+  # the rendered docs aligned with the live CLI and validate the docs YAML sources. They
+  # still need the built extension, but skip the rest of the suite and coverage.
+  python-smoke:
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.smoke == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: ci-cli-qc
+      - name: Sync dependencies
+        run: uv sync --frozen ${{ env.SYNC_ARGS }}
+      - name: Build Rust extension
+        run: uv run maturin develop --manifest-path rust/Cargo.toml
+      - name: Docs-consistency tests
+        run: uv run pytest --no-cov tests/test_docs_cli_coverage.py tests/test_docs_examples.py tests/test_docs_source_of_truth.py tests/test_docs_style.py tests/test_cli_help_friendly.py
+
   rust:
     runs-on: ubuntu-latest
     needs: [changes]
