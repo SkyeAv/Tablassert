@@ -16,8 +16,49 @@ env:
   SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log
 
 jobs:
+  # Detect which paths a pull request changed so each check below runs only when it can
+  # actually fail. Uses the PR files API via gh (no checkout, no third-party action):
+  # authoritative changed names, no git-history edge cases, nothing new to trust or pin.
+  # A PR touching only unrelated paths skips every job. The API reports at most 3000
+  # files per pull request, which is far above this repo's size.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      rust: ${{ steps.filter.outputs.rust }}
+      docs: ${{ steps.filter.outputs.docs }}
+      markdown: ${{ steps.filter.outputs.markdown }}
+      smoke: ${{ steps.filter.outputs.smoke }}
+    steps:
+      - name: List changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --jq '.[].filename' | tee changed_files.txt
+      - name: Compute path filters
+        id: filter
+        run: |
+          has() { grep -E -q "$1" changed_files.txt; }
+          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$)'; then python=true; else python=false; fi
+          if has '^rust/'; then rust=true; else rust=false; fi
+          if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$)'; then docs=true; else docs=false; fi
+          if has '(^|/)[^/]+\.md$|^\.markdownlint-cli2\.jsonc$|^\.htmlvalidate\.json$'; then markdown=true; else markdown=false; fi
+          if { [ "$docs" = true ] || [ "$markdown" = true ]; } && [ "$python" = false ] && [ "$rust" = false ]; then
+            smoke=true
+          else
+            smoke=false
+          fi
+          printf 'python=%s\nrust=%s\ndocs=%s\nmarkdown=%s\nsmoke=%s\n' \
+            "$python" "$rust" "$docs" "$markdown" "$smoke" >> "$GITHUB_OUTPUT"
+
   python-lint:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -43,6 +84,8 @@ jobs:
   # why) via the transform in .htmlvalidate.json.
   markdown-lint:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.markdown == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -53,6 +96,8 @@ jobs:
 
   python-type:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -74,8 +119,12 @@ jobs:
   # run is fixed overhead (interpreter start, imports, xdist workers, coverage init) against
   # only ~15s of actual test execution, so a 4-way split saved ~12s of test time while the
   # slowest-of-four sync straggler plus a coverage-combine job cost ~20s more than it saved.
+  # The full suite also covers docs-consistency tests; python-smoke runs a small subset
+  # instead when ONLY docs/markdown changed (see that job).
   python-test:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -102,6 +151,8 @@ jobs:
 
   rust:
     runs-on: ubuntu-latest
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
