@@ -36,16 +36,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # pipefail is load-bearing: a swallowed gh api failure would leave an empty
+          # file, every filter false, and a green PR with zero checks.
+          set -euo pipefail
           gh api --paginate \
             "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
             --jq '.[].filename' | tee changed_files.txt
       - name: Compute path filters
         id: filter
         run: |
+          set -euo pipefail
           has() { grep -E -q "$1" changed_files.txt; }
+          # python includes rust/: python-test rebuilds the extension, and pyright runs
+          # against the installed package.
           if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$)'; then python=true; else python=false; fi
           if has '^rust/'; then rust=true; else rust=false; fi
-          if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$)'; then docs=true; else docs=false; fi
+          if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$|llms\.txt$)'; then docs=true; else docs=false; fi
           if has '(^|/)[^/]+\.md$|^\.markdownlint-cli2\.jsonc$|^\.htmlvalidate\.json$'; then markdown=true; else markdown=false; fi
           if { [ "$docs" = true ] || [ "$markdown" = true ]; } && [ "$python" = false ] && [ "$rust" = false ]; then
             smoke=true
@@ -61,9 +67,11 @@ jobs:
   # issues never fail CI -- they land as a `chore:` commit instead. Unfixable violations
   # still fail this job (each fixer exits non-zero on them). Safe to push with
   # GITHUB_TOKEN: fork PRs get a read-only token (job skips), and pushes made with
-  # GITHUB_TOKEN never trigger new workflow runs, so this cannot recurse. Other jobs in
-  # the same run checkout the pre-fix commit, so they may flag issues this job just fixed;
-  # the next push re-runs them on the fixed tree.
+  # GITHUB_TOKEN never trigger new workflow runs, so this cannot recurse. Fork PRs
+  # therefore have no fixable-style gate in CI at all; that gap is accepted -- this repo
+  # merges only same-repo branches, and review covers the rest. Other jobs in the same
+  # run checkout the pre-fix commit, so they may flag issues this job just fixed; the
+  # next push re-runs them on the fixed tree.
   autofix:
     runs-on: ubuntu-latest
     permissions:
@@ -82,9 +90,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
       # Ruff runs standalone: `ruff check` measures 0s, so a full `uv sync` in front of it
-      # was ~40s of pure overhead. `version-file` reads the resolved pin (0.15.12) out of
-      # uv.lock, the same version .pre-commit-config.yaml pins, so local and CI cannot
-      # drift.
+      # was ~40s of pure overhead. `version-file` reads the resolved pin out of uv.lock --
+      # the same rev .pre-commit-config.yaml pins -- so local and CI cannot drift.
       - name: Ruff lint autofix
         uses: astral-sh/ruff-action@v4.1.0
         with:
@@ -103,6 +110,8 @@ jobs:
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
+          # A maintainer push racing this step makes the push below a non-fast-forward and
+          # turns this job red; re-running the job after the real push resolves it.
           if git diff --quiet; then
             echo "Tree already clean; nothing to autofix."
           else
