@@ -36,111 +36,88 @@ Tablassert targets knowledge-graph engineers and bioinformaticians with tabular 
 
 # State of the Field
 
-Several tools address aspects of Translator data ingestion. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Tablassert provides KGX-compatible output rather than competing with it. LinkML [@linkml] models and validates schemas but performs no entity resolution. Koza [@koza], the Monarch Initiative's [@monarch] ingest engine, pairs YAML configuration with semi-declarative Python transforms, so non-trivial sources still require procedural code and resolution supplied through external mappings. BioCypher [@biocypher] standardizes biomedical graph construction, to which OntoWeaver [@ontoweaver] adds declarative tabular mappings. sPIRES [@spires] extracts assertions from free text by zero-shot prompting; Tablassert's sources are already structured. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifiers over a network API; Tablassert instead vendors BABEL into an embedded database, trading storage for freedom from a runtime service dependency.
+Several tools address aspects of Translator data ingestion. KGX [@kgx] exchanges and validates graphs, including schema-driven Biolink conformance checks, but provides no column-to-statement mapping, study-level structural invariants, offline Translator infores checks, or in-place pruning. Tablassert provides KGX-compatible output rather than competing with it. LinkML [@linkml] models and validates schemas but performs no entity resolution.
+
+Koza [@koza], the Monarch Initiative's [@monarch] ingest engine, pairs YAML configuration with semi-declarative Python transforms, so non-trivial sources still require procedural code and resolution supplied through external mappings. In one tutorial, both produced five edge pairs and nine matching nodes when Koza called Tablassert's API with identical resolution settings; excluding blanks, comments, and docstrings, the Koza implementation used 72 YAML/Python lines of code (LOC) versus Tablassert's 56 YAML LOC (1,981 versus 1,152 non-whitespace characters).
+
+BioCypher [@biocypher] standardizes biomedical graph construction, to which OntoWeaver [@ontoweaver] adds declarative tabular mappings. SPIRES [@spires] extracts assertions from free text by zero-shot prompting; Tablassert's sources are already structured. The hosted SRI NameResolution service [@nameres] and separate Node Normalization service [@nodenorm] provide identifier resolution and canonical records through network APIs. Hosted workflows depend on service availability; reproducing historical results requires preserving responses or pinning the underlying resources. Tablassert instead vendors BABEL [@babel] into an embedded database, trading storage for freedom from a runtime service dependency.
 
 Tablassert was built rather than contributed to an existing project for three reasons. First, Tablassert's recipe model is not backward-compatible with the translator-ingests transform interface [@translator-ingests]; migrating would discard the provenance and statistical qualifiers attributed to each edge. Second, Tablassert targets many heterogeneous tables, so was designed to make additions easy by editing simple recipes rather than crafting new code. Third, Tablassert builds run locally on demand, whereas shared ingests run as periodic batch jobs, slowing iteration. Translator requirements for Biolink qualifier semantics and Resource Ingest Guide metadata also fall outside BioCypher's and OntoWeaver's scope; Tablassert interoperates with Translator through KGX and an ingest passthrough [@ingests].
 
 # Software Design
 
-Tablassert has three main trade-offs: fullmap storage enables local batched resolution without
-service calls; declarative YAML favors accessibility and validation over procedural flexibility;
-and the Maturin build system favors hot-path performance over implementation simplicity.
+Tablassert has three main trade-offs: an embedded NoSQL (fullmap) database enables local batched
+resolution without service calls; declarative YAML favors accessibility, validation, and speed
+over procedural flexibility; and a hybrid Python-Rust Maturin build system favors hot-path
+performance over implementation simplicity.
 
 ## Embedded fullmap database
 
-The embedded fullmap database underpins the design. Built from BABEL [@babel] exports, it maps
-normalized synonyms and cross-vocabulary meta-identifiers onto canonical identifiers with
-category and taxon metadata. Level one trims, lowercases, Porter2-stems ASCII tokens, then
-deduplicates, sorts, and joins them; level two removes non-word characters.
+Built from BABEL [@babel] exports, the embedded fullmap maps normalized synonyms and
+cross-vocabulary meta-identifiers to canonical identifiers with category and taxon metadata.
+Synonyms and queries share normalization. Redb [@redb] provides crash-safe NoSQL point lookups;
+graph builds treat the store as read-only, supporting parallel, memory-bounded access without SQL
+or runtime service calls.
 
-Synonyms and queries share normalization. Redb [@redb] offers crash-safe NoSQL point lookups
-through one predictable, SQL-free query path. Graph builds never write to it, permitting
-read-optimized, parallel, memory-bounded construction. The prebuilt archive for the current
-BABEL 22.2.0 export is 44.5 GB compressed; the redb store used here, built from the 2026-07-22 export, occupies 92.9 GB
-across one primary and 16 shard database files. Resolution is exact-match over normalized keys
-rather than fuzzy search; approximate matches surface only in the audit stage, not in the graph.
-To keep the database smaller and query times faster, the build applies a fixed allowlist of the
-top 100 experimental taxa derived from Translator knowledge-graph node frequencies, alongside
-all OrganismTaxon rows and rows without taxon metadata; this deliberate trade-off excludes some
-rare species-specific identifiers outside the allowlist.
+Storage is the main cost: the current BABEL 22.2.0 archive is 44.5 GB compressed, while the
+2026-07-22 redb store benchmarked here occupies 92.9 GB. Resolution uses exact matches over
+normalized keys; approximate matches appear only in the audit stage, not in the graph. To bound
+storage and lookup cost, the build retains the top 100 experimental taxa by Translator
+knowledge-graph node frequency, all OrganismTaxon rows, and rows without taxon metadata,
+potentially excluding rare species-specific identifiers.
 
-Resolution is column-aware rather than string-in/CURIE-out. Each node column declares an NCBI
-taxon filter that keeps taxon-bearing matches for the declared species while retaining taxon-less rows, Biolink category prioritize and avoid lists (where avoid also
-drops categories the installed model does not recognize), and CURIE prefix and regex exclusions.
-Candidates are ranked by exact preferred-name agreement, normalized-name agreement, and Biolink
-category priority; the best tier retains tied CURIEs. When column context is on, category frequency across the column helps break remaining
-ties; this is a heuristic, not a
-guarantee of semantic correctness.
+Each node column declares an NCBI taxon filter that retains matches for the declared species and
+taxon-less rows, Biolink category priority and avoid lists, and CURIE-prefix and regex exclusions.
+Setting `avoid` also drops categories outside the installed model's vocabulary. Candidates are
+ranked by exact preferred-name agreement, normalized-name agreement, and category priority, with
+ties retained in the best tier; optional column-category frequencies provide a heuristic
+tie-breaker.
+
+Using the 2026-07-22 BABEL fullmap on a dual-socket Intel Xeon Gold 6230 host, Tablassert
+resolved 104 hand-selected unique terms in a median of 0.886 seconds over three fresh-process
+runs and 0.516 seconds over three in-process runs, returning complete identifier, name, and
+category records for 93 terms.
 
 ## Declarative YAML configuration
 
-Pydantic models validate recipes before execution with field-specific errors. Accepted recipes
-yield correctly formatted KGX after successful builds, guaranteeing structure, not biological
-correctness. Recipes require fewer changes than code, helping nontechnical contributors and AI
-agents author graphs. The deliberately non-Turing-complete DSL provides common, fast
-transformations rather than arbitrary computation; custom operations require extending the tool.
+Pydantic models validate recipes before execution with field-specific errors. The
+non-Turing-complete DSL favors common, fast transformations over arbitrary computation, reducing
+the code changes needed for new sources and helping nontechnical contributors and AI agents author
+graphs.
 
 Recipes compile into TCode, an ordered sequence of (callable, arguments) operations executed
 through Polars lazy frames. Independent transformations fuse until batched resolution, quality
 control, or output writing requires materialization; sections sharing an instruction prefix reuse
-its computed snapshot. Lazy optimization means logical recipe order need not dictate physical
-execution order. This often improves performance but can be suboptimal for particular workloads
-and prevents transformations requiring strict procedural ordering.
+its computed snapshot. Lazy optimization decouples recipe order from execution order: it often
+improves performance, but can be suboptimal for some workloads and rules out transformations
+requiring strict procedural ordering.
 
-Edges carry recipe-declared provenance, including source URLs and publications when provided;
-traceability depends on the source and configuration. Optional quality control audits each
-resolved name with a four-stage cascade: exact or alias match, fuzzy string similarity,
-Schwartz-Hearst abbreviation expansion, then SapBERT [@sapbert; @sapbert-renci] embedding
-similarity using a checkpoint fine-tuned on BABEL synonyms
-(`RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`), each stage handling only
-what cheaper stages could not clear. Suspect mappings are dropped and logged with their scores
-rather than silently retained.
+Builds emit deduplicated KGX nodes and can emit a Resource Ingest Guide. Edges carry
+recipe-declared structured provenance, supporting-study metadata, and statistical qualifiers,
+including source URLs and publications when provided; traceability depends on the source and
+configuration. Optional quality control applies a four-stage cascade: exact or alias matching,
+fuzzy string similarity, Schwartz-Hearst abbreviation expansion, then SapBERT
+[@sapbert; @sapbert-renci] embedding similarity using a checkpoint fine-tuned on BABEL synonyms
+(`RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`). Each stage handles only
+what cheaper stages could not clear. Suspect mappings are dropped and logged with their scores.
 
 For example, a DAKP FAERS audit rejected "factor ii" mapped to `HMDB:HMDB0000607`
 (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its synonym, but the
-coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin]. This is one
-rejection, not measured QC precision or recall.
+coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin].
 
-Output validation complements recipe validation. An optional study stage checks structural
-invariants; `validate-kgx` checks category-specific Biolink records and Translator infores
-identity offline, while `--prune` removes failing edges and gates the post-prune exit status.
-These checks do not establish biological validity.
+An optional study stage checks structural invariants; `validate-kgx` checks category-specific
+Biolink records and Translator infores identity offline, while `--prune` removes failing edges
+and gates the post-prune exit status. These validations establish structure, not biological
+validity.
 
 ## Maturin build system
 
-PyO3 Rust stems and normalizes terms, performs sharded fullmap lookups, streams database
-construction, and serializes NDJSON. GIL-released Rayon workers parallelize these hot paths on
-standard Python 3.11; Python retains recipe parsing, Pydantic validation, and orchestration.
-Maturin packages performant native code in PyPI wheels for Linux/macOS, standard Unix-like
-platforms for major bioinformatics ecosystems such as
-Bioconda [@bioconda]. Supported users need no Rust toolchain;
-Windows users need WSL or a source build. The performance gain justifies added maintenance and
-readability costs.
-
-## Comparisons
-
-Tablassert resolved this sample faster than the separate hosted services. On a dual-socket Intel
-Xeon Gold 6230 host (40 physical cores, 80 hardware threads, 187 GiB RAM, SSD RAID1, Ubuntu
-24.04), 113 hand-selected entries comprised 104 unique terms. Median local time was 0.886 seconds
-across three fresh-process passes, excluding startup, and 0.516 seconds across three in-process
-passes; OS caches were not cleared. Local resolution returned complete identifier, name, and
-category fields for 93 terms. One workflow using SRI NameResolution [@nameres], then the separate
-SRI Node Normalization service [@nodenorm] returned complete top-ranked canonical records for 99
-terms in 50.23 seconds: 104 lookups with four concurrent requests plus five batched normalization
-requests, without errors. Hosted lookup used `limit=5` and `only_taxa=NCBITaxon:9606`;
-NameResolution also supports bulk lookup, Biolink-type filters, and CURIE prefix
-inclusion/exclusion. Matching policies and resource versions differ; this convenience sample
-measures neither accuracy nor general service performance.
-
-KGX's schema-driven `validate` [@kgx] likewise checks Biolink conformance; Tablassert adds
-study-level structural invariants, offline infores checks, and in-place pruning.
-
-The Tablassert tutorial uses 56 Tablassert YAML lines of code (LOC) versus 72 Koza [@koza]
-YAML/Python LOC (1,152 versus 1,981 non-whitespace characters), excluding blanks, comments, and
-docstrings. Koza calls Tablassert's API with identical resolution settings: both produce five
-edge pairs and nine matching nodes. Tablassert additionally emits a Resource Ingest Guide,
-deduplicated nodes, structured provenance, and supporting-study metadata. This compares
-verbosity, not runtime or capability.
+PyO3 Rust handles normalization, sharded fullmap lookups, streamed database construction, and
+NDJSON serialization; GIL-released Rayon workers parallelize these hot paths on standard Python
+3.11, while Python handles recipe parsing, Pydantic validation, and orchestration. Maturin builds Linux/macOS
+PyPI wheels for Unix-like bioinformatics platforms such as Bioconda [@bioconda]. Wheel users need
+no Rust toolchain; Windows requires WSL or a source build. This design targets hot-path
+performance at the cost of added implementation complexity.
 
 # Research Impact Statement
 
