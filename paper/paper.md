@@ -144,17 +144,7 @@ verbosity, not runtime or capability.
 
 # Research Impact Statement
 
-Tablassert and its declarative precursor underlie several production knowledge graphs.
-MicrobiomeKG [@microbiomekg] used an early precursor; deployed Microbiome and Multiomics graphs
-[@multiomics-kp] and their maintenance builds use Tablassert. Multiomics 3.1.3 contains 222,994
-nodes and 18,206,965 edges from 2,136 PMC publications [@multiomics-kp]; DAKP 1.26.0 contains
-16,257 nodes and 135,263 edges [@drug-approvals]. The Drug Approvals Knowledge Provider (DAKP)
-[@dakp], developed in the glusman-team monorepo [@graph-monorepo], publishes validated,
-versioned drug-approval graphs [@drug-approvals] and per-edge evidence linkouts. Translator
-ingest integration is under review [@ingests], starting with a Multiomics passthrough
-[@ingests-mokg]. KRAKEN [@kraken], Phenome Health's unified knowledge graph, integrates the
-Microbiome, Multiomics, and Drug Approvals graphs as domain-specific sources. A rare-disease
-multiomics knowledge graph built with Tablassert is in preparation.
+Tablassert and its predecessor underlie several production knowledge graphs. MicrobiomeKG [@microbiomekg] was built with an earlier version; the deployed Microbiome and Multiomics knowledge providers [@multiomics-kp] and their maintenance builds use Tablassert. The Drug Approvals Knowledge Provider (DAKP) [@dakp], developed in the glusman-team monorepo [@graph-monorepo], publishes validated, versioned drug-approval graphs with per-edge evidence linkouts [@drug-approvals]. As of release, Multiomics 3.1.3 contains 222,994 nodes and 18,206,965 edges derived from 2,136 PMC publications [@multiomics-kp], and DAKP 1.26.0 contains 16,257 nodes and 135,263 edges [@drug-approvals]. KRAKEN [@kraken], Phenome Health's unified knowledge graph, integrates the Microbiome, Multiomics, and Drug Approvals graphs as domain-specific sources. Translator ingest integration is in progress, beginning with a Multiomics passthrough [@ingests; @ingests-mokg]. Future directions include knowledge graphs focused on rare diseases.
 
 # AI Usage Disclosure
 
