@@ -36,27 +36,9 @@ Tablassert targets knowledge-graph engineers and bioinformaticians with tabular 
 
 # State of the Field
 
-Translator ingests commonly use source-specific Python with tools for exchange, schema modeling,
-and transformation. KGX [@kgx] exchanges and validates graphs but provides no
-column-to-statement mapping. Koza [@koza], the Monarch Initiative's [@monarch] ingest engine,
-pairs YAML configuration with semi-declarative Python transforms and outputs KGX, with entity
-resolution supplied through mappings or additional code. LinkML [@linkml] provides schema
-modeling and validation rather than Tablassert's integrated resolution pipeline. BioCypher
-[@biocypher] standardizes biomedical graph construction; OntoWeaver [@ontoweaver] provides
-declarative tabular mappings for BioCypher. sPIRES [@spires] extracts knowledge from free text
-by zero-shot prompting, while Tablassert's sources are already structured tables. Finally, the
-hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifier resources through
-a network API. Hosted builds depend on service availability; reproducing historical results
-requires preserving responses or pinning the underlying resources.
+Several tools address aspects of Translator data ingestion. KGX [@kgx] exchanges and validates graphs but provides no column-to-statement mapping. Tablassert provides KGX-compatible output rather than competing with it. LinkML [@linkml] models and validates schemas but performs no entity resolution. Koza [@koza], the Monarch Initiative's [@monarch] ingest engine, pairs YAML configuration with semi-declarative Python transforms, so non-trivial sources still require procedural code and resolution supplied through external mappings. BioCypher [@biocypher] standardizes biomedical graph construction, to which OntoWeaver [@ontoweaver] adds declarative tabular mappings. sPIRES [@spires] extracts assertions from free text by zero-shot prompting; Tablassert's sources are already structured. The hosted SRI name resolution service [@nameres] serves BABEL [@babel] identifiers over a network API; Tablassert instead vendors BABEL into an embedded database, trading storage for freedom from a runtime service dependency.
 
-Tablassert was built rather than contributed upstream for three reasons. First, its precursor
-predates the Translator ingests repository [@translator-ingests], which deployed its graphs
-through PloverDB [@plover]; existing infrastructure made migration costly. Second, it targets
-many small heterogeneous tables: new predicates or edge annotations need recipe changes, not
-transform code and Biolink boilerplate. Third, builds run locally on demand, whereas shared
-ingests run as periodic batch jobs, slowing iteration. Translator-specific requirements also
-fall outside BioCypher's and OntoWeaver's scope; Tablassert interoperates through KGX and an
-ingest passthrough [@ingests].
+Tablassert was built rather than contributed to an existing project for three reasons. First, Tablassert's recipe model is not backward-compatible with the translator-ingests transform interface [@translator-ingests]; migrating would discard the provenance and statistical qualifiers attributed to each edge. Second, Tablassert targets many heterogeneous tables, so was designed to make additions easy by editing simple recipes rather than crafting new code. Third, Tablassert builds run locally on demand, whereas shared ingests run as periodic batch jobs, slowing iteration. Translator requirements for Biolink qualifier semantics and Resource Ingest Guide metadata also fall outside BioCypher's and OntoWeaver's scope; Tablassert interoperates with Translator through KGX and an ingest passthrough [@ingests].
 
 # Software Design
 
