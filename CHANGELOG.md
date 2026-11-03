@@ -2,7 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
+## 22.2.1 - 2026-11-03
+
+### Changed
+
+- **Python dependencies and development tooling are refreshed.** The lockfile moves to polars 2.1.0, pydantic 2.14.2, pyarrow 26.0.0, rapidfuzz 3.14.6, scikit-learn 1.9.1, sentence-transformers 6.2.0, and cyclopts 5.3.2; tooling moves to maturin 1.16.0, pytest 9.2.0, pyright 1.1.414, MkDocs Material 9.8.0, pre-commit 4.7.0, and Ruff 0.17.3, with the README and API Python examples reformatted by the new Ruff. These are dependency and formatting updates; no Tablassert source API or configuration schema changes are included. ([#244](https://github.com/SkyeAv/Tablassert/pull/244), [#245](https://github.com/SkyeAv/Tablassert/pull/245), [#246](https://github.com/SkyeAv/Tablassert/pull/246), [#247](https://github.com/SkyeAv/Tablassert/pull/247))
+- **Rust dependencies are refreshed.** PyO3 0.30.1, rlimit 0.11.0, and rustc-hash 2.1.3 update both manifest ranges and the lockfile; flate2 1.1.10, memmap2 0.9.12, serde 1.0.229, serde_json 1.0.154, uuid 1.29.0, and xxhash-rust 0.8.19 update the lockfile. ([#238](https://github.com/SkyeAv/Tablassert/pull/238), [#239](https://github.com/SkyeAv/Tablassert/pull/239), [#240](https://github.com/SkyeAv/Tablassert/pull/240), [#241](https://github.com/SkyeAv/Tablassert/pull/241))
+- **Dependabot now maintains Python, Rust, and GitHub Actions dependencies.** The configuration added in [`256ed40`](https://github.com/SkyeAv/Tablassert/commit/256ed40) schedules weekly uv, Cargo, and GitHub Actions updates, grouping minor and patch releases per ecosystem; `astral-sh/setup-uv` is also bumped to 10.3.3 across the CI, documentation, and publishing workflows. ([#243](https://github.com/SkyeAv/Tablassert/pull/243))
 
 ## 22.2.0 - 2026-10-22
 
