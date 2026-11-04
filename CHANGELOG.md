@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.2.2 - 2026-11-04
+
+### Changed
+
+- **The Rust extension's zstd dependency is bumped from 0.13.3 to 0.14.3.** Both the manifest range in `rust/Cargo.toml` and the lockfile move together, pulling the matching `zstd-safe` and `zstd-sys` releases; no `tablassert-rs` source changes are included and the extension's public API and on-disk formats are untouched. ([#249](https://github.com/SkyeAv/Tablassert/pull/249))
+- **CI runs only the jobs a pull request can affect and self-heals formatting.** Job scoping keys each workflow job to the paths it guards (Python, Rust, docs, Markdown), so a Rust-only PR no longer pays for the Python suite; PRs that touch docs now build the MkDocs site and run a small docs-consistency subset of the test suite instead of the full run; and the `autofix` job commits Ruff, Ruff-format, and cargo-fmt fixes straight to the PR branch instead of only reporting them. The `changes` detection is hardened against fork/edge cases and the ruff pin is brought back in line with pre-commit. ([#248](https://github.com/SkyeAv/Tablassert/pull/248))
+
 ## 22.2.1 - 2026-11-03
 
 ### Changed
