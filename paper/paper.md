@@ -72,7 +72,7 @@ An optional study stage checks structural invariants; `validate-kgx` checks cate
 
 ## Maturin build system
 
-PyO3 Rust handles normalization, sharded fullmap lookups, streamed database construction, and NDJSON serialization; GIL-released Rayon workers parallelize these hot paths on standard Python 3.11, while Python handles recipe parsing, Pydantic validation, and orchestration. Maturin builds Linux/macOS PyPI wheels for Unix-like bioinformatics platforms such as Bioconda [@bioconda]. Wheel users need no Rust toolchain; Windows requires WSL or a source build. This design targets hot-path performance at the cost of added implementation complexity.
+PyO3 Rust handles normalization, sharded fullmap lookups, streamed database construction, and NDJSON serialization; GIL-released Rayon workers parallelize these hot paths on standard CPython, while Python handles recipe parsing, Pydantic validation, and orchestration. Maturin builds Linux/macOS PyPI wheels for Unix-like bioinformatics platforms such as Bioconda [@bioconda]. Wheel users need no Rust toolchain; Windows requires WSL or a source build. This design targets hot-path performance at the cost of added implementation complexity.
 
 # Research Impact Statement
 
