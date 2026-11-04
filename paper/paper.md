@@ -34,7 +34,7 @@ Biomedical knowledge graphs classically rely on bespoke ingest scripts for each 
 
 Tablassert targets knowledge-graph engineers and bioinformaticians with tabular biomedical information sources who need Biolink-conformant output. Declarative YAML recipes make data-to-statement mapping scalable, inspectable, and reusable. Batched resolution against an embedded identifier database removes the runtime service dependency. The same recipes extend beyond journal supplemental tables to any relational source (trial registries, drug approval records, or a researcher's own tables), and each build can emit the Resource Ingest Guide metadata required for integration with Translator.
 
-State of the Field
+# State of the Field
 
 Several tools address aspects of Translator data ingestion. KGX [@kgx] exchanges and validates graphs, including schema-driven Biolink conformance checks, but provides no column-to-statement mapping, study-level structural invariants, offline Translator infores checks, or in-place pruning. Tablassert provides KGX-compatible output rather than competing with it. LinkML [@linkml] models and validates schemas but performs no entity resolution.
 
