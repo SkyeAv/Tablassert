@@ -59,7 +59,12 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make fmt-check` | Ruff format check and `cargo fmt --check` |
 | `make typecheck` | Pyright |
 | `make check` | Lint, format check, typecheck, Python tests, Rust tests, and clippy with `-D warnings` |
+| `make patch` | Increment the release version's patch part in `pyproject.toml`, `uv.lock`, and `CITATION.cff`, and roll the `CHANGELOG.md` Unreleased section |
+| `make minor` | Same as `make patch` for the minor part (resets the patch) |
+| `make major` | Same as `make patch` for the major part (resets minor and patch) |
 | `make clean` | Local build/test/doc artifacts |
+
+The three bump targets run `scripts/bump_version.py`, which updates every file a release touches and leaves the changelog prose to you: an existing `## Unreleased` section becomes the dated `## X.Y.Z - YYYY-MM-DD` heading (body kept), and with no Unreleased section an empty dated section opens above the last release. Review the diff, write the release notes, and commit as `chore(release): X.Y.Z`; that commit on main is what triggers the tag and PyPI publish workflows. The `tablassert-rs` crate in `rust/Cargo.toml` is versioned independently and stays untouched.
 
 ## Project layout
 

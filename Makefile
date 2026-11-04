@@ -1,4 +1,4 @@
-.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check clean
+.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check patch minor major clean
 
 # Install Python dev dependencies, CLI/QC/log extras, and the editable Rust extension.
 setup:
@@ -42,6 +42,18 @@ typecheck:
 # Run the full local quality gate.
 check: lint fmt-check typecheck test test-rust
 	cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+
+# Increment the release version's patch part everywhere the release workflow looks.
+patch:
+	uv run python scripts/bump_version.py patch
+
+# Increment the release version's minor part and reset the patch.
+minor:
+	uv run python scripts/bump_version.py minor
+
+# Increment the release version's major part and reset minor and patch.
+major:
+	uv run python scripts/bump_version.py major
 
 # Remove local build, test, documentation, and compiled-extension artifacts.
 clean:
