@@ -29,7 +29,7 @@ JOSS rules change; re-check the
 ## File map
 
 - `paper.md`: manuscript in JOSS (pandoc) format. YAML front matter carries title,
-  authors, ORCIDs, tags, and the `bibliography: paper.bib` key that citeproc loads;
+  authors, ORCIDs, and the `bibliography: paper.bib` key that citeproc loads;
   the body uses the sections JOSS expects (Summary, Statement of need, State of the
   field, Software design, Research impact statement, AI usage disclosure,
   Acknowledgements, References). Author `affiliation:` values are INDICES into the

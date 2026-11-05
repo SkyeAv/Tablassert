@@ -4,7 +4,7 @@ Mirrors tests/test_docs_style.py: plain functions over explicit file paths, no f
 standard-library imports only (the pre-commit hook runs this file alone, so it must stay
 import-light). Enforces the structural requirements Whedon compilation and JOSS review
 impose so collaborators get fast local feedback: front matter carries title, authors
-with ORCIDs, and tags; the body carries every JOSS-required section (JOSS paper-format
+with ORCIDs, and bibliography metadata; the body carries every JOSS-required section (JOSS paper-format
 guidance, 2026); every [@key] citation resolves to a paper.bib entry and every entry is
 cited; the abstract and body stay inside the official JOSS word budgets.
 """
@@ -127,7 +127,7 @@ def test_front_matter_complete() -> None:
     assert re.search(r"^bibliography:\s*paper\.bib\s*$", front_matter, re.MULTILINE), (
         "front matter needs bibliography: paper.bib so pandoc citeproc loads the entries"
     )
-    assert _yaml_children(front_matter, "tags"), "front matter needs at least one tag"
+    assert not re.search(r"^tags:", front_matter, re.MULTILINE), "front matter must omit tags"
     blocks = _author_blocks(front_matter)
     assert blocks, "front matter needs at least one author"
     for block in blocks:
