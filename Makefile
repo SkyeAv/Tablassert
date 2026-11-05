@@ -87,6 +87,6 @@ paper: paper-check paper-pdf
 preprint: paper-check
 	cd paper && pandoc paper.md --citeproc --standalone --output=preprint.tex
 
-# Compile the generated preprint LaTeX to PDF with XeLaTeX.
+# Compile the generated preprint LaTeX to PDF; two XeLaTeX passes resolve references.
 preprint-pdf: preprint
-	cd paper && xelatex -interaction=nonstopmode -halt-on-error preprint.tex
+	cd paper && xelatex -interaction=nonstopmode -halt-on-error preprint.tex && xelatex -interaction=nonstopmode -halt-on-error preprint.tex
