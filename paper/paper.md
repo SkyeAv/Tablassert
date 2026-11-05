@@ -42,7 +42,7 @@ We built Tablassert rather than contributing to an existing project for three re
 
 # Software Design
 
-![placeholder caption](./figures/tablassert-simplified.drawio.png){height="9pt"}
+![placeholder caption](./figures/tablassert-simplified.drawio.png)
 
 Tablassert has three main trade-offs: an embedded NoSQL (fullmap) database enables local batched resolution without service calls; declarative YAML favors accessibility, validation, and speed over procedural flexibility; and a hybrid Python-Rust Maturin build system favors hot-path performance over implementation simplicity.
 
@@ -78,7 +78,7 @@ Tablassert and its predecessor underlie several production knowledge graphs. Mic
 
 # AI Usage Disclosure
 
-Generative AI assisted with code generation, test writing, security analyses, documentation, reviewing, drafting, and revising. Coding-agent use began on 27 January 2026 (`50f29e8`). Models used included `claude-opus-5`, `claude-sonnet-5`, `deepseek-v4`, `gemini-3.8-flash`, `glm-5.3`, `gpt-5.6`, `gpt-6`, `kimi-k2`, `kimi-k3`, `muse-spark-1.3-contributor`, `nemotron-3-ultra`, `laguna-s-2.1`, `qwen3.8`, `mimo-v2.5`, and `mimo-v2.6-pro` in a custom Pi coding agent (version 0.81.1) harness with prompt engineering from promptfoo (0.121.17) and GEPA (0.1.4). Prompt optimization and AI evaluation with CodeRabbit supplemented human review. Additionally, Grammarly was used to revise documentation and draft manuscripts. Authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
+Generative AI assisted with code generation, test writing, security analyses, documentation, reviewing, drafting, and revising. Coding-agent use began on 27 January 2026. Models used included claude-opus-5, claude-sonnet-5, deepseek-v4, gemini-3.8-flash, glm-5.3, gpt-5.6, gpt-6, kimi-k2, kimi-k3, muse-spark-1.3-contributor, nemotron-3-ultra, laguna-s-2.1, qwen3.8, mimo-v2.5, and mimo-v2.6-pro in a custom Pi coding agent (0.81.1) harness with prompt engineering from promptfoo (0.121.17) and GEPA (0.1.4). Prompt optimization and AI evaluation with CodeRabbit supplemented human review. Additionally, Grammarly was used to revise documentation and draft manuscripts. Authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
 
 # Author Contributions
 
