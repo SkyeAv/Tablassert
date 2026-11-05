@@ -36,7 +36,7 @@ We built Tablassert rather than contributing to an existing project for three re
 
 # Software Design
 
-![**Tablassert Simplified.** Graph and table YAMLs encode declarative transformations that are validated and coerced, compiled into operations, lazily optimized, and executed using a Python-Rust runtime, embedded named-entity recognition, and cryptographic caching. Outputs from individual tables are aggregated into one Biolink-conformant knowledge graph, exported as KGX nodes and edges alongside Translator Resource Ingest Guide (RIG) metadata.\label{tablassert}](./figures/tablassert-simplified.drawio.png)
+![**Tablassert Architecture.** Graph and table YAMLs encode declarative transformations that are validated and coerced, compiled into operations, lazily optimized, and executed using a Python-Rust runtime, embedded named-entity recognition, and cryptographic caching. Outputs from individual tables are aggregated into one Biolink-conformant knowledge graph, exported as KGX nodes and edges alongside Translator Resource Ingest Guide (RIG) metadata.\label{tablassert}](./figures/tablassert-simplified.drawio.png)
 
 Tablassert uses declarative configuration to transform tabular data into a single aggregated, Biolink-conformant knowledge graph, exported as KGX with Translator Resource Ingest Guide (RIG) metadata (Figure \ref{tablassert}). It has three main trade-offs: an embedded NoSQL (fullmap) database enables local batched resolution without service calls; declarative YAML favors accessibility, validation, and speed over procedural flexibility; and a hybrid Python-Rust Maturin build system favors performance over implementation simplicity.
 
