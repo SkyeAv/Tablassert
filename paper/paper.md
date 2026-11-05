@@ -50,8 +50,6 @@ Each node column declares an NCBI taxon filter that retains matches for the decl
 
 Optional quality control applies a four-stage cascade: exact or alias matching, fuzzy string similarity, Schwartz-Hearst abbreviation expansion, then SapBERT [@sapbert; @sapbert-renci] embedding similarity using a checkpoint fine-tuned on BABEL synonyms (`RenaissanceComputing/SapBERT-PubMedBERT-BabelSynonyms-v2025-01-23`). Each stage handles only what cheaper stages could not clear, and suspect mappings are dropped and logged with scores. For example, an audit rejected "factor ii" mapped to `HMDB:HMDB0000607` (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its synonym, but the coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin].
 
-Using the 2026-07-22 BABEL fullmap on a dual-socket Intel Xeon Gold 6230 host, Tablassert resolved 104 hand-selected unique terms in a median of 0.886 seconds over three fresh-process runs and 0.516 seconds over three in-process runs, returning complete identifier, name, and category records for 93 terms.
-
 ## Declarative YAML configuration
 
 Pydantic models validate recipes before execution with field-specific errors. The non-Turing-complete DSL favors common, fast transformations over arbitrary computation. This reduces code changes needed for new sources and helps nontechnical contributors and AI agents author graphs.
