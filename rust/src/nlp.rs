@@ -116,9 +116,32 @@ pub fn normalize_terms(py: Python<'_>, terms: Vec<String>) -> Vec<String> {
     })
 }
 
+/// Batch pyo3 surface for the fullmap `level_two` key filter: derive the
+/// level-two form of a list of (usually level-one) terms, returning an
+/// INDEX-ALIGNED list of strings (rayon's `into_par_iter` with `collect`
+/// preserves input order).
+///
+/// This is the query-side twin of the build-side key derivation: Python's
+/// `nlp.level_two` default path calls this, and this calls the exact
+/// `fullmap::level_two` filter `emit_term` stores build-side keys through, so
+/// query and build level-two keys are byte-identical by construction. Before
+/// issue #251 the query side ran a Unicode-aware polars `\\W+` regex while the
+/// build stripped every non-ASCII character, so non-ASCII terms could never
+/// match at level two. The GIL is released for the whole batch via `py.detach`
+/// (the same pattern as `normalize_terms`).
+#[pyfunction]
+pub fn normalize_terms_l2(py: Python<'_>, terms: Vec<String>) -> Vec<String> {
+    py.detach(move || {
+        terms
+            .into_par_iter()
+            .map(|term| crate::fullmap::level_two(&term).into_owned())
+            .collect()
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{normalize_l1, normalize_terms};
+    use super::{normalize_l1, normalize_terms, normalize_terms_l2};
     use pyo3::prelude::*;
     use std::borrow::Cow;
     use std::time::Instant;
@@ -249,6 +272,34 @@ mod tests {
             ];
             let output: Vec<String> = func.call1((input,)).unwrap().extract().unwrap();
             assert_eq!(output, vec!["aspirin oral", "", "gene", "51"]);
+
+            let empty: Vec<String> = func
+                .call1((Vec::<String>::new(),))
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert!(empty.is_empty());
+        });
+    }
+
+    #[test]
+    fn normalize_terms_l2_batch_is_index_aligned_and_handles_empty() {
+        // WHY: the Python level-two path pairs input and output positionally;
+        // output[i] must be fullmap::level_two(input[i]) -- including "" and an
+        // empty batch -- and non-ASCII terms must survive with the SAME keys the
+        // build side stores (issue #251: query and build L2 keys must never
+        // diverge again, which this pins against literal spellings).
+        pyo3::Python::initialize();
+        pyo3::Python::attach(|py| {
+            let func = pyo3::wrap_pyfunction!(normalize_terms_l2, py).unwrap();
+            let input = vec![
+                "au café lait".to_string(),
+                "β-catenin".to_string(),
+                "hello-world".to_string(),
+                String::new(),
+            ];
+            let output: Vec<String> = func.call1((input,)).unwrap().extract().unwrap();
+            assert_eq!(output, vec!["aucafélait", "βcatenin", "helloworld", ""]);
 
             let empty: Vec<String> = func
                 .call1((Vec::<String>::new(),))
