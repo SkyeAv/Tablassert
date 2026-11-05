@@ -38,6 +38,8 @@ site/
 paper/*.pdf
 paper/*.tex
 paper/*.aux
+paper/*.fls
+paper/*.fdb_latexmk
 
 .ralph/
 .paperdraft/
