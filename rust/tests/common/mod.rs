@@ -61,7 +61,8 @@ pub struct SourceRow {
 
 // ---------------------------------------------------------------------------
 // Fixed embedded fixture.  Deliberately covers: plain ASCII names, unicode names
-// (café / naïve), escaped JSON (quotes, backslashes, \uXXXX), alias fields
+// (café / naïve), a Greek-letter name (β-Catenin, the issue #251 level-two pin),
+// escaped JSON (quotes, backslashes, \uXXXX), alias fields
 // (id/name/categories/taxon), dead terms (12345/none/nan), equivalent
 // identifiers, multiple names per row, an empty names array, a null
 // preferred_name, a row with no names array, and a class row with no
@@ -70,7 +71,7 @@ pub struct SourceRow {
 // ---------------------------------------------------------------------------
 
 pub const SYNONYM_LINES: &[&str] = &[
-    r#"{"curie":"HGNC:1","preferred_name":"Alpha Gene","names":["Alpha Gene","alpha"],"types":["Gene"],"taxa":["NCBITaxon:9606"]}"#,
+    r#"{"curie":"HGNC:1","preferred_name":"Alpha Gene","names":["Alpha Gene","alpha","β-Catenin"],"types":["Gene"],"taxa":["NCBITaxon:9606"]}"#, // includes a Greek-letter name (issue #251 L2 pin)
     r#"{"curie":"HGNC:2","preferred_name":"café","names":["café","naïve"],"types":["Gene"],"taxa":["NCBITaxon:9606"]}"#,
     r#"{"curie":"HGNC:3","preferred_name":"Esc","names":["\"Quoted Name\"","back\\slash","\u00e9t\u00e9"],"types":["Gene"],"taxa":["NCBITaxon:9606"]}"#,
     r#"{"id":"MONDO:1","name":"Alias Disease","names":["alias disease"],"categories":["biolink:Disease"],"taxon":["NCBITaxon:0"]}"#,

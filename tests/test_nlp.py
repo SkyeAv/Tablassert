@@ -7,6 +7,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tablassert import rs
 from tablassert.nlp import level_one, level_two
 
 GOLDEN_FIXTURE: Path = Path(__file__).resolve().parents[1] / "rust" / "tests" / "fixtures" / "nlp_golden.tsv"
@@ -124,6 +125,47 @@ def test_level_two_custom_tag() -> None:
     result: pl.DataFrame = level_two(lf, "name", tag="_clean").collect()
     assert "name_clean" in result.columns
     assert result["name_clean"].to_list() == ["helloworld"]
+
+
+def test_level_two_non_ascii_matches_rust_build_side() -> None:
+    """level two keeps non-ASCII word characters exactly like the build side.
+
+    WHY: fullmap level-two keys were derived by an ASCII-only filter at build
+    time but a Unicode-aware regex at query time, so non-ASCII terms could
+    never match at level two (issue #251). Both sides now share one Rust
+    filter; this pins the issue's reproduction table on the query path.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["au café lait", "β-catenin"]}).lazy()
+    result: pl.DataFrame = level_two(lf, "name").collect()
+    assert result["name_two"].to_list() == ["aucafélait", "βcatenin"]
+
+
+def test_level_two_pipeline_matches_rust_batch() -> None:
+    """The level-one then level-two query pipeline equals the Rust batch filter.
+
+    WHY: mirrors the issue's reproduction command end to end: the strings the
+    query side derives from a column must equal what ``rs.normalize_terms_l2``
+    derives from the level-one forms, or fullmap level-two lookups silently
+    miss.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"t": ["Café au lait", "β-catenin"]}).lazy()
+    result: pl.DataFrame = level_two(level_one(lf, "t"), "t").collect()
+    expected: list[str] = rs.normalize_terms_l2(["au café lait", "β-catenin"])
+    assert result["t_two"].to_list() == ["aucafélait", "βcatenin"]
+    assert result["t_two"].to_list() == expected
+
+
+def test_level_two_keeps_nulls_and_empty_through_rust_path() -> None:
+    """level two keeps nulls in place and empties empty strings.
+
+    WHY: the default path round-trips through Rust (nulls never reach it), so
+    null positions and blank cells must come back exactly where they went in,
+    or term alignment across the ``{col}`` and ``{col}_two`` columns would
+    silently corrupt downstream lookups.
+    """
+    lf: pl.LazyFrame = pl.DataFrame({"name": ["hello world", None, "a-b", ""]}).lazy()
+    result: pl.DataFrame = level_two(lf, "name").collect()
+    assert result["name_two"].to_list() == ["helloworld", None, "ab", ""]
 
 
 def test_level_one_token_order_insensitive() -> None:

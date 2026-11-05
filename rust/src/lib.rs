@@ -63,9 +63,10 @@ pub use fullmap::{
 };
 // Level-one normalization.  `normalize_l1` is a plain Rust function consumed
 // by `fullmap::emit_term` (US-003) and by integration tests; `normalize_terms`
-// is the batch pyo3 surface the Python side calls (US-002).  Both are
-// intentional public exports, not dead code.
-pub use nlp::{normalize_l1, normalize_terms};
+// is the batch pyo3 surface the Python side calls (US-002), and
+// `normalize_terms_l2` is the batch pyo3 surface for the shared level-two key
+// filter (issue #251).  All are intentional public exports, not dead code.
+pub use nlp::{normalize_l1, normalize_terms, normalize_terms_l2};
 
 #[pymodule]
 fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -84,6 +85,7 @@ fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fullmap::taxon_allowlist_identity, module)?)?;
     module.add_function(wrap_pyfunction!(ndjson::dedup_ndjson, module)?)?;
     module.add_function(wrap_pyfunction!(nlp::normalize_terms, module)?)?;
+    module.add_function(wrap_pyfunction!(nlp::normalize_terms_l2, module)?)?;
     module.add_function(wrap_pyfunction!(uuid::namespace_uuid, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64_file, module)?)?;

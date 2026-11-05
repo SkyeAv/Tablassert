@@ -43,12 +43,13 @@ def class_row(curie: str, equivalents: list[str]) -> dict[str, Any]:
 
 
 # Fixed embedded fixture — logically identical to rust/tests/build_golden.rs.
-# Covers plain ASCII, unicode (café/naïve/été), escaped JSON (quotes/backslash/
+# Covers plain ASCII, unicode (café/naïve/été), a Greek-letter name (β-Catenin,
+# the issue #251 level-two pin), escaped JSON (quotes/backslash/
 # \uXXXX), alias fields (id/name/categories/taxon), dead terms (12345/none/nan),
 # equivalent identifiers, multiple names per row, an empty names array, a null
 # preferred_name, a row with no names array, and a class row with no equivalents.
 SYNONYMS: list[dict[str, Any]] = [
-    synonym_row("HGNC:1", "Alpha Gene", ["Alpha Gene", "alpha"], "Gene"),
+    synonym_row("HGNC:1", "Alpha Gene", ["Alpha Gene", "alpha", "β-Catenin"], "Gene"),
     synonym_row("HGNC:2", "café", ["café", "naïve"], "Gene"),
     synonym_row("HGNC:3", "Esc", ['"Quoted Name"', "back\\slash", "été"], "Gene"),
     {"id": "MONDO:1", "name": "Alias Disease", "names": ["alias disease"], "categories": ["biolink:Disease"], "taxon": ["NCBITaxon:0"]},
@@ -78,6 +79,12 @@ CLASSES: list[dict[str, Any]] = [class_row("HGNC:1", ["NCBIGene:100", "NCBIGene:
 # re-derived independently from the RAW fixture spellings through
 # `rs.normalize_terms` (the same call the Python query side makes) and
 # cross-checked against the regenerated Rust golden, not copied from a build.
+# Issue #251 (one shared level-two filter) then removed the three ASCII-stripped
+# level-two twins of non-ASCII names ("caf", "nave", "t": the filter now keeps
+# the Unicode letters, so each level-two form equals its level-one form and
+# stores no extra key) and added "β-catenin" / "βcatenin" for the fixture's new
+# Greek-letter name, each re-derived through `rs.normalize_terms` /
+# `rs.normalize_terms_l2`.
 PROBES: list[str] = [
     "alia diseas",
     "aliadiseas",
@@ -86,7 +93,6 @@ PROBES: list[str] = [
     "alphagene",
     "back\\slash",
     "backslash",
-    "caf",
     "café",
     "doid999",
     "doid:999",
@@ -120,7 +126,6 @@ PROBES: list[str] = [
     "multi",
     "name quot",
     "namequot",
-    "nave",
     "naïve",
     "ncbigene100",
     "ncbigene101",
@@ -129,8 +134,9 @@ PROBES: list[str] = [
     "nullnam",
     "realnam",
     "share",
-    "t",
     "été",
+    "β-catenin",
+    "βcatenin",
 ]
 
 # The pinned hydrated lookup output (SOURCE_VERSION asserted separately).
@@ -143,7 +149,6 @@ GOLDEN_ROWS: list[dict[str, object]] = [
     {"term": "alphagene", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "back\\slash", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "backslash", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "caf", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "café", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "doid999", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "doid:999", "CURIE": "MONDO:1", "PREFERRED_NAME": "Alias Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
@@ -178,7 +183,6 @@ GOLDEN_ROWS: list[dict[str, object]] = [
     {"term": "multi", "CURIE": "MONDO:3", "PREFERRED_NAME": "Multi B", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
     {"term": "name quot", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "namequot", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
-    {"term": "nave", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "naïve", "CURIE": "HGNC:2", "PREFERRED_NAME": "café", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene100", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "ncbigene101", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
@@ -188,8 +192,9 @@ GOLDEN_ROWS: list[dict[str, object]] = [
     {"term": "realnam", "CURIE": "HGNC:4", "PREFERRED_NAME": "Dead", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "share", "CURIE": "HGNC:6", "PREFERRED_NAME": "Shared Hit", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "share", "CURIE": "MONDO:2", "PREFERRED_NAME": "Shared Disease", "CATEGORY_NAME": "Disease", "TAXON_ID": 0, "SOURCE_NAME": "SRC"},
-    {"term": "t", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
     {"term": "été", "CURIE": "HGNC:3", "PREFERRED_NAME": "Esc", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "β-catenin", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
+    {"term": "βcatenin", "CURIE": "HGNC:1", "PREFERRED_NAME": "Alpha Gene", "CATEGORY_NAME": "Gene", "TAXON_ID": 9606, "SOURCE_NAME": "SRC"},
 ]
 
 EXPECTED_CURIES: list[str] = [
@@ -254,8 +259,8 @@ def test_golden_lookup_is_pinned(golden_db: Path) -> None:
     assert all(r["SOURCE_VERSION"] == source_version for r in rows)
 
     canon: list[dict[str, object]] = _canonical(rows)
-    assert len(canon) == len(GOLDEN_ROWS) == 55
-    assert len({r["term"] for r in canon}) == len(PROBES) == 52  # every probe resolved
+    assert len(canon) == len(GOLDEN_ROWS) == 54
+    assert len({r["term"] for r in canon}) == len(PROBES) == 51  # every probe resolved
     assert canon == GOLDEN_ROWS, "fullmap lookup output diverged from the pinned golden"
 
 

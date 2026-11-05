@@ -327,11 +327,19 @@ fn level_one(value: &str) -> Cow<'_, str> {
     }
 }
 
-fn level_two(value: &str) -> Cow<'_, str> {
-    // Fast path: level-two keeps [A-Za-z0-9_]; for an already-lowercase ASCII
-    // input that is exactly [a-z0-9_], so when every byte qualifies the filter is
-    // a no-op and we borrow unchanged (the common case post-level_one).  Any
-    // uppercase or non-ASCII byte falls through to the filtering slow path.
+/// Derive the level-two key of a (usually level-one) term: keep every Unicode
+/// alphanumeric character or underscore, drop everything else.  This is THE
+/// single level-two key definition: `emit_term` stores build-side keys through
+/// it and `nlp::normalize_terms_l2` derives query-side keys through it, so the
+/// two sides cannot drift apart (the query side used a Unicode-aware polars
+/// regex while the build stripped all non-ASCII, which made non-ASCII terms
+/// unmatchable at level two).
+pub(crate) fn level_two(value: &str) -> Cow<'_, str> {
+    // Fast path: for an already-lowercase ASCII input, keeping Unicode word
+    // characters is exactly keeping [a-z0-9_], so when every byte qualifies the
+    // filter is a no-op and we borrow unchanged (the common case
+    // post-level_one).  Any uppercase or non-ASCII byte falls through to the
+    // filtering slow path.
     if value
         .bytes()
         .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
@@ -341,7 +349,7 @@ fn level_two(value: &str) -> Cow<'_, str> {
         Cow::Owned(
             value
                 .chars()
-                .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .filter(|c| c.is_alphanumeric() || *c == '_')
                 .collect(),
         )
     }
@@ -3902,6 +3910,26 @@ mod tests {
         assert_eq!(level_two("brca-1"), "brca1");
     }
 
+    #[test]
+    fn level_two_keeps_non_ascii_word_characters() {
+        // WHY: the build side and the Python query side must derive the SAME
+        // level-two key for every level-one string (issue #251). The filter
+        // keeps Unicode alphanumeric characters (accents, Greek letters,
+        // non-ASCII digits) plus underscore, and drops punctuation, symbols,
+        // combining marks, and whitespace -- matching the query side because it
+        // IS the implementation the query side calls.
+        assert_eq!(level_two("au café lait"), "aucafélait");
+        assert_eq!(level_two("β-catenin"), "βcatenin");
+        assert_eq!(level_two("naïve"), "naïve");
+        assert_eq!(level_two("p_value"), "p_value");
+        // Combining marks are neither alphanumeric nor underscore: a decomposed
+        // form must collapse exactly like the query side does.
+        assert_eq!(level_two("cafe\u{301}"), "cafe");
+        // Unchanged ASCII behavior: punctuation still splits, empty stays empty.
+        assert_eq!(level_two("hello-world"), "helloworld");
+        assert_eq!(level_two(""), "");
+    }
+
     /// `term_shard` is the single routing oracle shared by the writer and the
     /// reader, so it must be deterministic (same term -> same shard every call,
     /// or reads would look in the wrong file), agree with the raw xxh64-mask
@@ -6259,9 +6287,9 @@ mod tests {
             Some([(1, 0), (2, 0)].as_slice()),
             "both spellings must land on one normalized level-one key"
         );
-        // Level-two still composes AFTER level-one: it is the `[a-z0-9_]` strip
-        // of the NORMALIZED key ("aspirin oral" -> "aspirinoral"), not of the
-        // raw term (which would have been "oralaspirin").
+        // Level-two still composes AFTER level-one: it is the Unicode-word-
+        // character strip of the NORMALIZED key ("aspirin oral" -> "aspirinoral"),
+        // not of the raw term (which would have been "oralaspirin").
         assert_eq!(
             terms.get("aspirinoral").map(Vec::as_slice),
             Some([(1, 0), (2, 0)].as_slice())
@@ -6275,16 +6303,20 @@ mod tests {
         assert_eq!(terms.len(), 1, "expected only the key `gene`: {terms:?}");
         assert!(terms.contains_key("gene"));
 
-        // Digit- and punctuation-bearing tokens survive verbatim (never stemmed)
-        // and non-ASCII folds case but skips stemming, so the level-two strip is
-        // the only place those characters disappear.
+        // Digit- and punctuation-bearing tokens survive verbatim (never stemmed).
+        // Level-two keeps Unicode word characters (é, β) and drops punctuation,
+        // so "café" derives NO distinct level-two key (it equals its level-one
+        // form) while "β-catenin" derives the level-two key "βcatenin" -- the
+        // same key the Python query side derives through
+        // `nlp::normalize_terms_l2` (issue #251).
         let mut terms: HashMap<String, Vec<(u32, u8)>> = HashMap::new();
         emit_term("TNF-alpha", (4, 0), &mut terms);
         emit_term("café", (5, 0), &mut terms);
-        for key in ["tnf-alpha", "tnfalpha", "café", "caf"] {
+        emit_term("β-catenin", (5, 0), &mut terms);
+        for key in ["tnf-alpha", "tnfalpha", "café", "β-catenin", "βcatenin"] {
             assert!(terms.contains_key(key), "missing key {key:?}: {terms:?}");
         }
-        assert_eq!(terms.len(), 4);
+        assert_eq!(terms.len(), 5);
 
         // The gates run BEFORE stemming: "Hypothetical Protein" is rejected on
         // its cleaned spelling (post-normalization it reads "hypothet protein"

@@ -71,6 +71,30 @@ def level_one(lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
     return lf.with_columns(expr.alias(col))
 
 
+def _level_two_series(values: pl.Series) -> pl.Series:
+    """Level-two normalize one whole string column through the Rust level-two filter.
+
+    Args:
+        values: Raw column batch (already cast to string by the caller).
+
+    Returns:
+        Series with every non-null value replaced by its level-two form,
+        nulls kept exactly where they were.
+
+    Notes:
+        Shares the exact batch shape of ``_normalize_terms_series`` (nulls never
+        reach Rust; one GIL-released Rust call per column instead of per row,
+        ``map_elements`` is forbidden in this repo) but applies the fullmap
+        build-side level-two key filter instead of the level-one pipeline, so
+        the query-side ``{col}_two`` keys are byte-identical to the keys
+        ``emit_term`` stores at build time (issue #251).
+    """
+    text: pl.Series = values.cast(pl.String)
+    indices: pl.Series = text.is_not_null().arg_true()
+    normalized: pl.Series = pl.Series(rs.normalize_terms_l2(text.drop_nulls().to_list()), dtype=pl.String)
+    return text.scatter(indices, normalized)
+
+
 def level_two(
     lf: pl.LazyFrame,
     col: str,  # pyright: ignore
@@ -82,16 +106,28 @@ def level_two(
     The cleaned values are written to a new column named ``f"{col}{tag}"`` rather
     than overwriting the source column.
 
+    With the default pattern the column is cleaned through the compiled Rust
+    filter (``rs.normalize_terms_l2``) that derives the fullmap build-side
+    level-two keys, so query-side and build-side keys are byte-identical by
+    construction: non-ASCII word characters (accents, Greek letters) survive
+    while punctuation, symbols, and combining marks are dropped on both sides.
+    A custom ``regex`` keeps the vectorized Polars path and is a generic text
+    cleaner with no build-side key contract.
+
     Args:
         lf: Source LazyFrame.
         col: Name of the source column to clean.
-        regex: Pattern whose matches are removed. Defaults to runs of non-word
-            characters (``\\W+``).
+        regex: Pattern whose matches are removed. Only the default non-word
+            pattern (``\\W+``) routes through the shared Rust level-two filter;
+            any other pattern is applied with Polars directly.
         tag: Suffix appended to ``col`` to form the output column name.
 
     Returns:
         LazyFrame with the new tagged column added.
     """
-    expr: pl.Expr = pl.col(col).str.replace_all(regex, "")
+    if regex == r"\W+":
+        expr: pl.Expr = pl.col(col).cast(pl.String).map_batches(_level_two_series, return_dtype=pl.String)
+    else:
+        expr = pl.col(col).str.replace_all(regex, "")
     col: str = col + tag
     return lf.with_columns(expr.alias(col))
