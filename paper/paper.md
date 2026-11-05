@@ -42,7 +42,7 @@ We built Tablassert rather than contributing to an existing project for three re
 
 # Software Design
 
-![placeholder caption](./figures/tablassert-simplified.drawio.png)
+![placeholder caption](./figures/tablassert-simplified.drawio.png){height="9pt"}
 
 Tablassert has three main trade-offs: an embedded NoSQL (fullmap) database enables local batched resolution without service calls; declarative YAML favors accessibility, validation, and speed over procedural flexibility; and a hybrid Python-Rust Maturin build system favors hot-path performance over implementation simplicity.
 
