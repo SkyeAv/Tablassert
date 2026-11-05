@@ -1,4 +1,4 @@
-.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check clean paper paper-check paper-pdf paper-image
+.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check clean paper paper-check paper-pdf paper-image preprint
 
 # Install Python dev dependencies, CLI/QC/log extras, and the editable Rust extension.
 setup:
@@ -45,7 +45,7 @@ check: lint fmt-check typecheck test test-rust
 
 # Remove local build, test, documentation, and compiled-extension artifacts.
 clean:
-	rm -rf build dist site htmlcov .coverage .pytest_cache .ruff_cache rust/target src/tablassert/*.so .paperdraft paper/paper.pdf
+	rm -rf build dist site htmlcov .coverage .pytest_cache .ruff_cache rust/target src/tablassert/*.so .paperdraft paper/paper.pdf paper/preprint.pdf
 
 # Validate the JOSS paper draft: front matter, citation resolution, word budgets.
 paper-check:
@@ -82,3 +82,7 @@ paper-pdf: paper-image
 
 # Full JOSS paper gate: validate the draft, then compile the PDF.
 paper: paper-check paper-pdf
+
+# Compile a standalone preprint PDF with Pandoc and XeLaTeX.
+preprint: paper-check
+	cd paper && pandoc paper.md --citeproc --pdf-engine=xelatex --output=preprint.pdf
