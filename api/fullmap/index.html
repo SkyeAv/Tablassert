@@ -1542,7 +1542,7 @@ dropped as well.</p>
 <p><code>resolve()</code> expects the LazyFrame to already have two NLP columns applied upstream:</p>
 <ul>
 <li><code>col</code>: the canonical <code>level_one</code> output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)</li>
-<li><code>col + tag</code>: the <code>level_two</code> output (non-word characters removed via <code>\W+</code>)</li>
+<li><code>col + tag</code>: the <code>level_two</code> output (non-word characters removed by the same compiled Rust filter that derives the build-side level-two keys)</li>
 </ul>
 <p>The default <code>"_two"</code> matches <code>level_two</code>'s default tag.</p>
 <h3 id="return-value">Return Value<a class="headerlink" href="#return-value" title="Permanent link">&para;</a></h3>
@@ -1687,7 +1687,7 @@ dropped as well.</p>
 <p>Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existing fullmaps to produce schema v6 before using them with this level-one contract.</p>
 <p><strong><code>level_two</code> output</strong> (column: <code>col + "_two"</code>):</p>
 <ul>
-<li>All non-word characters (<code>\W+</code>) removed from the <code>level_one</code> result</li>
+<li>All non-word characters removed from the <code>level_one</code> result: Unicode alphanumeric characters and underscores survive, while punctuation, symbols, combining marks, and whitespace are dropped. The default path runs the exact compiled Rust filter the build path stores level-two keys with, so query-side and build-side keys are byte-identical for every input (non-ASCII letters such as accents and Greek symbols are kept, fixing the divergence tracked in issue #251).</li>
 <li>Used as fallback when <code>level_one</code> produces no match</li>
 <li>Preferred for disease names and free text</li>
 </ul>
