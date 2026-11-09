@@ -1,6 +1,7 @@
 # Tablassert
 
 [![PyPI version](https://badge.fury.io/py/tablassert.svg)](https://badge.fury.io/py/tablassert)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/tablassert?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/tablassert)
 [![CI](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml/badge.svg)](https://github.com/SkyeAv/Tablassert/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/github/deployments/SkyeAv/Tablassert/github-pages?label=docs)](https://skyeav.github.io/Tablassert/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

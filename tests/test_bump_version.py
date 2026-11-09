@@ -14,6 +14,7 @@ from __future__ import annotations
 import difflib
 import importlib.util
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -226,8 +227,9 @@ def test_real_repo_files_round_trip(tmp_path: Path) -> None:
     """
     for name in ("pyproject.toml", "uv.lock", "CITATION.cff", "CHANGELOG.md"):
         (tmp_path / name).write_text((REPO_ROOT / name).read_text(encoding="utf-8"), encoding="utf-8")
+    current = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     new_version = bump_module.bump("patch", "2000-01-01", root=tmp_path)
-    assert new_version == "22.2.3"
+    assert new_version == bump_module.bump_version(current, "patch")
     for name in ("pyproject.toml", "uv.lock", "CITATION.cff"):
         ops = changed_ops((REPO_ROOT / name).read_text(encoding="utf-8").split("\n"), (tmp_path / name).read_text(encoding="utf-8").split("\n"))
         assert len(ops) == 1, f"{name}: expected one edit, got {ops}"

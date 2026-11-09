@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.3.0 - 2026-11-09
+
+### Added
+
+- **Release version bumps are mechanical.** New `make patch`, `make minor`, and `make major` targets run `scripts/bump_version.py`, updating `pyproject.toml`, the self-package entry in `uv.lock`, and `CITATION.cff`, then rolling `CHANGELOG.md`; existing `## Unreleased` prose is preserved and `rust/Cargo.toml` remains independently versioned. ([#250](https://github.com/SkyeAv/Tablassert/pull/250))
+
+### Fixed
+
+- **Level-two fullmap keys now use the same Unicode-aware filter at build and query time.** The Rust `fullmap::level_two` implementation keeps Unicode alphanumeric characters and underscores, and `nlp.level_two` calls it through the new `normalize_terms_l2` batch function, so terms containing accented or Greek characters resolve consistently at both levels; custom query regexes retain the Polars path. Existing fullmaps must be rebuilt with `build-fullmap` after upgrading because their stored level-two keys predate this fix; the on-disk schema tag is unchanged. ([#252](https://github.com/SkyeAv/Tablassert/pull/252))
+
 ## 22.2.2 - 2026-11-04
 
 ### Changed
