@@ -93,7 +93,7 @@ Suffix appended to `col` to locate the `level_two` output column.
 `resolve()` expects the LazyFrame to already have two NLP columns applied upstream:
 
 - `col`: the canonical `level_one` output (cleaned, Unicode-lowercased, Porter2-stemmed, deduplicated, and byte-sorted by token)
-- `col + tag`: the `level_two` output (non-word characters removed via `\W+`)
+- `col + tag`: the `level_two` output (non-word characters removed by the same compiled Rust filter that derives the build-side level-two keys)
 
 The default `"_two"` matches `level_two`'s default tag.
 
@@ -207,7 +207,7 @@ Schema-v5 fullmap databases are rejected by the current resolver. Rebuild existi
 
 **`level_two` output** (column: `col + "_two"`):
 
-- All non-word characters (`\W+`) removed from the `level_one` result
+- All non-word characters removed from the `level_one` result: Unicode alphanumeric characters and underscores survive, while punctuation, symbols, combining marks, and whitespace are dropped. The default path runs the exact compiled Rust filter the build path stores level-two keys with, so query-side and build-side keys are byte-identical for every input (non-ASCII letters such as accents and Greek symbols are kept, fixing the divergence tracked in issue #251).
 - Used as fallback when `level_one` produces no match
 - Preferred for disease names and free text
 

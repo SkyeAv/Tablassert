@@ -61,7 +61,6 @@ alpha gene|HGNC:1
 alphagene|HGNC:1
 back\slash|HGNC:3
 backslash|HGNC:3
-caf|HGNC:2
 café|HGNC:2
 doid999|MONDO:1
 doid:999|MONDO:1
@@ -95,7 +94,6 @@ mondo:3|MONDO:3
 multi|HGNC:10,MONDO:3
 name quot|HGNC:3
 namequot|HGNC:3
-nave|HGNC:2
 naïve|HGNC:2
 ncbigene100|HGNC:1
 ncbigene101|HGNC:1
@@ -104,8 +102,9 @@ ncbigene:101|HGNC:1
 nullnam|HGNC:7
 realnam|HGNC:4
 share|HGNC:6,MONDO:2
-t|HGNC:3
 été|HGNC:3
+β-catenin|HGNC:1
+βcatenin|HGNC:1
 "#;
 
 // ---------------------------------------------------------------------------

@@ -175,7 +175,7 @@ parallel (releasing the GIL, one reader per non-empty shard, re-merged into inpu
 missing tag raises rather than silently reading incompatible data. Databases built under the older
 `v1`/`v2`/`v3`/`v4`/`v5` schemas are rejected: there is no automatic schema migration, so a schema bump
 (the v3 to v4 move to sharded files, the v4 to v5 move to the redb 4 engine, and the v5 to v6 move to normalized level-one keys) requires rebuilding
-via `tablassert build-fullmap`.
+via `tablassert build-fullmap`. Rebuilding is also required after a key-derivation fix even when the schema tag is unchanged: fullmaps built before the issue #251 level-two correction stripped non-ASCII characters from level-two keys, so a pre-existing database cannot resolve non-ASCII terms at level two until it is rebuilt with a current extension.
 
 Readers open every fullmap file READ-ONLY with a SHARED file lock (redb 4 `ReadOnlyDatabase`), so any
 number of processes can run lookups against the same fullmap concurrently; only a `build-fullmap` rebuild
