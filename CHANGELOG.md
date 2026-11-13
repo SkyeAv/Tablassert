@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.3.1 - 2026-11-13
+
+### Changed
+
+- **Python lockfile is refreshed.** cyclopts 5.4.0, pydantic 2.14.3 (with pydantic-core 2.50.4), and pyarrow 26.0.1 update their lock entries alongside the development-only ruff 0.17.4 and MkDocs Material 9.8.1; the `pyproject.toml` requirement ranges are unchanged, so published package metadata is identical to 22.3.0 and no source changes are included. ([#255](https://github.com/SkyeAv/Tablassert/pull/255))
+- **Rust lockfile is refreshed.** flate2 1.1.11 and uuid 1.29.1 move their lock entries; the manifest ranges in `rust/Cargo.toml` are unchanged, so the extension's public API and on-disk formats are untouched, but released wheels are rebuilt against the new dependency versions. ([#254](https://github.com/SkyeAv/Tablassert/pull/254))
+
 ## 22.3.0 - 2026-11-09
 
 ### Added
