@@ -6,7 +6,7 @@ import-light). Enforces the structural requirements Whedon compilation and JOSS 
 impose so collaborators get fast local feedback: front matter carries title, authors
 with ORCIDs, and bibliography metadata; the body carries every JOSS-required section (JOSS paper-format
 guidance, 2026); every [@key] citation resolves to a paper.bib entry and every entry is
-cited; the abstract and body stay inside the official JOSS word budgets.
+cited; the abstract and rendered body prose stay inside the official JOSS word budgets.
 """
 
 import re
@@ -38,6 +38,24 @@ REQUIRED_SECTIONS = (
 _BIB_ENTRY = re.compile(r"^@\w+\s*\{([^,\s]+),", re.MULTILINE)
 _CITED_GROUP = re.compile(r"\[@([^\]]*)\]")
 _ORCID = re.compile(r"\b\d{4}-\d{4}-\d{4}-\d{3}[\dX]\b")
+
+# Approximate the rendered manuscript rather than raw Markdown. The official
+# submission check uses a crude whole-file `wc -w`, but this local gate is meant
+# to count visible body prose: YAML, References, code blocks, image paths,
+# labels, and Markdown syntax are excluded. Each citation group is counted as one
+# rendered citation because expanding it would require parsing BibTeX styles.
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_TABLE_SEPARATOR = re.compile(r"^[ \t]*\|?[ \t:|-]+\|[ \t:|-]*$", re.MULTILINE)
+_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)(?:\{[^}]*\})?")
+_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)(?:\{[^}]*\})?")
+_SPAN = re.compile(r"\[([^\]]*)\]\{[^}]*\}")
+_LABEL = re.compile(r"\\label\{[^}]*\}")
+_FLOAT_REF = re.compile(r"\\(auto)?ref\{[^}]*\}")
+_CITATION_GROUP = re.compile(r"\[@[^\]]*\]")
+_HEADING_MARKER = re.compile(r"^#{1,6}[ \t]+", re.MULTILINE)
+_LIST_MARKER = re.compile(r"^[ \t]*(?:[-*+]|\d+\.)[ \t]+", re.MULTILINE)
+_BLOCKQUOTE_MARKER = re.compile(r"^[ \t]*>[ \t]?", re.MULTILINE)
+_WHITESPACE = re.compile(r"\s+")
 
 
 def _split_front_matter(text: str) -> tuple[str, str]:
@@ -88,6 +106,28 @@ def _strip_fences(body: str) -> str:
         if not fence:
             lines.append(line)
     return "\n".join(lines)
+
+
+def _strip_markup(text: str) -> str:
+    """Reduce Markdown and JOSS-specific syntax to approximate rendered prose."""
+    text = _HTML_COMMENT.sub(" ", text)
+    text = _TABLE_SEPARATOR.sub(" ", text)
+    text = _IMAGE.sub(r" \1 ", text)
+    text = _LINK.sub(r" \1 ", text)
+    text = _SPAN.sub(r" \1 ", text)
+    text = _LABEL.sub(" ", text)
+    text = _FLOAT_REF.sub(lambda match: "figure 1" if match.group(1) else "1", text)
+    text = _CITATION_GROUP.sub(" citation ", text)
+    text = _HEADING_MARKER.sub("", text)
+    text = _LIST_MARKER.sub("", text)
+    text = _BLOCKQUOTE_MARKER.sub("", text)
+    text = text.replace("`", " ").replace("*", " ").replace("|", " ")
+    return _WHITESPACE.sub(" ", text).strip()
+
+
+def _visible_words(text: str) -> int:
+    """Count words in approximately rendered visible prose."""
+    return sum(1 for token in _strip_markup(text).split() if any(char.isalnum() for char in token))
 
 
 def _section(body: str, title: str) -> str:
@@ -156,10 +196,27 @@ def test_no_uncited_entries() -> None:
     assert not dead, f"paper.bib entries never cited in paper.md: {sorted(dead)}"
 
 
+def test_visible_word_count_ignores_nonrendered_markup() -> None:
+    sample = (
+        "---\n"
+        "title: Hidden Metadata\n"
+        "---\n\n"
+        "# Heading\n\n"
+        'Visible ![**Caption.** text \\label{fig:sample}](image.png){height="9pt"} '
+        "[@a; @b] \\ref{fig:sample} `code` [link text](https://example.com).\n\n"
+        "# References\n\n"
+        "ignored [@hidden]\n"
+    )
+    _, body = _split_front_matter(sample)
+    prose = _before_references(_strip_fences(body))
+    assert _strip_markup(prose) == "Heading Visible Caption. text citation 1 code link text ."
+    assert _visible_words(prose) == 9
+
+
 def test_abstract_within_budget() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
     abstract = _section(_strip_fences(body), "Summary")
-    words = len(abstract.split())
+    words = _visible_words(abstract)
     assert words > 0, "paper.md needs a Summary section with abstract paragraphs"
     assert words <= ABSTRACT_WORD_LIMIT, f"abstract is {words} words (max {ABSTRACT_WORD_LIMIT})"
 
@@ -167,7 +224,7 @@ def test_abstract_within_budget() -> None:
 def test_body_within_budget() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
     prose = _before_references(_strip_fences(body))
-    words = len(prose.split())
+    words = _visible_words(prose)
     assert words >= 750, f"body is {words} words (JOSS minimum 750)"
     assert words <= BODY_WORD_LIMIT, f"body is {words} words (max {BODY_WORD_LIMIT})"
 
