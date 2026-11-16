@@ -62,7 +62,9 @@ An optional study stage checks structural invariants; `validate-kgx` checks cate
 
 ## Maturin build system
 
-PyO3 Rust handles normalization, sharded fullmap lookups, streamed database construction, and newline-delimited JSON (NDJSON) serialization. Global interpreter lock (GIL)-released Rayon workers parallelize these hot paths on standard CPython, while Python handles recipe parsing, Pydantic validation, and orchestration. Maturin builds Linux/macOS PyPI wheels for Unix-like bioinformatics platforms such as Bioconda [@bioconda]. Wheel users need no Rust toolchain; Windows requires WSL or a source build. This design targets hot-path performance at the cost of added implementation complexity.
+Tablassert's Python layer handles recipe parsing, validation, lazy execution planning, and build coordination, while compiled Rust supplies repeated low-level operations. PyO3, a Rust-Python bridge, exposes those Rust functions as an ordinary Python extension. For example, Rust normalizes terms, queries the sharded fullmap, streams database construction through sorted temporary files, and writes KGX output as NDJSON, a line-oriented JSON format.
+
+CPython's global interpreter lock (GIL) allows only one thread to execute Python bytecode at a time. Rust calls release the GIL and use Rayon to spread work across CPU cores on standard CPython (trading build complexity for multicore performance). Maturin packages the extension as Linux and macOS PyPI wheels, so users can install them without a Rust toolchain. However, Windows requires WSL or a source build.
 
 # Research Impact Statement
 
