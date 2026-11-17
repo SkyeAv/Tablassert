@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.3.2 - 2026-11-17
+
+### Fixed
+
+- **Successful pipeline workers now drain before exiting.** Pipeline pools close and join after a successful stage instead of unconditionally terminating workers, allowing worker-local logging queues to release their named semaphores under forkserver. Failed stages still terminate and join workers before re-raising the original error. ([#256](https://github.com/SkyeAv/Tablassert/pull/256))
+
+### Added
+
+- **A JOSS paper draft documents Tablassert and its evaluation.** The draft includes bibliography, architecture figure, name-resolution and Koza comparison evidence, reproducibility scripts, and paper-validation tests; Makefile targets and a dedicated workflow support paper checks and PDF compilation. ([#224](https://github.com/SkyeAv/Tablassert/pull/224))
+
 ## 22.3.1 - 2026-11-13
 
 ### Changed
