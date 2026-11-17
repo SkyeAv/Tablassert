@@ -5,7 +5,8 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from importlib import import_module
 from importlib.metadata import version as get_version
 from itertools import chain, pairwise
@@ -34,6 +35,25 @@ if TYPE_CHECKING:
 else:
     pl = LazyModule("polars")
     pydantic = LazyModule("pydantic")
+
+
+@contextmanager
+def _pipeline_pool() -> Iterator[Any]:
+    """Drain workers normally; terminate only when a pipeline stage fails.
+
+    Pool.__exit__ terminates even successful workers, bypassing cleanup of
+    worker-local logging queues and leaking named semaphores under forkserver.
+    """
+    pool = Pool()
+    try:
+        yield pool
+        pool.close()
+        pool.join()
+    except BaseException:
+        pool.terminate()
+        pool.join()
+        raise
+
 
 # Pipeline completion events (BUILD, VALIDATE).
 logger = cat("PIPELINE")
@@ -320,7 +340,7 @@ def build_graph_pipeline(
     # index and we reassemble by index to keep raw[i] aligned with g.tables[i].
     start, advance, _ = progress.section_loop(len(g.tables), "Load")
     raw: list[object] = [None for _ in g.tables]
-    with Pool() as pool:
+    with _pipeline_pool() as pool:
         for idx, parsed in pool.imap_unordered(_load_table_indexed, enumerate(g.tables)):
             raw[idx] = parsed
             start(str(g.tables[idx]))
@@ -332,7 +352,7 @@ def build_graph_pipeline(
     # flattened sections order is byte-identical to the old starmap result.
     start, advance, _ = progress.section_loop(len(g.tables), "Extract")
     temp: list[list[dict[str, Any]]] = [[] for _ in g.tables]
-    with Pool() as pool:
+    with _pipeline_pool() as pool:
         for idx, section_list in pool.imap_unordered(_extract_sections_indexed, zip(range(len(g.tables)), raw, g.tables, strict=True)):
             temp[idx] = section_list
             start(str(g.tables[idx]))

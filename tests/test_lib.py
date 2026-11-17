@@ -138,6 +138,15 @@ class DummyProgress:
 class SyncPool:
     """Synchronous drop-in replacement for multiprocessing.Pool in tests."""
 
+    def close(self) -> None:
+        pass
+
+    def join(self) -> None:
+        pass
+
+    def terminate(self) -> None:
+        pass
+
     def __enter__(self) -> Self:
         return self
 
