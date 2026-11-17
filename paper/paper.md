@@ -72,7 +72,7 @@ Tablassert underlies several production knowledge graphs. MicrobiomeKG [@microbi
 
 # AI Usage Disclosure
 
-Generative AI assisted with code generation, test writing, security analyses, documentation, reviewing, drafting, and revising. Coding-agent use began on 01/27/2026. Models used include claude-opus-5, claude-sonnet-5, deepseek-v4, gemini-3.8-flash, glm-5.3, gpt-5.6, gpt-6, kimi-k2, kimi-k3, muse-spark-1.3-contributor, nemotron-3-ultra, laguna-s-2.1, qwen3.8, mimo-v2.5, and mimo-v2.6-pro in a custom Pi coding agent harness (v0.81.1) with prompt engineering from promptfoo (v0.121.17) and GEPA (v0.1.4). Prompt optimization and AI evaluation with CodeRabbit supplemented human review. Additionally, Grammarly was used to revise documentation and draft manuscripts. The authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
+Generative AI assisted with code generation, test writing, security analyses, documentation, reviewing, drafting, and revising. Coding-agent use began on 01/27/2026. Models used include claude-opus-5, claude-sonnet-5, deepseek-v4, gemini-3.8-flash, glm-5.3, gpt-5.6, gpt-6, kimi-k2, kimi-k3, muse-spark-1.3-contributor, nemotron-3-ultra, laguna-s-2.1, qwen3.8, mimo-v2.5, and mimo-v2.6-pro in a custom Pi coding agent harness (v0.81.1) with prompt engineering from promptfoo (v0.121.17) and GEPA (v0.1.4). AI evaluation with CodeRabbit supplemented human code review. Additionally, Grammarly was used to revise documentation and draft manuscripts. The authors made all architecture decisions and reviewed all outputs. The authors retain full responsibility for all aspects of the software and manuscript.
 
 # Author Contributions
 
