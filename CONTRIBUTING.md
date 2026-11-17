@@ -66,6 +66,8 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make paper-image` | Build the JOSS paperdraft compiler image (local Docker layer cache) |
 | `make paper-pdf` | Compile `paper/paper.pdf` from `paper/paper.md` with Docker |
 | `make paper` | JOSS paper gate plus PDF compile |
+| `make preprint` | Generate standalone preprint LaTeX (`paper/preprint.tex`) from `paper/paper.md` with pandoc |
+| `make preprint-pdf` | Compile the preprint LaTeX to PDF with two XeLaTeX passes |
 | `make clean` | Local build/test/doc artifacts |
 
 The three bump targets run `scripts/bump_version.py`, which updates every file a release touches and leaves the changelog prose to you: an existing `## Unreleased` section becomes the dated `## X.Y.Z - YYYY-MM-DD` heading (body kept), and with no Unreleased section an empty dated section opens above the last release. Review the diff, write the release notes, and commit as `chore(release): X.Y.Z`; that commit on main is what triggers the tag and PyPI publish workflows. The `tablassert-rs` crate in `rust/Cargo.toml` is versioned independently and stays untouched.
