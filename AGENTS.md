@@ -10,7 +10,7 @@ Tablassert turns biomedical spreadsheets into KGX knowledge graphs for NCATS Tra
 - Release version bump: `make patch` / `make minor` / `make major` bumps `pyproject.toml`, `uv.lock`, `CITATION.cff` and rolls the `CHANGELOG.md` Unreleased section (changelog prose stays manual).  [verified]
 - Python tests: `uv run pytest`  [verified]; parallel via pytest-xdist (`-n auto` in pyproject addopts, coverage inline); use `-n 0` for one serial test while debugging.
 - Rust tests: `cargo test --manifest-path rust/Cargo.toml`  (evidence: ci)
-- CI is path-gated by a `changes` job: `autofix` (ruff check --fix, ruff format, markdownlint --fix, cargo fmt; fixes are committed back to same-repo PR branches, unfixable violations fail), `pyright`, full `pytest` (python or rust changes), a 5-file docs-consistency pytest subset (`python-smoke`, docs/markdown-only PRs), `mkdocs build --strict` (docs changes), `html-validate` (markdown changes), `cargo clippy --all-targets -- -D warnings` + `cargo test` (rust changes).  (evidence: ci)
+- CI is path-gated by a `changes` job: `autofix` (`ruff check --fix`, `ruff format`, `markdownlint --fix`, `cargo fmt`; fixes are committed back to same-repo PR branches, unfixable violations fail), `pyright`, full `pytest` (python or rust changes), a 5-file docs-consistency pytest subset (`python-smoke`, docs/markdown-only PRs), `mkdocs build --strict` (docs changes), `html-validate` (markdown changes), `cargo clippy --all-targets -- -D warnings` + `cargo test` (rust changes).  (evidence: ci)
 - After editing `pyproject.toml`, relock; `uv lock --check` runs in pre-commit and catches a stale lockfile.  [verified]
 
 ## Conventions
