@@ -2,12 +2,6 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
-
-### Added
-
-- **Dead-code and security gates joined CI and pre-commit.** Vulture (unused Python symbols) and deptry (unused or transitively-relied-upon dependencies) run in the `python-type` CI job, as pre-push hooks, and via `make deadcode`; cargo-machete checks unused Rust dependencies in the `rust` job and on push; gitleaks scans staged changes on every commit. A new unpinned-path `security.yml` workflow runs gitleaks, `pip-audit --strict`, and cargo-audit on every PR plus a weekly audit of main. The first scans removed five dead Python symbols, declared the runtime-imported `linkml-runtime` directly instead of relying on it transitively, and cleared 43 known advisories by upgrading both lockfiles (torch 2.11 to 2.15, rustix to 1.1.6, and others). ([#257](https://github.com/SkyeAv/Tablassert/pull/257))
-
 ## 22.3.2 - 2026-11-17
 
 ### Fixed
