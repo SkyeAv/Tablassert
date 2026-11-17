@@ -107,3 +107,11 @@ repos:
         files: ^rust/
         pass_filenames: false
         stages: [pre-push]
+  # Unused-Rust-dependency gate; mirrors the CI `rust` job step. Keep the rev in sync
+  # with the bnjbvr/cargo-machete action pin in .github/workflows/ci.yml. The hook's
+  # own types_or (cargo/cargo-lock) already scopes it to manifest changes.
+  - repo: https://github.com/bnjbvr/cargo-machete
+    rev: v0.10.1
+    hooks:
+      - id: cargo-machete
+        stages: [pre-push]

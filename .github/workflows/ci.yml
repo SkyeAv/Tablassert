@@ -275,5 +275,12 @@ jobs:
       # cargo fmt is enforced by the autofix job, which can also fix it automatically.
       - name: Cargo clippy
         run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+      # Unused-dependency gate; same cargo-machete pin as the pre-push hook in
+      # .pre-commit-config.yaml. Options must precede paths; the fresh checkout has no
+      # target/ dirs, so no --skip-targets is needed.
+      - name: Cargo machete (unused dependencies)
+        uses: bnjbvr/cargo-machete@v0.10.1
+        with:
+          args: rust/
       - name: Cargo test
         run: cargo test --manifest-path rust/Cargo.toml
