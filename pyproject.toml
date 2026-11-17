@@ -47,6 +47,10 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "biolink-model>=4.4.6",
+    # Direct runtime import (`biolink._schema` builds a SchemaView); was only transitive
+    # via biolink-model. Declared for the same reason openpyxl is in the test group: a
+    # biolink-model bump must not be able to silently drop a module this package imports.
+    "linkml-runtime>=1.11",
     "polars>=2.0.0rc2",
     "pyarrow>=21.0.0",
     "rapidfuzz>=3.14.3",
@@ -120,8 +124,9 @@ docs = [
 ci = [
     { include-group = "test" },
     { include-group = "typecheck" },
-    # Dead-code gate run by the python-type CI job; lives in `ci` so the lockfile pins
-    # the same version the pre-commit hook mirrors (see .pre-commit-config.yaml).
+    # Dead-code gates run by the python-type CI job; live in `ci` so the lockfile pins
+    # the same versions the pre-commit hooks mirror (see .pre-commit-config.yaml).
+    "deptry>=0.25",
     "vulture>=2.16",
 ]
 # Superset for local development, so `make setup` still installs everything.
@@ -201,3 +206,27 @@ ignore_decorators = ["@field_validator", "@model_validator", "@pytest.fixture"]
 # `model_config` is read by pydantic; `pytestmark` is read by pytest.
 ignore_names = ["model_config", "pytestmark"]
 sort_by_size = true
+
+[tool.deptry]
+# Dependency-hygiene gate: catches unused declared dependencies (dead weight) and imports
+# that only work through a transitive dependency (fragile). maturin's `python-source = "src"`
+# layout is not auto-detected, so the package's own module must be declared first-party.
+known_first_party = ["tablassert"]
+# paper/ holds JOSS reproducibility scripts that run in their own environments (koza etc.),
+# not in this project's; tests/ is already excluded by deptry's defaults.
+extend_exclude = ["paper"]
+
+[tool.deptry.package_module_name_map]
+# PyPI distribution "aria2" exposes import module "aria2c"; the mapping silences deptry's
+# name-assumption warning. The DEP002 ignore below still applies because the import is dynamic.
+aria2 = "aria2c"
+
+[tool.deptry.per_rule_ignores]
+# Never imported by name at module scope, but required at runtime:
+# - polars: loaded through the LazyModule("polars") mechanism (_lazy.py); every static
+#   `import polars` in src/ is TYPE_CHECKING-only by design.
+# - aria2: cli.py resolves the bundled binary through import_module("aria2c"); the PyPI
+#   distribution "aria2" exposes import module "aria2c" (see the [aria2] extra comment).
+# - sentence-transformers: loaded through LazyModule("sentence_transformers") in qc.py.
+# - pyarrow/fastexcel: polars Excel/IPC engines (pl.read_excel engine="calamine" loads fastexcel).
+DEP002 = ["polars", "aria2", "sentence-transformers", "pyarrow", "fastexcel"]

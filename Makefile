@@ -39,9 +39,10 @@ fmt-check:
 typecheck:
 	uv run pyright
 
-# Run Python dead-code checks (unused symbols beyond what ruff/pyright catch).
+# Run Python dead-code checks (unused symbols and dependency hygiene).
 deadcode:
 	uv run vulture
+	uv run deptry .
 
 # Run the full local quality gate.
 check: lint fmt-check typecheck deadcode test test-rust

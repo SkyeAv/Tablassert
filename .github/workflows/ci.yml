@@ -187,6 +187,9 @@ jobs:
       # Dead-code gate: same vulture pin and [tool.vulture] config as the pre-push hook.
       - name: Vulture (dead code)
         run: uv run vulture
+      # Dependency hygiene: same deptry pin and [tool.deptry] config as the pre-push hook.
+      - name: Deptry (dependency hygiene)
+        run: uv run deptry .
 
   # Deliberately NOT sharded across a matrix. Measured on this repo: ~21s of every pytest
   # run is fixed overhead (interpreter start, imports, xdist workers, coverage init) against

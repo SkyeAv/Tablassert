@@ -90,6 +90,15 @@ repos:
         types_or: [python, pyi]
         pass_filenames: false
         stages: [pre-push]
+      # Dependency-hygiene gate (unused declared deps, imports only reachable transitively).
+      # Whole-repo scan configured by [tool.deptry]; triggers on the inputs it reads.
+      - id: deptry
+        name: deptry
+        entry: uv run deptry .
+        language: system
+        files: ^(src/.*\.py|pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+        stages: [pre-push]
       - id: cargo-clippy
         name: cargo-clippy
         entry: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
