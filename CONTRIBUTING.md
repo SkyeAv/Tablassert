@@ -104,6 +104,8 @@ The stable commands are:
 uv run ruff check .
 uv run ruff format --check .
 uv run pyright
+uv run vulture
+uv run deptry .
 uv run pytest -q
 cargo fmt --check --manifest-path rust/Cargo.toml
 cargo test --manifest-path rust/Cargo.toml
@@ -117,6 +119,8 @@ What the gates cover:
 - **Python tests.** The suite is offline and runs in parallel by default via [pytest-xdist](https://pypi.org/project/pytest-xdist/) (`-n auto` in `pyproject.toml`'s addopts, which also enable `--cov` so coverage is reported inline); Disable parallelism for a single serial run with `pytest -n 0`. CI installs the `ci` dependency group with the `cli`, `qc`, and `log` extras (`--no-default-groups --group ci --extra cli --extra qc --extra log`) and runs the suite as a single job rather than sharding it across a matrix of runners: most of a run is fixed overhead (interpreter start, imports, xdist worker spin-up, coverage init) rather than test execution, so splitting the suite would cost more in per-runner setup than it recovers.
 - **Rust tests.** `cargo test --manifest-path rust/Cargo.toml` runs the extension's Rust unit tests.
 - **Rust style and lints.** `cargo fmt --check` enforces formatting; clippy runs all targets with warnings denied.
+- **Dead code.** `uv run vulture` finds unused Python functions, methods, classes, and attributes that ruff and pyright cannot see; its scope and suppressions live in `[tool.vulture]` and `vulture_whitelist.py` (names used dynamically, like config-vocabulary enum members and pydantic fields). `uv run deptry .` finds unused declared dependencies and imports that only work through a transitive dependency; its ignores live in `[tool.deptry]`. On the Rust side, clippy already denies `dead_code`, and cargo-machete (CI `rust` job and pre-push hook, no local install required) rejects unused crate dependencies.
+- **Security.** `.github/workflows/security.yml` is not path-gated: gitleaks scans every PR's commits for leaked secrets, `pip-audit --strict` audits the locked Python environment, and cargo-audit audits `rust/Cargo.lock` against the RustSec database, all on a weekly schedule for main as well. The gitleaks pre-commit hook additionally stops secrets at the commit stage, before they enter history.
 
 ## Pre-commit hooks
 
@@ -132,6 +136,7 @@ On every **commit**, fast and auto-fixing:
 
 - `ruff`: fixes lint issues where possible.
 - `ruff-format`: formats Python files.
+- `gitleaks`: scans staged changes for hardcoded secrets.
 - `cargo-fmt`: runs `cargo fmt --check --manifest-path rust/Cargo.toml`.
 - `uv-lock-check`: runs `uv lock --check` when `pyproject.toml` or `uv.lock` changes, so a dependency edit that was never relocked fails here instead of as an opaque CI sync error.
 
@@ -139,6 +144,9 @@ On every **push**, the whole-repo gates:
 
 - `pyright`: the same type check CI runs.
 - `cargo-clippy`: all targets, warnings denied.
+- `vulture`: dead-code scan over the `[tool.vulture]` paths.
+- `deptry`: dependency-hygiene scan when `src/`, `pyproject.toml`, or `uv.lock` changes.
+- `cargo-machete`: unused-Rust-dependency scan when a Cargo manifest changes (the hook builds the tool itself on first run).
 
 The ruff hooks cover the **whole tree**, matching CI's `ruff check .`. They used to be scoped to `src/` and `tests/`, which meant `examples/` could only ever fail in CI.
 
