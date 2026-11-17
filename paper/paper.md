@@ -31,7 +31,7 @@ Tablassert uses declarative configuration to transform tabular data into one agg
 
 ## Embedded fullmap database
 
-Built from BABEL [@babel] exports, the embedded fullmap maps normalized synonyms and cross-vocabulary meta-identifiers to canonical identifiers with category and taxon metadata. Synonyms and queries share normalization. Redb [@redb] provides crash-safe NoSQL point lookups; graph builds treat the store as read-only, supporting parallel, memory-bounded access without SQL or runtime service calls.
+Built from BABEL [@babel] exports, the embedded fullmap maps normalized synonyms and cross-vocabulary meta-identifiers to canonical identifiers with category and taxon metadata. Synonyms and queries share normalization. Builds rely on Redb [@redb] for parallel, read-only, memory-bounded point lookups without SQL or runtime service calls.
 
 Storage is the main cost: the current BABEL 22.2.0 archive is 44.5 GB compressed, while the 2026-07-22 redb store benchmarked here occupies 92.9 GB. Resolution uses exact matches over normalized keys. To limit storage and lookup cost, the current build retains the top 100 experimental taxa by Translator knowledge-graph node frequency, all OrganismTaxon rows, and rows without taxon metadata, potentially excluding rare species-specific identifiers. Sixteen smaller shards accelerate lookups and support multithreaded reads. After the initial build, read-only access needs no writer coordination, and a bounded in-process cache reuses hits and misses with minimal memory and synchronization costs.
 
