@@ -1,18 +1,7 @@
 ---
 title: 'Tablassert: Declarative Extraction of NCATS Translator-Compliant Knowledge Graphs from Biomedical Tables'
-authors:
-  - name: Skye Lane Goetz
-    affiliation: 1
-    orcid: 0009-0007-8373-2352
-  - name: Jared C. Roach
-    affiliation: 1
-    orcid: 0000-0003-4524-0107
-  - name: Gwênlyn Glusman
-    affiliation: 1
-    orcid: 0000-0001-8060-5955
-affiliations:
-  - index: 1
-    name: Institute for Systems Biology
+authors: [{"name":"Skye Lane Goetz","affiliation":1,"orcid":"0009-0007-8373-2352"},{"name":"Jared C. Roach","affiliation":1,"orcid":"0000-0003-4524-0107"},{"name":"Gwênlyn Glusman","affiliation":1,"orcid":"0000-0001-8060-5955"}]
+affiliations: [{"index":1,"name":"Institute for Systems Biology"}]
 date: 20 October 2026
 lang: en-US
 bibliography: paper.bib
@@ -20,7 +9,7 @@ bibliography: paper.bib
 
 # Summary
 
-Tables published in biomedical research papers, particularly supplemental tables, capture knowledge assertions that may have been omitted from the manuscript for several reasons, including statistical significance, space limitations, and narrative scope. These tables include association statistics, assay readouts, curated gene lists, omics data, and other information. Much of this information encodes relationships between biological entities (e.g., between columns and their labels). Tablassert converts such tabular data (Excel, CSV, TSV, Parquet) into knowledge graphs ready for the NCATS Biomedical Data Translator [@translator]. A user declares in YAML how each table's data map to subject-predicate-object-qualifier statements; Tablassert resolves free text (e.g., "lung cancer") to standard identifiers, attaches provenance and statistics, and emits graph files conforming to Translator standards [@kgx; @biolink-model].
+Tables published in biomedical research papers, particularly supplemental tables, capture knowledge assertions that may have been omitted from the manuscript for several reasons, including statistical significance, space limitations, and narrative scope. These tables include association statistics, assay readouts, curated gene lists, omics data, and other information. Much of this information encodes relationships between biological entities (e.g., between columns and their labels). Tablassert converts such tabular data (Excel, CSV, TSV, Parquet) into knowledge graphs ready for the NCATS Biomedical Data Translator [@translator]. A user declares in YAML how each table's data map to subject-predicate-object-qualifier statements; Tablassert resolves free text (e.g., "lung cancer") to standard identifiers, attaches provenance and statistics, and emits graph files conforming to Translator standards [@kgx;@biolink-model].
 
 # Statement of Need
 
@@ -48,7 +37,7 @@ Storage is the main cost: the current BABEL 22.2.0 archive is 44.5 GB compressed
 
 Node columns declare an NCBI taxon filter that retains matches for the declared species and taxon-less rows, Biolink category priority and avoid lists, and CURIE-prefix and regex exclusions. Before lookup, the cleaning trims raw preferred names and synonyms, strips surrounding quotes, and lowercases. Then, in a first normalization, ASCII alphabetic tokens are stemmed, duplicates removed, and remaining tokens sorted so repeated words and word order do not affect matching. A second normalization uses a regular expression to remove runs of non-word characters (punctuation, whitespace, and other symbols) while retaining letters, digits, and underscores. Candidates are ranked in this order: exact preferred-name agreement, normalized-name agreement, category priority, and normalization level required for the match, with ties retained in the best tier. Optional column-category frequencies provide a heuristic tie-breaker.
 
-Optional quality control applies a four-stage cascade: exact or alias matching, fuzzy string similarity, Schwartz-Hearst abbreviation expansion, then SapBERT [@sapbert; @sapbert-renci] embedding similarity using a checkpoint fine-tuned on BABEL synonyms. Each stage handles only what cheaper stages could not clear, and suspect mappings are dropped and logged with scores. For example, an audit rejected "factor ii" mapped to `HMDB:HMDB0000607` (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its synonym, but the coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin].
+Optional quality control applies a four-stage cascade: exact or alias matching, fuzzy string similarity, Schwartz-Hearst abbreviation expansion, then SapBERT [@sapbert;@sapbert-renci] embedding similarity using a checkpoint fine-tuned on BABEL synonyms. Each stage handles only what cheaper stages could not clear, and suspect mappings are dropped and logged with scores. For example, an audit rejected "factor ii" mapped to `HMDB:HMDB0000607` (cyanocobalamin; SapBERT cosine 0.444): BABEL lists "Factor II" as its synonym, but the coagulation drug context calls for prothrombin, not vitamin B12 [@prothrombin].
 
 ## Declarative YAML configuration
 
@@ -68,7 +57,7 @@ CPython's global interpreter lock (GIL) allows only one thread to execute Python
 
 # Research Impact Statement
 
-Tablassert underlies several production knowledge graphs. MicrobiomeKG [@microbiomekg] was built with an earlier version; the deployed MicrobiomeKG, the Multiomics Knowledge Provider (MOKP) [@multiomics-kp], and their maintenance builds all use Tablassert. The Drug Approvals Knowledge Provider (DAKP), originally developed in the Airflow-based glusman-team/dakp repository [@dakp] and now maintained in glusman-team/graph-monorepo [@graph-monorepo], publishes validated, versioned drug-approval graphs with per-edge evidence linkouts [@drug-approvals]. As of release, Multiomics KP 3.1.3 contains 222,994 nodes and 18,206,965 edges derived from 2,136 PubMed Central (PMC) publications [@multiomics-kp], and DAKP 1.28.1 contains 24,008 nodes and 164,662 edges [@drug-approvals]. KRAKEN [@kraken], Phenome Health's unified knowledge graph, integrates MicrobiomeKG, MOKP, and DAKP as domain-specific sources. Translator ingest integration is in progress, beginning with a Multiomics passthrough [@ingests; @ingests-mokg]. Future directions entail expanding MOKP to integrate a comprehensive subset of rare disease supplemental tables.
+Tablassert underlies several production knowledge graphs. MicrobiomeKG [@microbiomekg] was built with an earlier version; the deployed MicrobiomeKG, the Multiomics Knowledge Provider (MOKP) [@multiomics-kp], and their maintenance builds all use Tablassert. The Drug Approvals Knowledge Provider (DAKP), originally developed in the Airflow-based glusman-team/dakp repository [@dakp] and now maintained in glusman-team/graph-monorepo [@graph-monorepo], publishes validated, versioned drug-approval graphs with per-edge evidence linkouts [@drug-approvals]. As of release, Multiomics KP 3.1.3 contains 222,994 nodes and 18,206,965 edges derived from 2,136 PubMed Central (PMC) publications [@multiomics-kp], and DAKP 1.28.1 contains 24,008 nodes and 164,662 edges [@drug-approvals]. KRAKEN [@kraken], Phenome Health's unified knowledge graph, integrates MicrobiomeKG, MOKP, and DAKP as domain-specific sources. Translator ingest integration is in progress, beginning with a Multiomics passthrough [@ingests;@ingests-mokg]. Future directions entail expanding MOKP to integrate a comprehensive subset of rare disease supplemental tables.
 
 # AI Usage Disclosure
 

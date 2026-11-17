@@ -34,7 +34,10 @@ JOSS rules change; re-check the
   field, Software design, Research impact statement, AI usage disclosure,
   Acknowledgements, References). Author `affiliation:` values are INDICES into the
   separate `affiliations:` list (the JOSS convention); putting an institution string
-  there silently collapses the rendered author block to the last author.
+  there silently collapses the rendered author block to the last author. `authors:` and
+  `affiliations:` are compact inline JSON flow lists on purpose: JOSS parses them
+  identically to block YAML, but they lower the bot's whole-file `wc -w` word count.
+  Keep them inline.
 - `paper.bib`: BibTeX entries. Every `[@key]` citation in `paper.md` must resolve to an
   entry here, and every entry must be cited; `paper-check` enforces both directions.
   Note: pandoc's bibliography parser treats `%` comment lines loosely, so keep `]`, `@`,
