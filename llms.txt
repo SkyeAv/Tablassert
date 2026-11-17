@@ -38,7 +38,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 - [Project Metadata](pyproject.toml): dependencies, tooling config, and CLI entrypoint. Optional extras: `cli`, `rt`, `aria2`, `qc`, and `log`.
 - [Tests](tests/): pytest coverage and fixtures.
 - [MkDocs Configuration](mkdocs.yml): docs navigation and published pages.
-- [GitHub Workflows](.github/workflows/): `ci.yml` runs lint, format, type, test, rust, and mkdocs checks; `docs.yml` builds and deploys MkDocs; `pipy.yml` checks the project version, builds sdist and wheel artifacts, and publishes to PyPI; `tag-version.yml` tags changed project versions; `paper.yml` tests the JOSS paper compile and uploads the PDF artifact; `security.yml` scans commits for leaked secrets with gitleaks and audits dependencies against advisory databases with pip-audit and cargo-audit for the Rust lockfile.
+- [GitHub Workflows](.github/workflows/): `ci.yml` runs lint, format, type, dead-code (vulture, deptry), test, rust (clippy, machete), and mkdocs checks; `docs.yml` builds and deploys MkDocs; `pipy.yml` checks the project version, builds sdist and wheel artifacts, and publishes to PyPI; `tag-version.yml` tags changed project versions; `paper.yml` tests the JOSS paper compile and uploads the PDF artifact; `security.yml` scans commits for leaked secrets with gitleaks and audits dependencies against advisory databases with pip-audit and cargo-audit for the Rust lockfile.
 - [Changelog](CHANGELOG.md): release history and version notes.
 
 ## Implementation Map

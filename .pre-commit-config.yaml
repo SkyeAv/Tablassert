@@ -26,6 +26,7 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks
+        stages: [pre-commit]
   # markdownlint-cli2 (Markdown structure rules + custom unicode rule) and html-validate
   # (HTML inside markdown, ```html fences only) — the whole-repo gates re-run both with the
   # same pins in the `markdown-lint` job in .github/workflows/ci.yml; keep the pins in sync.

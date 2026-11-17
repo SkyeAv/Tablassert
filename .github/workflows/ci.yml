@@ -48,8 +48,8 @@ jobs:
           set -euo pipefail
           has() { grep -E -q "$1" changed_files.txt; }
           # python includes rust/: python-test rebuilds the extension, and pyright runs
-          # against the installed package.
-          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$)'; then python=true; else python=false; fi
+          # against the installed package. vulture_whitelist.py is a dead-code gate input.
+          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$|vulture_whitelist\.py$)'; then python=true; else python=false; fi
           if has '^rust/'; then rust=true; else rust=false; fi
           if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$|llms\.txt$)'; then docs=true; else docs=false; fi
           if has '(^|/)[^/]+\.md$|^\.markdownlint-cli2\.jsonc$|^\.htmlvalidate\.json$'; then markdown=true; else markdown=false; fi
