@@ -1,0 +1,78 @@
+name: Security
+
+# Deliberately NOT path-gated like ci.yml: a newly published advisory can affect this
+# repo without any file changing, and a secret can ride along in any diff. The weekly
+# schedule audits main's lockfiles even when no PR is open.
+on:
+  pull_request:
+  schedule:
+    # Mondays 04:17 UTC.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep in sync with SYNC_ARGS in ci.yml so this workflow restores the same warm uv cache.
+  SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log
+
+jobs:
+  secrets:
+    name: Gitleaks (committed secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # On pull_request the action scans the PR's commits; on schedule and dispatch it
+      # scans the full history. No GITLEAKS_LICENSE is needed: this repo belongs to a
+      # personal account, and the action only requires a license for organizations.
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  python-audit:
+    name: pip-audit (Python advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: ci-cli-qc
+      - name: Sync dependencies
+        run: uv sync --frozen ${{ env.SYNC_ARGS }}
+      # Audits the locked environment against the OSV advisory database. pip-audit joins
+      # the run environment ephemerally (--with) so SYNC_ARGS stays identical to ci.yml's
+      # jobs and the shared cache stays warm. --strict fails on any skipped package.
+      - name: pip-audit
+        run: uv run --with pip-audit==2.10.1 pip-audit --strict
+
+  rust-audit:
+    name: cargo-audit (RustSec advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo-audit
+        run: cargo audit --file rust/Cargo.lock

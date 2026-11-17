@@ -19,6 +19,13 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  # Secret scanning on the commit stage: the official hook scans only staged changes, so it
+  # stays fast while keeping leaked keys out of history entirely. The CI security.yml
+  # workflow runs the same tool over PR commits and, weekly, over the full history of main.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
   # markdownlint-cli2 (Markdown structure rules + custom unicode rule) and html-validate
   # (HTML inside markdown, ```html fences only) — the whole-repo gates re-run both with the
   # same pins in the `markdown-lint` job in .github/workflows/ci.yml; keep the pins in sync.
