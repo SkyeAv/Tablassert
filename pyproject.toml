@@ -120,6 +120,9 @@ docs = [
 ci = [
     { include-group = "test" },
     { include-group = "typecheck" },
+    # Dead-code gate run by the python-type CI job; lives in `ci` so the lockfile pins
+    # the same version the pre-commit hook mirrors (see .pre-commit-config.yaml).
+    "vulture>=2.16",
 ]
 # Superset for local development, so `make setup` still installs everything.
 dev = [
@@ -185,3 +188,16 @@ reportMissingTypeStubs = false
 reportUnusedImport = true
 reportUnusedVariable = true
 reportDuplicateImport = true
+
+[tool.vulture]
+# Whole-repo dead-code gate: ruff/pyright only catch unused imports and locals, while
+# vulture also finds unused functions, methods, classes, attributes and unreachable code.
+# tests/ is scanned as a usage source (code only tests call is not dead), and the
+# whitelist marks names that are used dynamically and cannot be seen statically.
+paths = ["src", "tests", "scripts", "vulture_whitelist.py"]
+# Pydantic validators are called by the framework, pytest fixtures by the runner;
+# neither shows up as a static reference.
+ignore_decorators = ["@field_validator", "@model_validator", "@pytest.fixture"]
+# `model_config` is read by pydantic; `pytestmark` is read by pytest.
+ignore_names = ["model_config", "pytestmark"]
+sort_by_size = true

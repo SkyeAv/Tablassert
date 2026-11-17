@@ -58,7 +58,8 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make fmt` | Ruff format and `cargo fmt` |
 | `make fmt-check` | Ruff format check and `cargo fmt --check` |
 | `make typecheck` | Pyright |
-| `make check` | Lint, format check, typecheck, Python tests, Rust tests, and clippy with `-D warnings` |
+| `make deadcode` | Vulture dead-code scan (unused functions, methods, classes, and attributes beyond what ruff and pyright catch) |
+| `make check` | Lint, format check, typecheck, dead-code scan, Python tests, Rust tests, and clippy with `-D warnings` |
 | `make patch` | Increment the release version's patch part in `pyproject.toml`, `uv.lock`, and `CITATION.cff`, and roll the `CHANGELOG.md` Unreleased section |
 | `make minor` | Same as `make patch` for the minor part (resets the patch) |
 | `make major` | Same as `make patch` for the major part (resets minor and patch) |

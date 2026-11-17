@@ -1,4 +1,4 @@
-.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck check patch minor major clean paper paper-check paper-pdf paper-image preprint preprint-pdf
+.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck deadcode check patch minor major clean paper paper-check paper-pdf paper-image preprint preprint-pdf
 
 # Install Python dev dependencies, CLI/QC/log extras, and the editable Rust extension.
 setup:
@@ -39,8 +39,12 @@ fmt-check:
 typecheck:
 	uv run pyright
 
+# Run Python dead-code checks (unused symbols beyond what ruff/pyright catch).
+deadcode:
+	uv run vulture
+
 # Run the full local quality gate.
-check: lint fmt-check typecheck test test-rust
+check: lint fmt-check typecheck deadcode test test-rust
 	cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 
 # Increment the release version's patch part everywhere the release workflow looks.

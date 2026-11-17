@@ -184,6 +184,9 @@ jobs:
         run: uv sync --frozen ${{ env.SYNC_ARGS }}
       - name: Pyright
         run: uv run pyright
+      # Dead-code gate: same vulture pin and [tool.vulture] config as the pre-push hook.
+      - name: Vulture (dead code)
+        run: uv run vulture
 
   # Deliberately NOT sharded across a matrix. Measured on this repo: ~21s of every pytest
   # run is fixed overhead (interpreter start, imports, xdist workers, coverage init) against
