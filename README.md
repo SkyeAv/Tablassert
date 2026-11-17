@@ -19,20 +19,21 @@ configuration reference, and API docs.
 
 ## Statement of need
 
-Biomedical knowledge lives in spreadsheets: association tables, assay results, curated gene-disease
-lists. Getting those rows into an NCATS Translator knowledge graph means writing an ingest that maps
-columns to Biolink statements, resolves free text ("TP53", "lung cancer") to standard CURIEs, and
-records provenance, terms of use, and statistical annotations. Today that ingest is Python code
-maintained per source, and entity resolution usually means calling a hosted name-resolution service
-at build time.
+Biomedical knowledge graphs classically rely on bespoke ingest scripts for each source. When data
+sources lack standardization, such as the millions of tables published in biomedical literature,
+bespoke scripts impose three costs that limit scalability. First, mapping each table's rows,
+columns, and cells to biological assertions is idiosyncratic, making them hard to inspect, review,
+or reuse. Second, entity resolution may depend on hosted network services, making graph builds
+unreproducible. Third, and most importantly, because each source requires a new pipeline, most
+published tables are never ingested and remain neither interoperable nor reusable.
 
-Tablassert replaces the per-source code with a declarative YAML mapping plus an embedded, offline
-entity-resolution database built from RENCI BABEL exports, so a build is reproducible, auditable,
-and network-free. It is aimed at Translator ingest authors and knowledge-graph data engineers who
-hold tabular biomedical sources, and at bioinformatics groups that want a validated KGX output
-without writing a transform pipeline. The configuration model and the Biolink/KGX contracts it
-emits follow current [`NCATSTranslator/translator-ingests`](https://github.com/NCATSTranslator/translator-ingests)
-practice, and each build can emit the Resource Ingest Guide (RIG) metadata those submissions require.
+Tablassert supports knowledge-graph engineers and bioinformaticians working with tabular biomedical
+sources who need standards-conformant output. Declarative YAML recipes make data-to-statement
+mapping scalable, inspectable, and reusable. Batched resolution against an embedded identifier
+database removes runtime service dependencies. These recipes extend beyond journal supplemental
+tables to any relational source (trial registries, drug approval records, or a researcher's own
+tables). Each build can emit a standardized resource descriptor, like the Resource Ingest Guide
+metadata required for integration with Translator.
 
 ## Getting help
 
