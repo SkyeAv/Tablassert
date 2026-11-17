@@ -20,9 +20,16 @@ PAPER_BIB = REPO_ROOT / "paper" / "paper.bib"
 # Exact non-ASCII characters permitted in the paper, mapped to their source.
 ALLOWED_NON_ASCII = {"ê": "Gwênlyn Glusman, author name in CITATION.cff"}
 
-# JOSS guidance: "The paper should be between 750-1750 words" (body, excluding
-# references); the leading unheaded abstract paragraph is capped separately.
-BODY_WORD_LIMIT = 1750
+# The JOSS submission bot (openjournals/gh-action-repo-checks, checks.rb) is what
+# actually flags a paper on the review issue. It runs `cat paper.md | wc -w` over the
+# WHOLE file - YAML front matter, Markdown/LaTeX markup, and the References heading
+# included - then, for 2026+ submissions, marks >1800 words as a warning and >1999 as
+# an alarm. That raw count is what authors see, so the ceiling below mirrors it.
+# JOSS prose guidance still says "750-1750 words"; the 750 floor is kept on visible
+# prose, where it is meaningful, rather than on the raw token count.
+BOT_WORD_LIMIT = 1800
+BOT_ALARM_LIMIT = 1999
+BODY_WORD_MINIMUM = 750
 ABSTRACT_WORD_LIMIT = 250
 
 REQUIRED_SECTIONS = (
@@ -238,12 +245,22 @@ def test_abstract_within_budget() -> None:
     assert words <= ABSTRACT_WORD_LIMIT, f"abstract is {words} words (max {ABSTRACT_WORD_LIMIT})"
 
 
-def test_body_within_budget() -> None:
+def test_body_above_minimum() -> None:
     _, body = _split_front_matter(PAPER_MD.read_text(encoding="utf-8"))
     prose = _before_references(_strip_fences(body))
     words = _visible_words(prose)
-    assert words >= 750, f"body is {words} words (JOSS minimum 750)"
-    assert words <= BODY_WORD_LIMIT, f"body is {words} words (max {BODY_WORD_LIMIT})"
+    assert words >= BODY_WORD_MINIMUM, f"body is {words} visible words (JOSS minimum {BODY_WORD_MINIMUM})"
+
+
+def test_bot_word_count() -> None:
+    """Fail when the JOSS submission bot would flag paper.md for length.
+
+    Reproduces the bot's metric exactly: raw whitespace-split tokens over the whole
+    file. The alarm threshold is asserted first so the more severe breach is reported.
+    """
+    words = len(PAPER_MD.read_text(encoding="utf-8").split())
+    assert words <= BOT_ALARM_LIMIT, f"paper.md is {words} raw words; the JOSS bot alarms above {BOT_ALARM_LIMIT}"
+    assert words <= BOT_WORD_LIMIT, f"paper.md is {words} raw words; the JOSS bot warns above {BOT_WORD_LIMIT}"
 
 
 def test_ascii_only() -> None:

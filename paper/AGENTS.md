@@ -20,8 +20,12 @@ requirements, so the review focuses on the paper itself:
   documentation, or manuscript, with versions and how outputs were verified.
 - An **archive**: the tagged release gets a Zenodo DOI at acceptance; keep
   `CITATION.cff` and this paper's author list in sync.
-- The paper's body stays between 750 and 1750 words excluding references; the abstract
-  under 250. The `paper-check` gate enforces both locally.
+- Word budget: the JOSS submission bot counts `wc -w` over the WHOLE `paper.md` (YAML,
+  markup, and the References heading included) and warns above 1800 words for 2026+
+  submissions (alarm above 1999). `paper-check` mirrors that raw ceiling. It also keeps
+  the 750-word floor and the 250-word abstract cap on visible prose, since JOSS prose
+  guidance still says "750-1750 words". Cutting raw words means cutting prose or
+  compacting markup; both lower the bot's number.
 
 JOSS rules change; re-check the
  [paper format page](https://joss.readthedocs.io/en/latest/paper.html) before submission.
