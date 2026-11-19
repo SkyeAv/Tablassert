@@ -199,7 +199,7 @@ reportDuplicateImport = true
 # vulture also finds unused functions, methods, classes, attributes and unreachable code.
 # tests/ is scanned as a usage source (code only tests call is not dead), and the
 # whitelist marks names that are used dynamically and cannot be seen statically.
-paths = ["src", "tests", "scripts", "vulture_whitelist.py"]
+paths = ["src", "tests", "scripts"]
 # Pydantic validators are called by the framework, pytest fixtures by the runner;
 # neither shows up as a static reference.
 ignore_decorators = ["@field_validator", "@model_validator", "@pytest.fixture"]

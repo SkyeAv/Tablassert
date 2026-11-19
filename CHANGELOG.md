@@ -14,6 +14,10 @@ All notable changes to this project are documented in this file.
 
 - **The release round-trip test tolerates an existing Unreleased section.** `test_real_repo_files_round_trip` derives the expected `CHANGELOG.md` transformation from the real file, so it passes both when an `## Unreleased` section exists (its heading becomes the dated release and its body is preserved) and when the section is absent (a dated section is inserted above the last release); `scripts/bump_version.py` itself is unchanged. ([#284](https://github.com/SkyeAv/Tablassert/pull/284), [#282](https://github.com/SkyeAv/Tablassert/issues/282))
 
+### Changed
+
+- **The vulture allowlist lives in `scripts/` next to the other developer tooling.** `vulture_whitelist.py` moves to `scripts/vulture_whitelist.py` unchanged; the `[tool.vulture]` `paths` list drops the now-redundant root entry because `scripts` is already scanned, and the CI `python` path filter, the pre-commit hook comment, and the CONTRIBUTING dead-code section follow the new location. The gate is behaviorally identical: same vulture pin, same config, same allowlist content. ([#287](https://github.com/SkyeAv/Tablassert/pull/287))
+
 ## 22.3.3 - 2026-11-19
 
 ### Added

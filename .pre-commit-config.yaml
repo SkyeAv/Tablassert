@@ -103,7 +103,7 @@ repos:
         stages: [pre-push]
       # Whole-repo dead-code gate (unused functions/methods/classes/attributes that ruff
       # and pyright cannot see). Scope and suppressions come from [tool.vulture] in
-      # pyproject.toml + vulture_whitelist.py, so pass_filenames must stay false.
+      # pyproject.toml + scripts/vulture_whitelist.py, so pass_filenames must stay false.
       - id: vulture
         name: vulture
         entry: uv run vulture
