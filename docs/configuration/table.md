@@ -267,6 +267,23 @@ source:
   row_slice: [1, auto]
 ```
 
+#### Hugging Face Dataset Source
+
+Reads a Hugging Face Hub dataset split via `datasets.load_dataset` (requires the optional `[hf]`
+extra). Columns are renamed positionally to `column_1..` in schema order. Pin `revision` to a
+commit SHA or tag for reproducible builds; `url` defaults to `https://huggingface.co/datasets/<repo_id>`.
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `kind` | String | Yes | Source kind (`"hf"`). Required as the discriminated-union tag. |
+| `repo_id` | String | Yes | Hugging Face dataset repository ID (for example `org/dataset`). |
+| `config` | String | No | Optional dataset configuration or subset name. |
+| `split` | String | No | Dataset split to load (defaults to `"train"`). |
+| `revision` | String | No | Optional git revision or commit SHA to pin for reproducible builds. |
+| `url` | List[URL] | No | Provenance URLs; defaults to `https://huggingface.co/datasets/<repo_id>`. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `reindex` | List[Reindex] | No | Conditional row filtering |
 #### Reindexing (Conditional Filtering)
 
 Filter rows based on column values.
