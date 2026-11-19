@@ -76,7 +76,7 @@ def _shown(name: str, target: str) -> str:
     return f"`{name}` (coerced to `{target}`)" if target != name else f"`{name}`"
 
 
-def _section_source_label(source: Excel | Text | Parquet) -> str:
+def _section_source_label(source: Excel | Text | Parquet | IPC) -> str:
     """Render a section's source for a diagnostic message: the local path, plus the sheet for Excel.
 
     Args:
@@ -286,6 +286,12 @@ class Text(BaseSource):
 # `Text`/`Excel` it adds no format-specific fields beyond `BaseSource`.
 class Parquet(BaseSource):
     kind: Literal[Files.PARQUET] = Field(Files.PARQUET, description="Source kind; must be 'parquet'.")
+
+
+# Like parquet, Arrow IPC is self-describing (typed columns, real headers, no sheets or
+# delimiters), so it adds no format-specific fields beyond `BaseSource`.
+class IPC(BaseSource):
+    kind: Literal[Files.IPC] = Field(Files.IPC, description="Source kind; must be 'ipc'.")
 
 
 class Regex(TablaBase):
@@ -982,7 +988,7 @@ class Annotation(Encoding):
 class Section(TablaBase):
     """Pydantic section model and coercion target for a single table configuration."""
 
-    source: Excel | Text | Parquet = Field(..., description="Input source definition for reading tabular rows.")
+    source: Excel | Text | Parquet | IPC = Field(..., description="Input source definition for reading tabular rows.")
     statement: Statement = Field(..., description="Subject-object statement mapping for this section.")
     provenance: Provenance = Field(..., description="Provenance metadata applied to all produced edges.")
     annotations: list[Annotation] | None = Field(None, description="Optional extra encoded columns added to each row.")

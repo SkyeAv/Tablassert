@@ -72,6 +72,7 @@ from tablassert.fullmap import filter_and_rank, join_matches
 from tablassert.ingests import to_sections
 from tablassert.lib import Tcode
 from tablassert.models import (
+    IPC,
     Annotation,
     Encoding,
     Excel,
@@ -585,6 +586,7 @@ CONFIG_MODEL_BINDINGS: tuple[ModelTableBinding, ...] = (
     ModelTableBinding(Excel, TABLE_CONFIGURATION, ("Excel Source",)),
     ModelTableBinding(Text, TABLE_CONFIGURATION, ("Text Source (CSV/TSV)",)),
     ModelTableBinding(Parquet, TABLE_CONFIGURATION, ("Parquet Source",)),
+    ModelTableBinding(IPC, TABLE_CONFIGURATION, ("Arrow IPC Source",)),
     ModelTableBinding(Reindex, TABLE_CONFIGURATION, ("Reindexing (Conditional Filtering)",)),
     ModelTableBinding(Statement, TABLE_CONFIGURATION, ("Statement (Triple Definition)",)),
     ModelTableBinding(NodeEncoding, TABLE_CONFIGURATION, ("NodeEncoding",)),

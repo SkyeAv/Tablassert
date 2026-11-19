@@ -16,7 +16,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from tablassert.biolink import _build_str_enum, _category_name
-from tablassert.models import Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
+from tablassert.models import IPC, Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
 
 
 def test_manual_provenance_explicit_none_publications_short_circuits() -> None:
@@ -87,10 +87,25 @@ def test_parquet_source_parses_and_forbids_extras() -> None:
         Parquet.model_validate({"kind": "parquet", "local": "./data.parquet", "url": ["https://example.com/data.parquet"], "sheet": "Sheet1"})
 
 
-def test_section_accepts_all_three_source_kinds() -> None:
-    """``Section.source`` validates ``kind: parquet`` alongside the existing ``text``/``excel``.
+def test_ipc_source_parses_and_forbids_extras() -> None:
+    """The ``IPC`` source parses a minimal config and rejects format-specific fields.
 
-    The union is pydantic's smart union on the ``kind`` literal, so adding a third member must
+    Arrow IPC is self-describing like parquet, so it adds no fields beyond ``BaseSource``;
+    ``TablaBase``'s ``extra="forbid"`` must reject an ``Excel``-style ``sheet`` key instead of
+    silently accepting (and ignoring) it.
+    """
+    source: IPC = IPC.model_validate({"kind": "ipc", "local": "./data.arrow", "url": ["https://example.com/data.arrow"]})
+    assert source.kind == "ipc"
+    assert not hasattr(source, "sheet")
+    assert not hasattr(source, "delimiter")
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        IPC.model_validate({"kind": "ipc", "local": "./data.arrow", "url": ["https://example.com/data.arrow"], "sheet": "Sheet1"})
+
+
+def test_section_accepts_all_source_kinds() -> None:
+    """``Section.source`` validates ``kind: ipc`` alongside ``text``/``excel``/``parquet``.
+
+    The union is pydantic's smart union on the ``kind`` literal, so adding a new member must
     keep every existing kind parsing (no union ambiguity) and resolve each config to the model
     its ``kind`` names. This is the config-author-facing contract of the new source kind.
     """
@@ -98,7 +113,7 @@ def test_section_accepts_all_three_source_kinds() -> None:
         "statement": {"subject": {"method": "value", "encoding": "BRCA1"}, "object": {"method": "value", "encoding": "TP53"}},
         "provenance": {"repo": "PMC", "publication": "PMC0000000"},
     }
-    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet)]:
+    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet), ("ipc", IPC)]:
         payload: dict[str, Any] = {**base, "source": {"kind": kind, "local": f"./table.{kind}", "url": [f"https://example.com/table.{kind}"]}}
         section: Section = Section.model_validate(payload)
         assert section.source.kind == kind
@@ -106,7 +121,7 @@ def test_section_accepts_all_three_source_kinds() -> None:
 
 
 def test_section_source_label_per_kind() -> None:
-    """The diagnostic label appends the sheet only for Excel; text and parquet render the bare path.
+    """The diagnostic label appends the sheet only for Excel; text, parquet, and ipc render the bare path.
 
     ``_section_source_label`` feeds read-failure diagnostics, so a new kind must render without
     hitting the Excel-only ``source.sheet`` access (parquet has no ``sheet`` attribute at all).
@@ -115,5 +130,6 @@ def test_section_source_label_per_kind() -> None:
     # `local` is a Path, so a leading "./" normalizes away in the rendered label.
     assert _section_source_label(Text.model_validate({"kind": "text", "local": "./t.tsv", "url": urls})) == "`t.tsv`"
     assert _section_source_label(Parquet.model_validate({"kind": "parquet", "local": "./t.parquet", "url": urls})) == "`t.parquet`"
+    assert _section_source_label(IPC.model_validate({"kind": "ipc", "local": "./t.arrow", "url": urls})) == "`t.arrow`"
     excel: Excel = Excel.model_validate({"kind": "excel", "local": "./t.xlsx", "url": urls, "sheet": "S1"})
     assert _section_source_label(excel) == "`t.xlsx` (sheet `S1`)"
