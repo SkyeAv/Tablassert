@@ -5,7 +5,8 @@ gene-disease associations**: nodes and edges with standardized CURIEs, biolink c
 and statistical annotations, ready for NCATS Translator.
 
 The input files ship under `docs/examples/` and are validated against the live schema by the test suite;
-the configurations below reproduce them exactly.
+the configurations below reproduce them exactly. To scaffold a fresh project directory from scratch
+instead of copying files manually, run `tablassert init my-graph` (see [CLI Reference](cli.md#init)).
 
 **Time:** 5-10 minutes once the fullmap database is present. Obtaining it is a separate, larger
 step: `tablassert build-fullmap` downloads a multi-GB prebuilt archive when one is published for

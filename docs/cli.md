@@ -2,7 +2,7 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **five subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
+exposes **six subcommands**: `build-fullmap`, `build-kg`, `init`, `quick-map`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -12,6 +12,7 @@ for the live surface.
 | --- | --- |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
+| [`init`](#init) | Scaffold a new graph project directory with schema-valid configs |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model and the Translator registry |
@@ -239,6 +240,26 @@ Exits non-zero on any schema error. See [Table Configuration](configuration/tabl
 tablassert validate table-config.yaml --schema table
 tablassert validate graph.yaml --schema graph
 ```
+
+---
+
+## init
+
+Scaffold a new Tablassert project directory containing `graph.yaml` (with `DRAFT` RIG placeholders)
+and `tables/table.yaml` for the selected source `--kind` (with a placeholder `source.local` path).
+
+```bash
+tablassert init demo
+tablassert init demo --kind parquet
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `NAME` | Path | No | `.` | Target project directory to create or populate |
+| `--kind`, `-k` | `excel` \| `text` \| `parquet` \| `ipc` \| `ndjson` | No | `text` | Source format for the scaffolded table config |
+| `--force`, `-f` | Flag | No | `false` | Overwrite existing `graph.yaml` or `tables/table.yaml` files |
+
+Refuses to overwrite existing `graph.yaml` or `tables/table.yaml` unless `--force` is passed.
 
 ---
 
