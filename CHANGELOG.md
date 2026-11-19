@@ -16,7 +16,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- **The vulture allowlist lives in `scripts/` next to the other developer tooling.** `vulture_whitelist.py` moves to `scripts/vulture_whitelist.py` unchanged; the `[tool.vulture]` `paths` list drops the now-redundant root entry because `scripts` is already scanned, and the CI `python` path filter, the pre-commit hook comment, and the CONTRIBUTING dead-code section follow the new location. The gate is behaviorally identical: same vulture pin, same config, same allowlist content.
+- **The vulture allowlist lives in `scripts/` next to the other developer tooling.** `vulture_whitelist.py` moves to `scripts/vulture_whitelist.py` unchanged; the `[tool.vulture]` `paths` list drops the now-redundant root entry because `scripts` is already scanned, and the CI `python` path filter, the pre-commit hook comment, and the CONTRIBUTING dead-code section follow the new location. The gate is behaviorally identical: same vulture pin, same config, same allowlist content. ([#287](https://github.com/SkyeAv/Tablassert/pull/287))
 
 ## 22.3.3 - 2026-11-19
 
