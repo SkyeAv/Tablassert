@@ -986,6 +986,39 @@ def parquet(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def ipc(p: Path) -> pl.LazyFrame:
+    """Read an Arrow IPC (Feather v2 / `.arrow`) source as a LazyFrame with positional ``column_<n>`` names.
+
+    Args:
+        p: Path to the IPC file (file layout; stream layout is rejected).
+
+    Returns:
+        LazyFrame whose columns are renamed to ``column_1..`` in schema order.
+
+    Raises:
+        TablassertError: ``ipc-stream-unsupported`` when the file is not Arrow IPC file
+            layout (a stream-layout file lacks the leading ``ARROW1`` magic polars'
+            ``scan_ipc`` requires a footer for).
+
+    Notes:
+        IPC carries its own column names, but the config contract addresses columns
+        positionally (Excel-style ``A-ZZ`` encoding letters resolve to ``column_<n>``), so
+        the reader renames whatever names the file carries to ``column_1..`` -- the same
+        convention the ``parquet`` reader produces. File layout only: ``scan_ipc`` cannot
+        read stream layout (it raises an opaque ``InvalidFooter`` compute error), so the
+        reader checks the leading ``ARROW1`` magic and fails with a clear, coded message.
+    """
+    with p.open("rb") as f:
+        if f.read(6) != b"ARROW1":
+            raise TablassertError(
+                f"`ipc` source {p} is not Arrow IPC file layout (missing ARROW1 magic); stream layout is not supported -- convert it to file layout.",
+                code="ipc-stream-unsupported",
+            )
+    lf: pl.LazyFrame = pl.scan_ipc(source=p)
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1507,6 +1540,7 @@ class Tcode(Section):
             (csv, (self.source.local, self.source.delimiter)) if self.source.kind == Files.TEXT else None,  # pyright: ignore
             (excel, (self.source.local, self.source.sheet)) if self.source.kind == Files.EXCEL else None,  # pyright: ignore
             (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
+            (ipc, (self.source.local,)) if self.source.kind == Files.IPC else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,

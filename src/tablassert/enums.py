@@ -57,6 +57,7 @@ class Files(str, Enum):
     TEXT = "text"
     EXCEL = "excel"
     PARQUET = "parquet"
+    IPC = "ipc"
 
 
 class EncodingMethods(str, Enum):

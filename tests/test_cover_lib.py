@@ -15,9 +15,11 @@ from typing import Any
 
 import openpyxl
 import polars as pl
+import pytest
 
 import tablassert.lib as lib
 from tablassert.enums import Functions, Tokens
+from tablassert.errors import TablassertError
 from tablassert.ingests import from_yaml
 from tablassert.lib import Tcode
 from tablassert.runcache import prefix_digest
@@ -136,6 +138,68 @@ def test_parquet_reads_schema_and_renames_columns_positionally(tmp_path: Path) -
     assert df.columns == ["column_1", "column_2", "column_3"]
     assert df["column_1"].to_list() == ["brca1", "brca1"]
     assert df["column_3"].to_list() == [0.5, 0.01]
+
+
+def test_ipc_reads_schema_and_renames_columns_positionally(tmp_path: Path) -> None:
+    """``ipc`` scans lazily and maps the file's real names to positional ``column_<n>``.
+
+    Same contract as ``parquet``: the config addresses columns positionally (encoding
+    letters A-ZZ resolve to ``column_<n>``), so the reader renames whatever names the IPC
+    file carries to ``column_1..`` in schema order and stays lazy for ``Tcode`` composition.
+    """
+    ap: Path = tmp_path / "data.arrow"
+    pl.DataFrame({"gene_a": ["brca1", "brca1"], "gene_b": ["mapk1", "mapk1"], "p": [0.5, 0.01]}).write_ipc(ap)
+
+    lf: pl.LazyFrame = lib.ipc(ap)
+    assert isinstance(lf, pl.LazyFrame)
+    df: pl.DataFrame = lf.collect()
+    assert df.columns == ["column_1", "column_2", "column_3"]
+    assert df["column_1"].to_list() == ["brca1", "brca1"]
+    assert df["column_3"].to_list() == [0.5, 0.01]
+
+
+def test_ipc_rename_tracks_schema_order_not_name_order(tmp_path: Path) -> None:
+    """Positional renaming follows the schema's column order, whatever the names are.
+
+    A file whose names sort differently from their column positions (``zeta`` first,
+    ``alpha`` second) must still map positionally: ``column_1`` is the first schema column.
+    """
+    ap: Path = tmp_path / "order.arrow"
+    pl.DataFrame({"zeta": [1, 2], "alpha": ["x", "y"]}).write_ipc(ap)
+
+    df: pl.DataFrame = lib.ipc(ap).collect()
+    assert df.columns == ["column_1", "column_2"]
+    assert df["column_1"].to_list() == [1, 2]
+    assert df["column_2"].to_list() == ["x", "y"]
+
+
+def test_ipc_reads_empty_frame(tmp_path: Path) -> None:
+    """An empty IPC file still yields its (renamed) schema, so downstream ops see the columns."""
+    ap: Path = tmp_path / "empty.arrow"
+    pl.DataFrame({"gene_a": [], "p": []}).write_ipc(ap)
+
+    lf: pl.LazyFrame = lib.ipc(ap)
+    assert lf.collect_schema().names() == ["column_1", "column_2"]
+    assert lf.collect().shape == (0, 2)
+
+
+def test_ipc_rejects_stream_layout_with_clear_error(tmp_path: Path) -> None:
+    """Stream-layout IPC lacks the ARROW1 magic; the reader must fail coded, not opaque.
+
+    ``pl.scan_ipc`` alone raises an opaque ``InvalidFooter`` compute error at collect time;
+    the reader's magic check converts that into ``ipc-stream-unsupported`` naming the fix.
+    """
+    import pyarrow as pa
+
+    ap: Path = tmp_path / "stream.arrow"
+    table: pa.Table = pa.table({"gene_a": ["brca1"], "p": [0.5]})
+    sink: pa.BufferOutputStream = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    ap.write_bytes(sink.getvalue().to_pybytes())
+
+    with pytest.raises(TablassertError, match="ipc-stream-unsupported"):
+        lib.ipc(ap)
 
 
 def test_crop_slices_contiguous_range() -> None:

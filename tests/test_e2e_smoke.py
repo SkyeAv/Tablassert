@@ -237,6 +237,67 @@ def test_build_pipeline_over_parquet_source(tmp_path: Path, monkeypatch: pytest.
     assert "HGNC:6871" in edge_text
 
 
+def test_build_pipeline_over_ipc_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
+    """SMOKE: the same six-stage build reads a ``kind: ipc`` source end to end.
+
+    Mirrors the parquet smoke exactly except for the source kind: the declared ``kind``
+    must select the IPC reader, its positional ``column_1..`` convention must drive the
+    column encodings (the same ``A``/``B`` letters), and the rows must reach the real redb
+    and come back as resolved CURIEs in the KGX output.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+
+    # Two-row Arrow IPC source: first column = subject term, second column = object term.
+    data: Path = tmp_path / "data.arrow"
+    pl.DataFrame({"gene_a": ["brca1", "brca1"], "gene_b": ["mapk1", "mapk1"]}).write_ipc(data)
+
+    table: Path = tmp_path / "table.yaml"
+    table_config: dict[str, Any] = {
+        "template": {
+            "source": {"kind": "ipc", "local": str(data), "url": ["https://example.com/data.arrow"]},
+            "statement": {
+                "subject": {"method": "column", "encoding": "A"},
+                "predicate": "associated_with",
+                "object": {"method": "column", "encoding": "B"},
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        }
+    }
+    to_yaml(table, table_config)
+
+    graph: Path = tmp_path / "graph.yaml"
+    graph_config: dict[str, Any] = {
+        "name": "IPC_KG",
+        "version": "1.0.0",
+        "tables": [str(table)],
+        "fullmap": str(fullmap),
+        "rig": rig_factory(tmp_path, infores_id="infores:ipc-kg", source_info={"description": "ipc source smoke graph"}),
+    }
+    to_yaml(graph, graph_config)
+
+    build_pipeline(graph, PipelineProgress(total_stages=6))
+
+    nodes: Path = tmp_path / "IPC_KG_1.0.0.nodes.ndjson"
+    edges: Path = tmp_path / "IPC_KG_1.0.0.edges.ndjson"
+    assert nodes.is_file()
+    assert edges.is_file()
+
+    node_text: str = nodes.read_text()
+    edge_text: str = edges.read_text()
+    assert node_text.strip()
+    assert edge_text.strip()
+
+    # Only the real redb knows these CURIEs, so their presence proves the IPC rows flowed
+    # through load, encode, and resolve under the positional column contract.
+    assert "HGNC:1100" in node_text
+    assert "HGNC:6871" in node_text
+    assert "HGNC:1100" in edge_text
+    assert "HGNC:6871" in edge_text
+
+
 def test_validate_command_happy_path(tmp_path: Path) -> None:
     """SMOKE (ii): ``validate`` (cli.py wrapper) + ``validate_pipeline`` accept a valid table.
 

@@ -111,7 +111,7 @@ source:
   row_slice: [1, auto]  # Start at the second physical row, read to end
 ```
 
-> **Specify `kind` explicitly.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally); the file on disk is never inspected to infer its format. Because `kind` carries a default, a source whose `kind` is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating `kind` explicitly makes a mis-declared source fail fast.
+> **Specify `kind` explicitly.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally), `ipc` scans an Arrow IPC file (columns renamed positionally); the file on disk is never inspected to infer its format. Because `kind` carries a default, a source whose `kind` is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating `kind` explicitly makes a mis-declared source fail fast.
 
 #### Text Source (CSV/TSV)
 
@@ -164,6 +164,37 @@ source:
   local: ./data/mydata.parquet
   url:
     - https://example.com/data.parquet
+  row_slice: [1, auto]
+```
+
+#### Arrow IPC Source
+
+Reads an Arrow IPC (Feather v2 / `.arrow`) file. Like parquet, IPC is self-describing (typed
+columns, real headers, no sheets or delimiters), so the source adds no format-specific fields.
+Columns are addressed positionally: the reader renames the file's columns to `column_1`..`column_n`
+in schema order (the same convention the `parquet` reader produces), so `method: column`
+encodings keep using Excel-style letters (`A` is the first column, `B` the second, and so on)
+and the file's own header names are never referenced from configs. Column types are read as-is.
+Only IPC **file layout** is supported; a stream-layout file fails with a clear
+`ipc-stream-unsupported` error naming the conversion fix.
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `kind` | String | No | Source kind. Model default is `"ipc"`, but specify it explicitly in configs. |
+| `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
+| `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `reindex` | List[Reindex] | No | Conditional row filtering |
+
+**Example:**
+
+```yaml
+source:
+  kind: ipc
+  local: ./data/mydata.arrow
+  url:
+    - https://example.com/data.arrow
   row_slice: [1, auto]
 ```
 
