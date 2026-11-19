@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- **SQL (SQLite) is a sixth table source kind.** `kind: sql` reads a table or query result from a SQLite database via the stdlib `sqlite3` driver (zero new dependencies), with `local` carrying the database file and exactly one of `table` / `query` selecting the rows. `table` scans in `rowid` order and a `query` must carry its own `ORDER BY` (coded `sql-query-needs-order-by` otherwise), so row indices and `row:<N>` StudyResult ids stay reproducible across runs; columns rename positionally to `column_1..` per the reader contract. ([#285](https://github.com/SkyeAv/Tablassert/pull/285), [#263](https://github.com/SkyeAv/Tablassert/issues/263))
+
 ## 22.4.0 - 2026-11-19
 
 ### Added
