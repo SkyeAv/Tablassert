@@ -1019,6 +1019,37 @@ def ipc(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def ndjson(p: Path) -> pl.LazyFrame:
+    """Read an NDJSON (newline-delimited JSON) source as a LazyFrame with positional ``column_<n>`` names.
+
+    Args:
+        p: Path to the NDJSON file; one flat JSON object per line.
+
+    Returns:
+        LazyFrame whose columns are renamed to ``column_1..`` in schema order.
+
+    Raises:
+        TablassertError: ``ndjson-empty`` when the file has no records — NDJSON
+            is schemaless, so polars cannot infer columns from an empty input.
+
+    Notes:
+        NDJSON records carry their own key names, but the config contract addresses
+        columns positionally (Excel-style ``A-ZZ`` encoding letters resolve to
+        ``column_<n>``), so the reader renames whatever names the schema infers to
+        ``column_1..`` -- the same convention the ``parquet`` reader produces.
+        Polars infers the schema across the file and unions ragged keys (a record
+        missing a key scans as null in that column); columns follow first-seen
+        key order.
+    """
+    if p.stat().st_size == 0:
+        raise TablassertError(
+            f"`ndjson` source {p} has no records; NDJSON is schemaless and column names cannot be inferred from an empty file.", code="ndjson-empty"
+        )
+    lf: pl.LazyFrame = pl.scan_ndjson(source=p)
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1541,6 +1572,7 @@ class Tcode(Section):
             (excel, (self.source.local, self.source.sheet)) if self.source.kind == Files.EXCEL else None,  # pyright: ignore
             (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
             (ipc, (self.source.local,)) if self.source.kind == Files.IPC else None,  # pyright: ignore
+            (ndjson, (self.source.local,)) if self.source.kind == Files.NDJSON else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,

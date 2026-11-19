@@ -58,6 +58,7 @@ class Files(str, Enum):
     EXCEL = "excel"
     PARQUET = "parquet"
     IPC = "ipc"
+    NDJSON = "ndjson"
 
 
 class EncodingMethods(str, Enum):
