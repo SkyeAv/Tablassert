@@ -545,29 +545,31 @@ def validate_pipeline(table_configuration_file: Path, progress: PipelineProgress
     Raises:
         SectionValidationError: If any section fails Pydantic validation.
     """
-    from tablassert.ingests import from_yaml, to_sections
+    from tablassert.ingests import from_yaml_with_locations, to_sections_with_locations
     from tablassert.lib import Tcode
     from tablassert.utils import STORE, mkhash
 
     # Stage 1/3: load tables.
     progress.stage("Loading Tables")
-    r: object = from_yaml(table_configuration_file)
+    r, table_locs = from_yaml_with_locations(table_configuration_file)
 
     # Stage 2/3: extract sections.
     progress.stage("Extracting Sections")
-    sections: list[dict[str, Any]] = to_sections(r, table_configuration_file)  # pyright: ignore
+    sections, section_locs = to_sections_with_locations(r, table_configuration_file, table_locs)  # pyright: ignore
     n: int = len(sections)
 
     # Stage 3/3: validate section syntax.
     progress.stage("Validating Section Syntax")
     start, advance, _ = progress.section_loop(n, "Validate")
-    for s in sections:
+    for s, locs in zip(sections, section_locs, strict=True):
         h: str = mkhash(s)
         start(f"{Path(str(s['config'])).stem} · {h[:8]}")
         try:
             Tcode.model_validate({**s, "store": (STORE / f"{h}.parquet")})
         except pydantic.ValidationError as e:
-            raise SectionValidationError(table_configuration_file, h, flatten_pydantic_error(e)) from e
+            raise SectionValidationError(
+                table_configuration_file, h, flatten_pydantic_error(e, source_file=table_configuration_file, locations=locs)
+            ) from e
         advance()
 
     logger.info("Validated {n} sections from {config}", n=n, config=table_configuration_file.name)
@@ -588,37 +590,37 @@ def validate_graph_pipeline(configuration_file: Path, progress: PipelineProgress
         GraphValidationError: If the graph YAML fails Pydantic validation.
         SectionValidationError: If any referenced table section fails validation.
     """
-    from tablassert.ingests import from_yaml, to_sections
+    from tablassert.ingests import from_yaml_with_locations, to_sections_with_locations
     from tablassert.lib import Tcode
     from tablassert.models import Graph
     from tablassert.utils import STORE, mkhash
 
     # Stage 1/2: validate the graph config.
     progress.stage("Validating Graph")
-    r: object = from_yaml(configuration_file)
+    r, graph_locs = from_yaml_with_locations(configuration_file)
     try:
         g: Graph = Graph.model_validate(r)
     except pydantic.ValidationError as e:
-        raise GraphValidationError(configuration_file, flatten_pydantic_error(e)) from e
+        raise GraphValidationError(configuration_file, flatten_pydantic_error(e, source_file=configuration_file, locations=graph_locs)) from e
 
     # Stage 2/2: validate every referenced table's sections.
     progress.stage("Validating Tables")
     # Expand each referenced table into sections up front so the bar total is known.
-    table_sections: list[tuple[Path, dict[str, Any]]] = []
+    table_sections: list[tuple[Path, dict[str, Any], dict[tuple[str | int, ...], tuple[Path, int, int]]]] = []
     for table in g.tables:
-        raw_table: object = from_yaml(table)
-        sections: list[dict[str, Any]] = to_sections(raw_table, table)  # pyright: ignore
-        for section in sections:
-            table_sections.append((table, section))
+        raw_table, table_locs = from_yaml_with_locations(table)
+        sections, sec_locs = to_sections_with_locations(raw_table, table, table_locs)  # pyright: ignore
+        for section, locs in zip(sections, sec_locs, strict=True):
+            table_sections.append((table, section, locs))
     n: int = len(table_sections)
     start, advance, _ = progress.section_loop(n, "Validate")
-    for table, s in table_sections:
+    for table, s, locs in table_sections:
         h: str = mkhash(s)
         start(f"{Path(str(s['config'])).stem} · {h[:8]}")
         try:
             Tcode.model_validate({**s, "store": (STORE / f"{h}.parquet")})
         except pydantic.ValidationError as e:
-            raise SectionValidationError(table, h, flatten_pydantic_error(e)) from e
+            raise SectionValidationError(table, h, flatten_pydantic_error(e, source_file=table, locations=locs)) from e
         advance()
 
     logger.info("Validated graph {name}: {n} sections across {tables} tables", name=g.name, n=n, tables=len(g.tables))

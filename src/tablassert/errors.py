@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pydantic import ValidationError  # pyright: ignore[reportMissingImports]
 
 DOCS_URL: str = "https://tablassert.readthedocs.io/errors/"
+SKILL_URL: str = "https://github.com/SkyeAv/Tablassert/blob/main/SKILL.md#"
 
 _SECRET_ASSIGNMENT_RE: re.Pattern[str] = re.compile(
     r"""(?ix)
@@ -44,6 +45,7 @@ TablassertErrorCodes = Literal[
     "missing-extra",
     "graph-validation-failed",
     "section-validation-failed",
+    "yaml-parse-error",
     "babel-download-failed",
     "source-file-unreadable",
     "ipc-stream-unsupported",
@@ -276,33 +278,63 @@ class QcRuntimeMissingError(TablassertError):
         self.missing: tuple[str, ...] = tuple(missing)
 
 
-def flatten_pydantic_error(e: ValidationError) -> str:
-    """Flatten a pydantic ``ValidationError`` into a single-line, ``;``-joined summary.
+def _lookup_source_location(
+    loc: tuple[str | int, ...], locations: Mapping[tuple[str | int, ...], tuple[Path, int, int]] | None
+) -> tuple[Path, int, int] | None:
+    """Return the most specific ``(file, line, column)`` for a Pydantic error path."""
+    if not locations or not loc:
+        return None
+    for end in range(len(loc), 0, -1):
+        prefix: tuple[str | int, ...] = loc[:end]
+        if prefix in locations:
+            return locations[prefix]
+    return None
 
-    Each fragment is ``"<loc>: <msg> [<kind>]"``. ``<kind>`` is the stable
-    Tablassert error code when the error is coded (recovered from
-    ``ctx["error"].code``), else the pydantic ``type``. Coded messages already
-    embed their docs URL via ``_Coded.__str__``.
+
+def flatten_pydantic_error(
+    e: ValidationError, *, source_file: Path | None = None, locations: Mapping[tuple[str | int, ...], tuple[Path, int, int]] | None = None
+) -> str:
+    """Flatten a pydantic ``ValidationError`` into a ``;``-joined diagnostic summary.
+
+    Each fragment includes ``file:line:column`` when known (never fabricated when absent),
+    ``"<loc>: <msg> [<kind>]"``, and a ``SKILL.md#<anchor>`` fix link when available.
     """
     parts: list[str] = []
     for err in e.errors():
-        loc: str = ".".join(str(p) for p in err.get("loc", ())) or "<root>"
+        loc_tuple: tuple[str | int, ...] = tuple(p for p in err.get("loc", ()) if isinstance(p, (str, int)))
+        loc: str = ".".join(str(p) for p in loc_tuple) or "<root>"
         msg: str = str(err.get("msg", "")).replace("\n", " ").replace("|", "/").strip()
         ctx: object = err.get("ctx") or {}
         code: str | None = getattr(ctx.get("error"), "code", None) if isinstance(ctx, dict) else None
         kind: str = code if code is not None else str(err.get("type", ""))
-        parts.append(f"{loc}: {msg} [{kind}]")
+        coords: tuple[Path, int, int] | None = _lookup_source_location(loc_tuple, locations)
+        where: str = f"{coords[0]}:{coords[1]}:{coords[2]} " if coords is not None else (f"{source_file} " if source_file is not None else "")
+        fix_link: str = f" (fix: {SKILL_URL}{code})" if code is not None else ""
+        parts.append(f"{where}{loc}: {msg} [{kind}]{fix_link}")
     return "; ".join(parts)
+
+
+class YamlParseError(TablassertError):
+    """Coded error for malformed YAML, carrying ``file:line:column`` when available."""
+
+    def __init__(self, config: Path, line: int | None, column: int | None, problem: str) -> None:
+        where: str = f"{config}:{line}:{column}" if line is not None and column is not None else f"{config}"
+        super().__init__(f"YAML parse error at {where}: {problem}\nFix guide: {SKILL_URL}yaml-parse-error", code="yaml-parse-error")
 
 
 class GraphValidationError(TablassertError):
     def __init__(self, config: Path, detail: str) -> None:
-        super().__init__(f"Graph config validation failed: {config}\n{detail}", code="graph-validation-failed")
+        super().__init__(
+            f"Graph config validation failed: {config}\n{detail}\nFix guide: {SKILL_URL}graph-validation-failed", code="graph-validation-failed"
+        )
 
 
 class SectionValidationError(TablassertError):
     def __init__(self, config: Path, section_hash: str, detail: str) -> None:
-        super().__init__(f"Section validation failed: {config} (hash {section_hash[:8]})\n{detail}", code="section-validation-failed")
+        super().__init__(
+            f"Section validation failed: {config} (hash {section_hash[:8]})\n{detail}\nFix guide: {SKILL_URL}section-validation-failed",
+            code="section-validation-failed",
+        )
 
 
 class BabelDownloadError(TablassertError):
