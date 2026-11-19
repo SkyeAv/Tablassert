@@ -22,12 +22,12 @@ QC auditing and verbose logging are controlled at build time via the `build-kg -
 | `name` | String | Knowledge graph name (used in output filenames and the RIG) |
 | `version` | String | Knowledge graph version (used in output filenames) |
 | `tables` | List[Path] | Paths to table configuration YAML files |
-| `fullmap` | Path | Path to the fullmap redb file, or a base directory containing it |
 
 ### Optional Fields
 
 | Field | Type | Description |
 | ------- | ------ | ------------- |
+| `fullmap` | Path | Path to the fullmap redb file, or a base directory containing it. Required whenever any table section uses fullmap resolution; optional when every subject/object uses `identified` passthrough |
 | `rig` | RIGConfig | Resource Ingest Guide metadata emitted as `<name>_<version>.RIG.yaml` (see below). Omit it for draft/internal builds: KGX artifacts still build, a build-time warning notes the absent publication metadata, and no `.RIG.yaml` is emitted |
 | `infores` | String | RIG-less builds only: graph-level primary knowledge source infores recorded as node `provided_by` (must be a valid infores CURIE). Mutually exclusive with `rig:`; defaults to `infores:tablassert` |
 | `output_dir` | Path | RIG-less builds only: local output directory for the KGX artifacts (`rig.artifact_base_path` owns it otherwise). Mutually exclusive with `rig:`; defaults to the current directory |

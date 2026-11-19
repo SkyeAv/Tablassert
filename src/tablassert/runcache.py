@@ -297,8 +297,10 @@ OP_COST: dict[Callable, int] = {
     # was not itemized in the cost spec; it is costed here to keep the table exhaustive.)
     lib.resolve: 60,
     lib.resolve_batch: 60,
+    lib.passthrough_audit: 1,
     # QC: fuzzy match plus a SapBERT (sentence-transformers) cascade when enabled.
     lib.fullmap_audit: 30,
+    lib.passthrough_qc_audit: 1,
     # Edge/provenance: single lazy struct/column emissions.
     lib.edge_category: 1,
     lib.publications: 1,

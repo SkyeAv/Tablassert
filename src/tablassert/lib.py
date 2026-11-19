@@ -1720,32 +1720,28 @@ class Tcode(Section):
             (drop_low_number_of_cases, ()) if self.release and self.statement.predicate == "applied_to_treat" else None,
         ]
 
-    def _node_ops(self: Self, db: Path) -> list[Any]:
+    def _node_ops(self: Self, db: Path | None) -> list[Any]:
         """Collect the per-node encoding/resolve/QC ops shared across subject/object/qualifiers.
 
         Args:
-            db: Path to the fullmap redb used for entity resolution.
+            db: Path to the fullmap redb used for entity resolution, or ``None`` when
+                every node column in this section is passthrough (``identified``).
 
         Returns:
-            Raw op list: one ``node_prep`` block per node column, ``trim`` to drop
-            the spent raw ``column_<n>`` columns, the single shared
-            ``resolve_batch`` op, then per-column ``fullmap_audit`` ops when QC is
-            enabled.
+            Raw op list: ``node_prep`` / passthrough encoding per node column, ``trim`` to
+            drop spent raw ``column_<n>`` columns, ``resolve_batch`` ops for resolved
+            columns only, then per-column QC ops when QC is enabled.
         """
-        # Subject/object/qualifiers share one resolve_batch call instead of one per column.
-        # Enum-ranged qualifiers are excluded from resolution: their range is a closed
-        # Biolink vocabulary, so sending them through the fullmap would turn the required
-        # token `increased` into the CURIE `UMLS:C0205217`, which the slot rejects.
         qualifiers: list[Qualifier] = self.statement.qualifiers or []
         node_columns: list[tuple[NodeEncoding, str]] = [
             (self.statement.subject, "subject"),
             (self.statement.object, "object"),
             *[(x, x.qualifier) for x in qualifiers if x.resolved],
         ]
+        resolved_columns: list[tuple[NodeEncoding, str]] = [(x, col) for x, col in node_columns if x.identified is None]
+        passthrough_columns: list[tuple[NodeEncoding, str]] = [(x, col) for x, col in node_columns if x.identified is not None]
         literals: list[Qualifier] = [x for x in qualifiers if not x.resolved]
-        # A nullable qualifier keeps its edge when the cell is blank or unresolvable (the
-        # column stays null and the null-stripper omits the key); subject/object and
-        # strict qualifiers drop the row as before.
+
         specs: list[ResolveSpec] = [
             ResolveSpec(
                 col,
@@ -1757,13 +1753,14 @@ class Tcode(Section):
                 x.nullable if isinstance(x, Qualifier) else False,
                 x.taxon_from,
             )
-            for x, col in node_columns
+            for x, col in resolved_columns
         ]
-        # Per-row taxon scoping (ResolveSpec.taxon_from): a scoped column reads the
-        # taxon metadata its source column's resolution emits, so sources must resolve
-        # first. Layer the specs by dependency (config validation has already rejected
-        # cycles and unknown targets); with no taxon_from anywhere this is one batch
-        # and the op list is exactly what it always was.
+        if specs and db is None:
+            cols_list: str = ", ".join(s.col for s in specs)
+            raise TablassertError(
+                f"fullmap is required to resolve node column(s): {cols_list}. Set `fullmap` on the graph or use `identified` passthrough.",
+                code="fullmap-required",
+            )
         spec_cols: set[str] = {spec.col for spec in specs}
         batches: list[list[ResolveSpec]] = []
         placed: set[str] = set()
@@ -1781,21 +1778,22 @@ class Tcode(Section):
             placed.update(s.col for s in ready)
             pending = [s for s in pending if s.col not in placed]
         resolve_ops: list[Any] = [(resolve_batch, (batch, db, self.log, self.store.stem, self.config.name, True, "_two")) for batch in batches]
-        return [
-            [self.node_prep(x, col) for x, col in node_columns],
-            # Encode only: no pre-resolution snapshot and no NLP normalization, both of
-            # which exist to feed entity resolution these columns never undergo. Each enum-
-            # ranged column ends with a vocabulary audit: nothing else validates its cell
-            # values against the closed Biolink range before KGX emission.
-            [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
-            # Raw ``column_<n>`` columns are dead weight once the encodings above have
-            # copied them into named slots; trim before resolution so the frame that
-            # resolve_batch materializes and joins stays narrow.
-            (trim, ()),
-            *resolve_ops,
-            # QC audits only the strict columns: a nullable qualifier's nulls are expected
-            # (blank cell / no match), not resolution errors for the audit to delete.
-            [
+
+        passthrough_ops: list[list[Any]] = []
+        for x, col in passthrough_columns:
+            assert x.identified is not None
+            passthrough_ops.append(
+                [
+                    *self.encoding(x, col, table_literal=True),
+                    *self.encoding(x.identified.name, f"{col}_name"),
+                    *self.encoding(x.identified.category, f"{col}_category"),
+                    (passthrough_audit, (col,)),
+                ]
+            )
+
+        qc_ops: list[Any] | None = None
+        if self.qc:
+            qc_ops = [
                 (
                     fullmap_audit,
                     (
@@ -1820,11 +1818,17 @@ class Tcode(Section):
                         )
                     ),
                 )
-                for x, col in node_columns
+                for x, col in resolved_columns
                 if not (isinstance(x, Qualifier) and x.nullable)
-            ]
-            if self.qc
-            else None,
+            ] + [(passthrough_qc_audit, (col, self.store.stem, self.config.name, self.log)) for _, col in passthrough_columns]
+
+        return [
+            [self.node_prep(x, col) for x, col in resolved_columns],
+            passthrough_ops,
+            [[*self.encoding(x, x.qualifier), (qualifier_vocabulary_audit, (str(x.qualifier), sorted(x.vocabulary or ())))] for x in literals],
+            (trim, ()),
+            *resolve_ops,
+            qc_ops,
         ]
 
     def _provenance_ops(self: Self) -> list[Any]:
@@ -1913,7 +1917,16 @@ class Tcode(Section):
             (to_store, (self.store, self.config.name)),
         ]
 
-    def collect(self: Self, db: Path) -> list[tuple[Callable, tuple[Any]]] | Path:
+    def requires_fullmap(self: Self) -> bool:
+        """Return whether any node column in this section requires fullmap entity resolution."""
+        qualifiers: list[Qualifier] = self.statement.qualifiers or []
+        return (
+            self.statement.subject.identified is None
+            or self.statement.object.identified is None
+            or any(q.resolved and q.identified is None for q in qualifiers)
+        )
+
+    def collect(self: Self, db: Path | None) -> list[tuple[Callable, tuple[Any]]] | Path:
         """Build the ordered operation list that drives section transformation.
 
         Args:
@@ -1931,6 +1944,51 @@ class Tcode(Section):
         # Returns a list of: (function, (arguments)).
         tcode: list[Any] = [*self._source_ops(), *self._node_ops(db), *self._provenance_ops()]
         return self.clean(tcode)
+
+
+def passthrough_audit(lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    """Validate pre-identified CURIE, name, and category columns without fullmap lookup."""
+    from tablassert.biolink import Categories
+    from tablassert.rig import curie_prefix
+
+    name_col: str = f"{col}_name"
+    cat_col: str = f"{col}_category"
+    filtered: pl.LazyFrame = lf.filter(
+        pl.col(col).is_not_null()
+        & (pl.col(col).cast(pl.String).str.strip_chars() != "")
+        & pl.col(name_col).is_not_null()
+        & (pl.col(name_col).cast(pl.String).str.strip_chars() != "")
+        & pl.col(cat_col).is_not_null()
+        & (pl.col(cat_col).cast(pl.String).str.strip_chars() != "")
+    )
+    distinct_pairs: pl.DataFrame = filtered.select(col, cat_col).unique().collect()
+    for val in distinct_pairs.get_column(col).to_list():
+        text: str = str(val).strip()
+        if curie_prefix(text) is None:
+            raise TablassertError(
+                f"Passthrough `{col}` value {val!r} is not a valid CURIE (expected `PREFIX:LOCAL_ID`).", code="identified-bad-curie"
+            )
+    for cat_val in distinct_pairs.get_column(cat_col).to_list():
+        raw: str = str(cat_val).strip().removeprefix("biolink:")
+        try:
+            Categories(raw)
+        except ValueError as e:
+            raise TablassertError(f"Passthrough `{col}` category {cat_val!r} is not a valid Biolink category.", code="identified-bad-category") from e
+    return filtered
+
+
+def passthrough_qc_audit(lf: pl.LazyFrame, col: str, section_hash: str, config_file: str, log: bool = True) -> pl.LazyFrame:
+    """Record passthrough status in QC logs for pre-identified columns."""
+    if log:
+        from tablassert.log import cat
+
+        cat("QC").info(
+            "QC passthrough ({section_hash} {config_file}): column {col!r} skipped fullmap resolution (pre-identified CURIE)",
+            section_hash=section_hash,
+            config_file=config_file,
+            col=col,
+        )
+    return lf
 
 
 PHASE_OF: dict[Callable, str] = {
@@ -1951,7 +2009,9 @@ PHASE_OF: dict[Callable, str] = {
     level_two: "resolve",
     resolve: "resolve",
     resolve_batch: "resolve",
+    passthrough_audit: "resolve",
     fullmap_audit: "qc",
+    passthrough_qc_audit: "qc",
     column: "encode",
     qualifier_vocabulary_audit: "encode",
     edge_category: "edge",
@@ -2370,8 +2430,8 @@ def _collect_subframes(
         # Phase: normalize. Only subject and object become nodes; qualifier columns stay as edge attributes.
         if on_phase is not None:
             on_phase("normalize")
-        originals: list[str] = [c.removesuffix("_pre_resolution") for c in lf.collect_schema().names() if c.endswith("_pre_resolution")]
-        node_cols: list[str] = [c for c in originals if c in ("subject", "object")]
+        schema_names: list[str] = lf.collect_schema().names()
+        node_cols: list[str] = [c for c in ("subject", "object") if f"{c}_pre_resolution" in schema_names or f"{c}_name" in schema_names]
         for col in node_cols:
             partial, lf = normalize(lf, col, infores_id=infores_id)
             subnodes.append(partial)

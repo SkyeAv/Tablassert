@@ -407,6 +407,7 @@ Defines how to extract and resolve entities.
 | `avoid` | List[String] | No | Excluded Biolink categories (must be valid `Categories` enum values). Setting `avoid` makes the column an allow-list by complement: categories the `Categories` enum cannot name (fullmap-emitted Biolink mixins; see `biolink.CATEGORY_OVERRIDES`) are dropped as well, so the guard has no silent hole |
 | `exclude_prefixes` | List[String] | No | CURIE namespace prefixes excluded during entity resolution: the prefix is the text before the first `:` of a resolved CURIE, and every candidate whose prefix is listed is dropped. Matching is exact and case-sensitive (`OMIM` drops `OMIM:100100` but not `OMIMPS:100` or `omim:100100`). Optional; defaults to null (no prefix filtering). See [Resolution Filters](#resolution-filters). |
 | `exclude_regex` | List[String] | No | Case-sensitive regex patterns; any resolved CURIE matching one is dropped during entity resolution. Polars-compatible patterns only (no backreferences or lookarounds); an empty or whitespace-only pattern is rejected at config time (`regex-bad-pattern`) because an empty pattern would match every CURIE and silently drop all candidates. Optional; defaults to null (no regex filtering). See [Resolution Filters](#resolution-filters). |
+| `identified` | IdentifiedSpec | No | Passthrough mode for pre-identified CURIE columns (`{name: <Encoding>, category: <Encoding>}`); skips fullmap resolution and is mutually exclusive with resolution options (`taxon`, `taxon_from`, `prioritize`, `avoid`, `exclude_prefixes`, `exclude_regex`). |
 | `regex` | List[Regex] | No | Pattern replacements |
 | `fill` | String | No | Null-filling strategy: `"forward"`, `"backward"`, `"min"`, `"max"`, `"mean"`, `"zero"`, `"one"` |
 | `remove` | List[Int\|Float\|String] | No | Regex patterns to remove (replaced with empty string) |
@@ -639,6 +640,13 @@ object:
 Available functions: `copysign`, `pow`
 
 Use the `"values"` token to reference column values in transformations.
+
+### IdentifiedSpec
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `name` | Encoding | Yes | Encoding supplying the node's human-readable name. |
+| `category` | Encoding | Yes | Encoding supplying the node's Biolink category (e.g. `Gene` or `biolink:Gene`). |
 
 ### Qualifiers
 

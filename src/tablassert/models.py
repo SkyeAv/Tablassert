@@ -433,6 +433,25 @@ class Encoding(TablaBase):
     )
 
 
+class IdentifiedSpec(TablaBase):
+    """Passthrough metadata for a pre-identified CURIE column (skips fullmap resolution)."""
+
+    name: Encoding = Field(..., description="Encoding supplying the node's human-readable name.")
+    category: Encoding = Field(..., description="Encoding supplying the node's Biolink category (e.g. `Gene` or `biolink:Gene`).")
+
+    @model_validator(mode="after")
+    def validate_literal_category(self: Self) -> Self:
+        if self.category.method == EncodingMethods.VALUE:
+            raw: str = str(self.category.encoding).strip().removeprefix("biolink:")
+            try:
+                Categories(raw)
+            except ValueError as e:
+                raise TablassertValidationError(
+                    f"`identified.category` literal must be a valid Biolink category, got {self.category.encoding!r}.", code="identified-bad-category"
+                ) from e
+        return self
+
+
 class NodeEncoding(Encoding):
     taxon: PositiveInt | None = Field(
         9606,
@@ -486,6 +505,24 @@ class NodeEncoding(Encoding):
         description="Regex patterns; any resolved CURIE matching one is dropped during entity resolution (case-sensitive).",
         examples=[["^OMIM:\\d+$"]],
     )
+    identified: IdentifiedSpec | None = Field(
+        None, description="Passthrough mode for pre-identified CURIE columns; skips fullmap resolution when `name` and `category` are supplied."
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def identified_excludes_resolution_options(cls, data: Any) -> Any:
+        """Reject `identified` combined with fullmap resolution options."""
+        if not isinstance(data, dict) or data.get("identified") is None:
+            return data
+        resolution_keys: tuple[str, ...] = ("taxon", "taxon_from", "prioritize", "avoid", "exclude_prefixes", "exclude_regex")
+        present: list[str] = [k for k in resolution_keys if k in data and (k == "taxon" or data.get(k) is not None)]
+        if present:
+            raise TablassertValidationError(
+                f"`identified` passthrough is mutually exclusive with fullmap resolution options ({', '.join(present)}); remove them.",
+                code="identified-resolution-conflict",
+            )
+        return data
 
     @field_validator("exclude_regex", mode="after")
     @classmethod
@@ -609,6 +646,15 @@ class Qualifier(NodeEncoding):
         if self.nullable and self.method != EncodingMethods.COLUMN:
             raise TablassertValidationError(
                 "`nullable` only applies to `method: column` qualifiers; a literal qualifier can never be null.", code="qualifier-nullable-literal"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def reject_identified_on_qualifier(self: Self) -> Self:
+        """Reject `identified` on qualifiers; passthrough applies only to subject/object nodes."""
+        if self.identified is not None:
+            raise TablassertValidationError(
+                "`identified` only applies to `subject` and `object`, not qualifiers.", code="qualifier-identified-unsupported"
             )
         return self
 
@@ -1350,7 +1396,11 @@ class Graph(TablaBase):
     name: str = Field(..., description="Graph name written into output metadata.")
     version: str = Field(..., description="Graph version label.")
     tables: list[Path] = Field(..., description="Paths to table YAML files included in this graph.", examples=[["tables/tutorial-table.yaml"]])
-    fullmap: Path = Field(..., description="Base fullmap directory or fullmap redb file for entity resolution.", examples=[".fullmap"])
+    fullmap: Path | None = Field(
+        None,
+        description="Base fullmap directory or fullmap redb file for entity resolution. Optional when every subject/object uses `identified` passthrough.",
+        examples=[".fullmap"],
+    )
     rig: RIGConfig | None = Field(
         default=None,
         description="Optional Resource Ingest Guide metadata emitted as <name>_<version>.RIG.yaml. Omit it for draft/internal builds: KGX artifacts still build, with `infores` and `output_dir` supplying the fallbacks RIG metadata normally provides.",
