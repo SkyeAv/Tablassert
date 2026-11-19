@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **Profiled `build_graph_pipeline` and ported `p_value` scientific formatting to Rust (`rs.format_scientific_4e`).** Published the 50k-row release-build profile in `paper/benchmarks/pipeline_profile/README.md`, moved `lib.format_numeric()`'s per-row `"{:.4e}"` loop into `rust/src/lib.rs` with `rayon` parallelism (4.23x speedup on 100k floats: 22.80 ms to 5.39 ms median), and pinned byte-for-byte `{:.4e}` parity in `tests/test_format_numeric_golden.py`. ([#267](https://github.com/SkyeAv/Tablassert/issues/267))
 - **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
 
 ### Added
