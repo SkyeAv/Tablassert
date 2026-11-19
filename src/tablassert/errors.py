@@ -94,6 +94,7 @@ TablassertErrorCodes = Literal[
     "rig-bad-infores",
     "rig-bad-artifact-url",
     "rig-bad-access-location",
+    "template-bad-github-ref",
     "rig-terms-empty",
     "rig-legacy-keys",
     "rig-validation-failed",
