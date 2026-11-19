@@ -614,6 +614,7 @@ CONFIG_MODEL_BINDINGS: tuple[ModelTableBinding, ...] = (
 # `ModelTableBinding` above, or add its name here.
 UNBOUND_MODELS: frozenset[str] = frozenset(
     {
+        "ComposeStep",
         "TablaBase",
         "BaseSource",
         "Encoding",

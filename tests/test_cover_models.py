@@ -136,6 +136,7 @@ def test_section_accepts_all_source_kinds() -> None:
             source["table"] = "t"  # `sql` requires exactly one of table/query.
         payload: dict[str, Any] = {**base, "source": source}
         section: Section = Section.model_validate(payload)
+        assert section.source is not None
         assert section.source.kind == kind
         assert type(section.source) is model
 

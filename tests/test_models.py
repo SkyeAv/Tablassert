@@ -38,6 +38,7 @@ def test_section_from_minimal_yaml(fixtures_path: Path) -> None:
     """valid minimal text section."""
     data: Any = from_yaml(fixtures_path / "minimal_section.yaml")
     section: Section = Section(**data)  # pyright: ignore
+    assert section.source is not None
     assert section.source.kind == "text"
     assert section.statement.subject.encoding == "BRCA1"
     assert section.statement.object.encoding == "TP53"
