@@ -16,6 +16,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **CI runs only when a release is cut or on manual dispatch.** `.github/workflows/ci.yml` no longer triggers on pull requests; it runs on a push to main that changes `project.version` in `pyproject.toml` (the `chore(release):` commit, detected by the same `detect-pyproject-version-change` action the tag and PyPI workflows use) or via `workflow_dispatch`. The PR-only `changes` path filter, the push-back `autofix` job, the `python-smoke` subset, and the CI `changelog` job are removed; formatting is now a check-only `format` job, and the changelog requirement stays enforced by the pre-push hook. Run `make check` locally before opening a pull request.
 - **The vulture allowlist lives in `scripts/` next to the other developer tooling.** `vulture_whitelist.py` moves to `scripts/vulture_whitelist.py` unchanged; the `[tool.vulture]` `paths` list drops the now-redundant root entry because `scripts` is already scanned, and the CI `python` path filter, the pre-commit hook comment, and the CONTRIBUTING dead-code section follow the new location. The gate is behaviorally identical: same vulture pin, same config, same allowlist content. ([#287](https://github.com/SkyeAv/Tablassert/pull/287))
 
 ## 22.3.3 - 2026-11-19

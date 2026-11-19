@@ -71,9 +71,9 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make preprint-pdf` | Compile the preprint LaTeX to PDF with two XeLaTeX passes |
 | `make clean` | Local build/test/doc artifacts |
 
-The three bump targets run `scripts/bump_version.py`, which updates every file a release touches and leaves the changelog prose to you: an existing `## Unreleased` section becomes the dated `## X.Y.Z - YYYY-MM-DD` heading (body kept), and with no Unreleased section an empty dated section opens above the last release. Review the diff, write the release notes, and commit as `chore(release): X.Y.Z`; that commit on main is what triggers the tag and PyPI publish workflows. The `tablassert-rs` crate in `rust/Cargo.toml` is versioned independently and stays untouched.
+The three bump targets run `scripts/bump_version.py`, which updates every file a release touches and leaves the changelog prose to you: an existing `## Unreleased` section becomes the dated `## X.Y.Z - YYYY-MM-DD` heading (body kept), and with no Unreleased section an empty dated section opens above the last release. Review the diff, write the release notes, and commit as `chore(release): X.Y.Z`; that commit on main is what triggers the CI, tag, and PyPI publish workflows. CI (`.github/workflows/ci.yml`) runs only on such a release commit or on manual dispatch (`gh workflow run ci.yml --ref main`), not on pull requests, so run `make check` before opening one. The `tablassert-rs` crate in `rust/Cargo.toml` is versioned independently and stays untouched.
 
-Changelog entries accompany the changes they describe: every pull request adds at least one bullet under the `## Unreleased` heading of `CHANGELOG.md`. The CI `changelog` job enforces this on every pull request, forks included, and the pre-push hook mirrors it locally; release rolls (`chore(release):`) and dependency bumps (`chore(deps):`) are exempt, recognized by their title or commit subject prefix, and documentation-only pull requests (every changed path is markdown or under `docs/`) are exempt via `--exempt-docs-only`. For an instant local check without pushing, run `uv run python scripts/check_changelog.py --base origin/main`.
+Changelog entries accompany the changes they describe: every pull request adds at least one bullet under the `## Unreleased` heading of `CHANGELOG.md`. The pre-push hook enforces this locally; release rolls (`chore(release):`) and dependency bumps (`chore(deps):`) are exempt, recognized by their title or commit subject prefix, and documentation-only pull requests (every changed path is markdown or under `docs/`) are exempt via `--exempt-docs-only`. For an instant local check without pushing, run `uv run python scripts/check_changelog.py --base origin/main`.
 
 ## Project layout
 
@@ -122,7 +122,7 @@ What the gates cover:
 - **Rust tests.** `cargo test --manifest-path rust/Cargo.toml` runs the extension's Rust unit tests.
 - **Rust style and lints.** `cargo fmt --check` enforces formatting; clippy runs all targets with warnings denied.
 - **Dead code.** `uv run vulture` finds unused Python functions, methods, classes, and attributes that ruff and pyright cannot see; its scope and suppressions live in `[tool.vulture]` and `scripts/vulture_whitelist.py` (names used dynamically, like config-vocabulary enum members and pydantic fields). `uv run deptry .` finds unused declared dependencies and imports that only work through a transitive dependency; its ignores live in `[tool.deptry]`. On the Rust side, clippy already denies `dead_code`, and cargo-machete (CI `rust` job and pre-push hook, no local install required) rejects unused crate dependencies.
-- **Changelog.** `scripts/check_changelog.py` (CI `changelog` job and the pre-push hook) requires every pull request to add a bullet under `## Unreleased` in `CHANGELOG.md` relative to its merge base; release-bump and dependency-bump pull requests are exempt by title prefix.
+- **Changelog.** `scripts/check_changelog.py` (pre-push hook) requires every pull request to add a bullet under `## Unreleased` in `CHANGELOG.md` relative to its merge base; release-bump and dependency-bump pull requests are exempt by title prefix.
 - **Security.** `.github/workflows/security.yml` is not path-gated: gitleaks scans every PR's commits for leaked secrets, `pip-audit --strict` audits the locked Python environment, and cargo-audit audits `rust/Cargo.lock` against the RustSec database, all on a weekly schedule for main as well. The gitleaks pre-commit hook additionally stops secrets at the commit stage, before they enter history.
 
 ## Pre-commit hooks
@@ -153,7 +153,7 @@ On every **push**, the whole-repo gates:
 
 The ruff hooks cover the **whole tree**, matching CI's `ruff check .`. They used to be scoped to `src/` and `tests/`, which meant `examples/` could only ever fail in CI.
 
-The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI already runs them on every pull request (the Python suite as a single job, deliberately not sharded across a matrix). Use `make check` when you want everything locally.
+The full pytest suite and `cargo test` are deliberately in neither stage: they rebuild the Rust extension, which is too slow and too stateful for a commit/push hook, and CI runs them when a release is cut (the Python suite as a single job, deliberately not sharded across a matrix). Use `make check` when you want everything locally.
 
 ## Running subsets
 
