@@ -60,6 +60,43 @@ def test_new_bullets_rejects_non_substantive_additions() -> None:
     assert not check_module.is_bullet("- ")
 
 
+def test_evaluate_docs_only_exemption() -> None:
+    """The docs-only exemption fires only when enabled, and only for all-documentation diffs.
+
+    A docs change is its own summary, so it needs no changelog bullet; but a mixed
+    docs-plus-code diff must still add one, and an empty changed-file list (no
+    commits) must never exempt anything.
+    """
+    base = "# Changelog\n\n## 1.0.0 - 2026-01-01\n\n- Old release.\n"
+    code, message = check_module.evaluate(base, base, None, "docs: readme", (), changed_files=["README.md"], exempt_docs_only=True)
+    assert code == 0
+    assert "docs-only" in message
+    code, _ = check_module.evaluate(base, base, None, "docs: readme", (), changed_files=["README.md"], exempt_docs_only=False)
+    assert code == 1, "the flag must gate the exemption, not exempt unconditionally"
+    code, _ = check_module.evaluate(base, base, None, "docs: readme", (), changed_files=["README.md", "src/new.py"], exempt_docs_only=True)
+    assert code == 1, "a mixed docs-plus-code diff still needs an entry"
+    code, _ = check_module.evaluate(base, base, None, "docs: readme", (), changed_files=[], exempt_docs_only=True)
+    assert code == 1, "an empty diff never exempts"
+
+
+def test_is_docs_path_scope() -> None:
+    """Documentation means content files: markdown anywhere, the docs tree, docs index/config.
+
+    Tooling and code must stay outside the exemption so a stray source file forces
+    a changelog entry, matching the content-only notion of the CI path filters.
+    """
+    assert check_module.is_docs_path("README.md")
+    assert check_module.is_docs_path("docs/configuration/table.md")
+    assert check_module.is_docs_path("paper/notes.md")
+    assert check_module.is_docs_path("mkdocs.yml")
+    assert check_module.is_docs_path("llms.txt")
+    assert not check_module.is_docs_path("src/tablassert/cli.py")
+    assert not check_module.is_docs_path("pyproject.toml")
+    assert not check_module.is_docs_path(".markdownlint-cli2.jsonc")
+    assert not check_module.is_docs_path("rust/src/lib.rs")
+    assert not check_module.is_docs_path("docs.md.bak")
+
+
 def test_evaluate_verdicts_and_messages() -> None:
     """Each outcome is distinct: pass names the entry, failures are actionable, exemptions explain themselves."""
     base = "# Changelog\n\n## 1.0.0 - 2026-01-01\n\n- Old release.\n"
@@ -219,3 +256,17 @@ def test_pr_title_exemption_end_to_end(repo: Path) -> None:
     result = run_check(repo, "--base", "main", "--pr-title", "chore(release): 1.0.1")
     assert result.returncode == 0
     assert "skipped" in result.stdout
+
+
+def test_docs_only_exemption_end_to_end(repo: Path) -> None:
+    """A PR touching only documentation skips the requirement; adding code un-exempts it."""
+    _branch(repo, "docs-only")
+    _commit(repo, "README.md", "# Scratch\n\nUpdated prose.\n", "docs: readme")
+    result = run_check(repo, "--base", "main", "--exempt-docs-only")
+    assert result.returncode == 0, result.stderr
+    assert "docs-only" in result.stdout
+    result = run_check(repo, "--base", "main")
+    assert result.returncode == 1, "without the flag a docs-only diff still fails, matching the CI default being opt-in"
+    _commit(repo, "src/new.py", "X = 1\n", "feat: widget")
+    result = run_check(repo, "--base", "main", "--exempt-docs-only")
+    assert result.returncode == 1, "docs plus code is not docs-only"

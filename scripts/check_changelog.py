@@ -17,7 +17,9 @@ What counts as a new entry:
 Exemptions: release-bump and dependency-bump pull requests are skipped when the
 PR title or the HEAD commit subject starts with ``chore(release):`` or
 ``chore(deps):`` (a release roll legitimately empties the Unreleased section;
-override with ``--exempt-prefix``).
+override with ``--exempt-prefix``). Documentation-only pull requests -- every changed
+path is markdown, under ``docs/``, or the docs index/config files -- are exempt too via
+``--exempt-docs-only``, since their summary is the change itself.
 
 Exit codes: 0 satisfied or explicitly skipped, 1 requirement violated, 2
 plumbing error (git failure or unresolvable base ref) so unknown states fail
@@ -26,19 +28,24 @@ loudly instead of passing.
 Usage:
     check_changelog.py [--base origin/main] [--repo PATH] [--file CHANGELOG.md]
                        [--pr-title TITLE] [--exempt-prefix PREFIX]...
-                       [--fetch-base]
+                       [--exempt-docs-only] [--fetch-base]
 """
 
 from __future__ import annotations
 
 import argparse
 import difflib
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 DEFAULT_BASE = "origin/main"
 DEFAULT_EXEMPT_PREFIXES = ("chore(release):", "chore(deps):")
+# Mirrors the documentation notion of the CI path filters: content files only
+# (markdown anywhere, the docs tree, the docs nav and index). Lint configs such as
+# .markdownlint-cli2.jsonc stay outside: they are tooling, not documentation.
+DOCS_PATH_RE = re.compile(r"(?:^|/)[^/]+\.md$|^docs/|^mkdocs\.yml$|^llms\.txt$")
 
 
 class ChangelogCheckError(Exception):
@@ -84,13 +91,38 @@ def new_bullets(base_text: str, head_text: str) -> list[str]:
     return [text for index, text in added_lines(base_text.split("\n"), head_lines) if start <= index < end and is_bullet(text)]
 
 
-def evaluate(base_text: str, head_text: str, pr_title: str | None, commit_subject: str, exempt_prefixes: tuple[str, ...]) -> tuple[int, str]:
-    """Pure check core: return (exit code, message) for the two changelog texts."""
+def is_docs_path(path: str) -> bool:
+    """Whether one changed path is documentation (markdown, docs tree, docs index/config)."""
+    return DOCS_PATH_RE.search(path) is not None
+
+
+def is_docs_only(changed: list[str]) -> bool:
+    """A docs-only change touches at least one path, and every path is documentation."""
+    return bool(changed) and all(is_docs_path(path) for path in changed)
+
+
+def evaluate(
+    base_text: str,
+    head_text: str,
+    pr_title: str | None,
+    commit_subject: str,
+    exempt_prefixes: tuple[str, ...],
+    changed_files: list[str] | None = None,
+    exempt_docs_only: bool = False,
+) -> tuple[int, str]:
+    """Pure check core: return (exit code, message) for the two changelog texts.
+
+    ``changed_files`` (paths the pull request touches) enables the docs-only
+    exemption when ``exempt_docs_only`` is set: a change whose every path is
+    documentation is its own summary, so it does not need a changelog bullet.
+    """
     for label, text in (("PR title", pr_title), ("HEAD commit subject", commit_subject)):
         if text:
             for prefix in exempt_prefixes:
                 if text.startswith(prefix):
                     return 0, f"changelog check: skipped - {label} starts with {prefix!r}"
+    if exempt_docs_only and is_docs_only(changed_files or []):
+        return 0, f"changelog check: skipped - docs-only pull request ({len(changed_files or [])} documentation path(s))"
     if unreleased_span(head_text.split("\n")) is None:
         return (
             1,
@@ -136,6 +168,11 @@ def merge_base(repo: Path, base: str) -> str:
     return result.stdout.strip()
 
 
+def changed_files(repo: Path, base_ref: str) -> list[str]:
+    """Paths the branch changes relative to the merge base (committed work only)."""
+    return [line for line in git_out(repo, ["diff", "--name-only", base_ref, "HEAD"]).split("\n") if line]
+
+
 def fetch_base(repo: Path, base: str) -> bool:
     """Fetch the branch behind a remote-tracking ``base`` ref; False when offline."""
     branch = base.removeprefix("origin/")
@@ -151,6 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--file", default="CHANGELOG.md", help="changelog path relative to the repo root")
     parser.add_argument("--pr-title", default=None, help="pull request title; also exempts on prefix match")
     parser.add_argument("--exempt-prefix", action="extend", default=[], help="commit/PR title prefixes to skip (repeatable)")
+    parser.add_argument("--exempt-docs-only", action="store_true", help="skip documentation-only pull requests (every changed path is docs)")
     parser.add_argument("--fetch-base", action="store_true", help="fetch the base branch first; skip loudly when it fails")
     return parser
 
@@ -164,14 +202,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"changelog check: skipped - could not fetch {args.base!r}; CI enforces this check on the pull request.", file=sys.stderr)
         return 0
     try:
-        base_text = file_at_commit(repo, merge_base(repo, args.base), args.file) or ""
+        base_ref = merge_base(repo, args.base)
+        base_text = file_at_commit(repo, base_ref, args.file) or ""
+        changed = changed_files(repo, base_ref)
         head_path = repo / args.file
         head_text = head_path.read_text(encoding="utf-8") if head_path.is_file() else ""
         commit_subject = git_out(repo, ["log", "-1", "--pretty=%s"])
     except ChangelogCheckError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    code, message = evaluate(base_text, head_text, args.pr_title, commit_subject, prefixes)
+    code, message = evaluate(
+        base_text, head_text, args.pr_title, commit_subject, prefixes, changed_files=changed, exempt_docs_only=args.exempt_docs_only
+    )
     print(message, file=sys.stderr if code else sys.stdout)
     return code
 
