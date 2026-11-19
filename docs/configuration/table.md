@@ -267,6 +267,21 @@ source:
   row_slice: [1, auto]
 ```
 
+#### Delta Lake Source
+
+Reads a local Delta Lake table directory via `pl.scan_delta` (requires the optional `[delta]` extra).
+Columns are renamed positionally to `column_1..` in schema order, matching the `parquet` reader
+contract. Set `version` to pin a specific Delta table version for reproducible builds.
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `kind` | String | Yes | Source kind (`"delta"`). Required as the discriminated-union tag. |
+| `local` | Path | Yes | Local path to the Delta table directory. |
+| `url` | List[URL] | Yes | One or more source URLs recorded as provenance. At least one URL is required; format-validated only. |
+| `version` | NonNegativeInt | No | Optional Delta table version to pin for reproducible builds. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `reindex` | List[Reindex] | No | Conditional row filtering |
 #### Reindexing (Conditional Filtering)
 
 Filter rows based on column values.

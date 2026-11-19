@@ -98,6 +98,9 @@ qc = [
 log = [
     "loguru>=0.7.3",
 ]
+delta = [
+    "deltalake>=0.25.0",
+]
 
 [dependency-groups]
 test = [
@@ -228,5 +231,5 @@ aria2 = "aria2c"
 # - aria2: cli.py resolves the bundled binary through import_module("aria2c"); the PyPI
 #   distribution "aria2" exposes import module "aria2c" (see the [aria2] extra comment).
 # - sentence-transformers: loaded through LazyModule("sentence_transformers") in qc.py.
-# - pyarrow/fastexcel: polars Excel/IPC engines (pl.read_excel engine="calamine" loads fastexcel).
-DEP002 = ["polars", "aria2", "sentence-transformers", "pyarrow", "fastexcel"]
+# - pyarrow/fastexcel/deltalake: polars Excel/IPC/Delta engines (pl.read_excel / pl.scan_delta).
+DEP002 = ["polars", "aria2", "sentence-transformers", "pyarrow", "fastexcel", "deltalake"]

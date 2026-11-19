@@ -4,20 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
-### Added
-
 ### Changed
 
-- **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
+- **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL | Delta, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
 
 ### Added
 
+- **Delta Lake is a seventh table source kind.** `kind: delta` scans a local Delta table via `pl.scan_delta` behind the opt-in `[delta]` extra (`deltalake`), supports optional `version` pinning for reproducible builds, and renames columns positionally to `column_1..` per the reader contract. ([#266](https://github.com/SkyeAv/Tablassert/issues/266))
 - **SQL (SQLite) is a sixth table source kind.** `kind: sql` reads a table or query result from a SQLite database via the stdlib `sqlite3` driver (zero new dependencies), with `local` carrying the database file and exactly one of `table` / `query` selecting the rows. `table` scans in `rowid` order and a `query` must carry its own `ORDER BY` (coded `sql-query-needs-order-by` otherwise), so row indices and `row:<N>` StudyResult ids stay reproducible across runs; columns rename positionally to `column_1..` per the reader contract. ([#285](https://github.com/SkyeAv/Tablassert/pull/285), [#263](https://github.com/SkyeAv/Tablassert/issues/263))
 
 ## 22.4.0 - 2026-11-19
 
 ### Added
-
 - **NDJSON (JSONL) is a fifth table source kind.** `kind: ndjson` scans newline-delimited JSON lazily with `pl.scan_ndjson` and renames its columns positionally to `column_1..` in first-seen key order, matching the `parquet` reader contract so `method: column` encodings keep using Excel-style letters. Ragged records scan missing keys as nulls instead of dropping rows; an empty file fails fast with a coded `ndjson-empty` error instead of polars' opaque `Cannot infer NDJSON types` compute error. ([#283](https://github.com/SkyeAv/Tablassert/pull/283), [#262](https://github.com/SkyeAv/Tablassert/issues/262))
 - **Every pull request must carry a new changelog entry.** A stdlib-only `scripts/check_changelog.py` requires at least one new bullet under the `## Unreleased` heading of `CHANGELOG.md` relative to the pull request's merge base, failing with remediation guidance when whitespace, subheadings, or released-history edits are the only additions; a CI job runs it on every pull request including forks, release-bump and dependency-bump pull requests are exempt by their `chore(release):` / `chore(deps):` title or commit subject, documentation-only pull requests (every changed path is markdown or under `docs/`) are exempt via `--exempt-docs-only`, and a pre-push hook mirrors the same check locally. ([#284](https://github.com/SkyeAv/Tablassert/pull/284), [#282](https://github.com/SkyeAv/Tablassert/issues/282))
 - **Arrow IPC (Feather v2) is a fourth table source kind.** `kind: ipc` scans a `.arrow` file lazily with `pl.scan_ipc` and renames its columns positionally to `column_1..` in schema order, matching the `parquet` reader contract so `method: column` encodings keep using Excel-style letters. Only IPC file layout is supported; a stream-layout file fails fast with a coded `ipc-stream-unsupported` error naming the conversion fix instead of polars' opaque `InvalidFooter` compute error. ([#281](https://github.com/SkyeAv/Tablassert/pull/281), [#264](https://github.com/SkyeAv/Tablassert/issues/264))

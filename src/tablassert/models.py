@@ -322,7 +322,12 @@ class SQL(BaseSource):
         return self
 
 
-Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]
+class Delta(BaseSource):
+    kind: Literal[Files.DELTA] = Field(Files.DELTA, description="Source kind; must be 'delta'.")
+    version: NonNegativeInt | None = Field(None, description="Optional Delta table version to pin for reproducible builds.")
+
+
+Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL | Delta, Field(discriminator="kind")]
 
 
 class Regex(TablaBase):

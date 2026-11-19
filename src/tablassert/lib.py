@@ -1170,6 +1170,16 @@ def ndjson(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def delta(p: Path, version: int | None = None) -> pl.LazyFrame:
+    """Read a Delta Lake table as a LazyFrame with positional ``column_<n>`` names."""
+    from tablassert import extras
+
+    extras.require("delta", required_by="kind: delta")
+    lf: pl.LazyFrame = pl.scan_delta(str(p), version=version) if version is not None else pl.scan_delta(str(p))
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1696,6 +1706,7 @@ class Tcode(Section):
             (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
             if self.source.kind == Files.SQL
             else None,  # pyright: ignore
+            (delta, (self.source.local, self.source.version)) if self.source.kind == Files.DELTA else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
@@ -1938,6 +1949,7 @@ PHASE_OF: dict[Callable, str] = {
     csv: "load",
     excel: "load",
     parquet: "load",
+    delta: "load",
     idx: "load",
     crop: "filter",
     pick: "filter",
