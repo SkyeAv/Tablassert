@@ -81,6 +81,19 @@ repos:
         language: system
         files: ^(paper/|tests/test_paper\.py$)
         pass_filenames: false
+      # Changelog discipline: every push that will open a PR needs a new Unreleased
+      # entry, so the hook has no files filter and runs on every push. Same script and
+      # semantics as the CI `changelog` job (keep them in sync). --fetch-base refreshes
+      # origin/main first; when the fetch cannot run (offline) the script prints an
+      # explicit SKIPPED warning and exits 0 -- CI is the authoritative gate -- instead
+      # of blocking offline pushes.
+      - id: changelog-check
+        name: changelog-check
+        entry: uv run python scripts/check_changelog.py --base origin/main --fetch-base
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       - id: pyright
         name: pyright
         entry: uv run pyright
