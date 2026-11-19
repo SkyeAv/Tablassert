@@ -2268,7 +2268,7 @@ def _write_ndjson(
     edges_tmp: Path,
     name: str,
     version: str,
-    rig: RIGConfig,
+    rig: RIGConfig | None,
     section_sources: list[dict[str, object]] | None,
     on_phase: Callable[[str], None] | None = None,
     domain: str = "TABLASSERT",
@@ -2294,7 +2294,8 @@ def _write_ndjson(
         edges_tmp: Working ``.edges.ndjson.tmp`` output path.
         name: Graph name (output stems and RIG).
         version: Graph version string.
-        rig: Validated ``rig:`` graph-config section driving the RIG.
+        rig: Optional validated ``rig:`` graph-config section driving the RIG;
+            ``None`` (RIG-less build) skips the ``rig`` phase.
         section_sources: Per-section source descriptors for the RIG
             relevant-file cross-check.
         on_phase: Optional callback fired with ``"write-nodes"``,
@@ -2331,23 +2332,27 @@ def _write_ndjson(
     dedup_stream(nodes_tmp, is_edges=False)
 
     # Phase: rig. Summaries come from the FINAL deduplicated KGX files, and the
-    # assembled document is audited before anything is written.
-    if on_phase is not None:
-        on_phase("rig")
-    compile_rig(name, version, rig, section_sources, nodes_tmp.with_suffix(""), edges_tmp.with_suffix(""))
+    # assembled document is audited before anything is written. RIG-less builds
+    # skip this phase entirely (#274): only the KGX artifacts are emitted.
+    if rig is not None:
+        if on_phase is not None:
+            on_phase("rig")
+        compile_rig(name, version, rig, section_sources, nodes_tmp.with_suffix(""), edges_tmp.with_suffix(""))
 
 
 def compile_graph(
     subgraphs: list[Path],
     name: str,
     version: str,
-    rig: RIGConfig | dict[str, Any],
+    rig: RIGConfig | dict[str, Any] | None,
     section_sources: list[dict[str, object]] | None = None,
     on_phase: Callable[[str], None] | None = None,
     on_subgraph: Callable[[], None] | None = None,
     uuid_fields: list[str] | None = None,
     uuid_domain: str | None = None,
     uuid_on_collision: str = "error",
+    output_dir: Path | None = None,
+    infores: str | None = None,
 ) -> None:
     """Aggregate subgraph parquets for NDJSON KGX export using a lazy scan.
 
@@ -2359,6 +2364,8 @@ def compile_graph(
             ``.RIG.yaml`` (source metadata, artifact bases, provenance).
             A plain dict is validated as :class:`RIGConfig` first, so
             programmatic callers get the same config-time errors as YAML.
+            ``None`` builds KGX only: no ``.RIG.yaml`` is emitted and the
+            ``rig`` phase is skipped.
         section_sources: Per-section source descriptors (``local``, ``urls``)
             used to cross-check configured RIG relevant-file entries.
         on_phase: Optional callback fired with the current phase label
@@ -2375,11 +2382,16 @@ def compile_graph(
             provided -- and to ``TABLASSERT`` otherwise.
         uuid_on_collision: ``error`` aborts when two different edges derive one id;
             ``merge`` folds them into one edge instead (``Graph.uuid_on_collision``).
+        output_dir: RIG-less output directory for the KGX artifacts (``Graph.output_dir``);
+            ignored when ``rig`` is set.
+        infores: RIG-less graph-level infores recorded as ``provided_by``
+            (``Graph.infores_id``); ignored when ``rig`` is set.
 
     Returns:
-        ``None``; writes ``<name>_<version>.nodes.ndjson``,
-        ``<name>_<version>.edges.ndjson``, and ``<name>_<version>.RIG.yaml``
-        into ``rig.artifact_base_path`` (created when missing).
+        ``None``; writes ``<name>_<version>.nodes.ndjson`` and
+        ``<name>_<version>.edges.ndjson`` into the output directory
+        (``rig.artifact_base_path``, else ``output_dir``, else the current
+        directory), plus ``<name>_<version>.RIG.yaml`` when ``rig`` is set.
 
     Raises:
         TablassertError: With code ``rig-validation-failed`` when the
@@ -2388,8 +2400,8 @@ def compile_graph(
             different edges derive one id under the declared ``uuid_fields``
             and ``uuid_on_collision`` is ``error``.
     """
-    rig_cfg: RIGConfig = rig if isinstance(rig, RIGConfig) else RIGConfig.model_validate(rig)
-    out_dir: Path = Path(rig_cfg.artifact_base_path)
+    rig_cfg: RIGConfig | None = None if rig is None else (rig if isinstance(rig, RIGConfig) else RIGConfig.model_validate(rig))
+    out_dir: Path = Path(rig_cfg.artifact_base_path) if rig_cfg is not None else (output_dir or Path("."))
     out_dir.mkdir(parents=True, exist_ok=True)
     p: Path = out_dir / f"{name}_{version}.tmp"
 
@@ -2401,11 +2413,12 @@ def compile_graph(
     if n.exists():
         n.unlink()
 
-    domain: str = uuid_domain or (rig_cfg.source_info.infores_id if uuid_fields else "TABLASSERT")
+    graph_infores: str = rig_cfg.source_info.infores_id if rig_cfg is not None else (infores or "infores:tablassert")
+    domain: str = uuid_domain or (graph_infores if uuid_fields else "TABLASSERT")
 
     subnodes: list[pl.LazyFrame]
     subedges: list[pl.LazyFrame]
-    subnodes, subedges = _collect_subframes(subgraphs, on_phase, on_subgraph, rig_cfg.source_info.infores_id)
+    subnodes, subedges = _collect_subframes(subgraphs, on_phase, on_subgraph, graph_infores)
     _write_ndjson(subnodes, subedges, n, e, name, version, rig_cfg, section_sources, on_phase, domain, uuid_fields, uuid_on_collision)
 
 

@@ -391,7 +391,7 @@ def build_graph_pipeline(
                         "head": head,
                         "linkouts": linkouts,
                         "name": g.name,
-                        "infores": g.rig.source_info.infores_id,
+                        "infores": g.infores_id,
                         "qc_similarity_threshold": g.qc_similarity_threshold,
                         "qc_fuzzy_ratio_threshold": g.qc_fuzzy_ratio_threshold,
                         "qc_fuzzy_partial_threshold": g.qc_fuzzy_partial_threshold,
@@ -466,6 +466,13 @@ def build_graph_pipeline(
     progress.stage("Compiling Graph")
     start, advance, sub_step = progress.section_loop(len(subgraphs), "Graph")
     start(f"{g.name} · v{g.version}")
+    if g.rig is None:
+        logger.warning(
+            "Graph {name} v{version} has no `rig:` section; emitting KGX artifacts only (provided_by falls back to {infores}). Add `rig:` when the graph is headed for Translator publication.",
+            name=g.name,
+            version=g.version,
+            infores=g.infores_id,
+        )
     # on_phase drives the phase tag (scan → normalize → write-nodes → write-edges → dedup → rig);
     # on_subgraph ticks the bar once per subgraph, so the total is len(subgraphs).
     compile_graph(
@@ -479,6 +486,8 @@ def build_graph_pipeline(
         uuid_fields=g.uuid_fields,
         uuid_domain=g.uuid_namespace,
         uuid_on_collision=g.uuid_on_collision,
+        output_dir=g.output_dir,
+        infores=g.infores if g.rig is None else None,
     )
 
     # Stage 7/7 (only with --qc): assert over the final NDJSON files.
@@ -490,9 +499,7 @@ def build_graph_pipeline(
         # Association is the author's accepted default. Graphs where every section is pinned
         # are unaffected; a mixed graph should split or accept the stricter gate. An empty
         # ``category_override: {}`` pins nothing and counts as undeclared.
-        study_final_ndjson(
-            g.name, g.version, Path(g.rig.artifact_base_path), category_override_declared=any(x.statement.category_override for x in tcode)
-        )
+        study_final_ndjson(g.name, g.version, g.artifact_path, category_override_declared=any(x.statement.category_override for x in tcode))
 
     logger.info("Built graph {name} v{version}: {n} sections", name=g.name, version=g.version, n=n)
 
@@ -953,7 +960,7 @@ def build_kg(
             cached under its own ``.head`` store, so it never reuses or replaces a full build.
         linkouts: Append the EdgeLinkouts per-edge record URL
             (``https://linkouts.skyelanegoetz.com/edges/{edge_id}``, resolved to the final
-            edge id after dedup) to the graph infores entry (``rig.source_info.infores_id``)
+            edge id after dedup) to the graph infores entry (``rig.source_info.infores_id``, or the ``infores`` fallback on RIG-less graphs)
             in every emitted edge's ``sources`` list, so linkouts.skyelanegoetz.com can
             deep-link each edge. Sections declaring ``provenance.override`` are untouched
             (their ``sources`` emission is author-controlled). Cached under its own

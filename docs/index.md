@@ -38,7 +38,7 @@ expectations.
 
 ### Reference
 
-- **[Configuration](configuration/graph.md)**: graph-level schema, the required `rig:` section, and stable edge ids
+- **[Configuration](configuration/graph.md)**: graph-level schema, the optional `rig:` section, and stable edge ids
 - **[Table Configuration](configuration/table.md)**: sources, statements, entity-resolution rules, provenance, annotations
 - **[Advanced Example](configuration/advanced-example.md)**: a fully-annotated real-world configuration
 - **[API Reference](api/fullmap.md)**: `resolve()` and `quick_map()`
