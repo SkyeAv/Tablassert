@@ -47,6 +47,7 @@ TablassertErrorCodes = Literal[
     "babel-download-failed",
     "source-file-unreadable",
     "ipc-stream-unsupported",
+    "ndjson-empty",
     "resolve-bad-specs",
     "taxon-from-conflict",
     "taxon-from-unknown-column",

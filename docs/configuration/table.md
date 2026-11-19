@@ -112,6 +112,7 @@ source:
 ```
 
 > **Specify `kind` explicitly.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally), `ipc` scans an Arrow IPC file (columns renamed positionally); the file on disk is never inspected to infer its format. Because `kind` carries a default, a source whose `kind` is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating `kind` explicitly makes a mis-declared source fail fast.
+> **Specify `kind` explicitly.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally), `ndjson` scans newline-delimited JSON (columns renamed positionally); the file on disk is never inspected to infer its format. Because `kind` carries a default, a source whose `kind` is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating `kind` explicitly makes a mis-declared source fail fast.
 
 #### Text Source (CSV/TSV)
 
@@ -195,6 +196,39 @@ source:
   local: ./data/mydata.arrow
   url:
     - https://example.com/data.arrow
+  row_slice: [1, auto]
+```
+
+#### NDJSON Source
+
+Reads a newline-delimited JSON (`.ndjson` / JSONL) file: one flat JSON object per line,
+the same shape Tablassert's own KGX export writes. Like parquet, the source adds no
+format-specific fields. Columns are addressed positionally: the reader infers the schema
+across the file and renames the inferred key names to `column_1`..`column_n` in **first-seen
+key order** (the order keys first appear in the records), so `method: column` encodings keep
+using Excel-style letters (`A` is the first column, and so on) and the records' own key
+names are never referenced from configs. Ragged records are kept: a record missing a key
+scans as null in that column rather than dropping the row. An empty file fails fast with a
+coded `ndjson-empty` error, because NDJSON is schemaless and column names cannot be inferred
+from no records.
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `kind` | String | No | Source kind. Model default is `"ndjson"`, but specify it explicitly in configs. |
+| `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
+| `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `reindex` | List[Reindex] | No | Conditional row filtering |
+
+**Example:**
+
+```yaml
+source:
+  kind: ndjson
+  local: ./data/mydata.ndjson
+  url:
+    - https://example.com/data.ndjson
   row_slice: [1, auto]
 ```
 

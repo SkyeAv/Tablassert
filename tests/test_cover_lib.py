@@ -202,6 +202,64 @@ def test_ipc_rejects_stream_layout_with_clear_error(tmp_path: Path) -> None:
         lib.ipc(ap)
 
 
+def test_ndjson_reads_records_and_renames_columns_positionally(tmp_path: Path) -> None:
+    """``ndjson`` scans lazily and maps the inferred key names to positional ``column_<n>``.
+
+    Same contract as ``parquet``: the config addresses columns positionally (encoding
+    letters A-ZZ resolve to ``column_<n>``), so the reader renames whatever key names
+    the schema infers to ``column_1..`` and stays lazy for ``Tcode`` composition.
+    """
+    np: Path = tmp_path / "data.ndjson"
+    np.write_text('{"gene_a": "brca1", "gene_b": "mapk1", "p": 0.5}\n{"gene_a": "brca1", "gene_b": "mapk1", "p": 0.01}\n')
+
+    lf: pl.LazyFrame = lib.ndjson(np)
+    assert isinstance(lf, pl.LazyFrame)
+    df: pl.DataFrame = lf.collect()
+    assert df.columns == ["column_1", "column_2", "column_3"]
+    assert df["column_1"].to_list() == ["brca1", "brca1"]
+    assert df["column_3"].to_list() == [0.5, 0.01]
+
+
+def test_ndjson_schema_order_is_first_seen_key_order(tmp_path: Path) -> None:
+    """Positional renaming follows first-seen key order across all records.
+
+    Key order in the schema is the order keys first appear in the file (not
+    alphabetical), so a config addressing ``A``/``B`` on records written
+    ``{"zeta", "alpha"}`` sees ``zeta`` as column_1.
+    """
+    np: Path = tmp_path / "order.ndjson"
+    np.write_text('{"zeta": 1, "alpha": "x"}\n{"zeta": 2, "alpha": "y"}\n')
+
+    df: pl.DataFrame = lib.ndjson(np).collect()
+    assert df.columns == ["column_1", "column_2"]
+    assert df["column_1"].to_list() == [1, 2]
+    assert df["column_2"].to_list() == ["x", "y"]
+
+
+def test_ndjson_ragged_keys_scan_as_nulls(tmp_path: Path) -> None:
+    """Records missing a key scan as null in that column rather than dropping rows."""
+    np: Path = tmp_path / "ragged.ndjson"
+    np.write_text('{"a": "x", "b": 1}\n{"a": "y"}\n{"b": 2, "a": "z"}\n')
+
+    df: pl.DataFrame = lib.ndjson(np).collect()
+    assert df.columns == ["column_1", "column_2"]
+    assert df["column_1"].to_list() == ["x", "y", "z"]
+    assert df["column_2"].to_list() == [1, None, 2]
+
+
+def test_ndjson_rejects_empty_file_with_clear_error(tmp_path: Path) -> None:
+    """An empty NDJSON file has no inferable schema; the reader must fail coded.
+
+    ``pl.scan_ndjson`` alone raises an opaque ``Cannot infer NDJSON types`` compute
+    error; the size check converts that into ``ndjson-empty`` naming the real problem.
+    """
+    np: Path = tmp_path / "empty.ndjson"
+    np.write_text("")
+
+    with pytest.raises(TablassertError, match="ndjson-empty"):
+        lib.ndjson(np)
+
+
 def test_crop_slices_contiguous_range() -> None:
     """Lines 435-442: ``crop`` resolves integer ``[start, stop]`` bounds to a slice."""
     lf: pl.LazyFrame = pl.LazyFrame({"c": [1, 2, 3, 4]})

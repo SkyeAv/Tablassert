@@ -73,6 +73,7 @@ from tablassert.ingests import to_sections
 from tablassert.lib import Tcode
 from tablassert.models import (
     IPC,
+    NDJSON,
     Annotation,
     Encoding,
     Excel,
@@ -587,6 +588,7 @@ CONFIG_MODEL_BINDINGS: tuple[ModelTableBinding, ...] = (
     ModelTableBinding(Text, TABLE_CONFIGURATION, ("Text Source (CSV/TSV)",)),
     ModelTableBinding(Parquet, TABLE_CONFIGURATION, ("Parquet Source",)),
     ModelTableBinding(IPC, TABLE_CONFIGURATION, ("Arrow IPC Source",)),
+    ModelTableBinding(NDJSON, TABLE_CONFIGURATION, ("NDJSON Source",)),
     ModelTableBinding(Reindex, TABLE_CONFIGURATION, ("Reindexing (Conditional Filtering)",)),
     ModelTableBinding(Statement, TABLE_CONFIGURATION, ("Statement (Triple Definition)",)),
     ModelTableBinding(NodeEncoding, TABLE_CONFIGURATION, ("NodeEncoding",)),

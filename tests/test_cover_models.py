@@ -16,7 +16,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from tablassert.biolink import _build_str_enum, _category_name
-from tablassert.models import IPC, Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
+from tablassert.models import IPC, NDJSON, Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
 
 
 def test_manual_provenance_explicit_none_publications_short_circuits() -> None:
@@ -102,18 +102,33 @@ def test_ipc_source_parses_and_forbids_extras() -> None:
         IPC.model_validate({"kind": "ipc", "local": "./data.arrow", "url": ["https://example.com/data.arrow"], "sheet": "Sheet1"})
 
 
+def test_ndjson_source_parses_and_forbids_extras() -> None:
+    """The ``NDJSON`` source parses a minimal config and rejects format-specific fields.
+
+    NDJSON records are flat key-value maps like parquet columns, so it adds no fields
+    beyond ``BaseSource``; ``TablaBase``'s ``extra="forbid"`` must reject an
+    ``Excel``-style ``sheet`` key instead of silently accepting (and ignoring) it.
+    """
+    source: NDJSON = NDJSON.model_validate({"kind": "ndjson", "local": "./data.ndjson", "url": ["https://example.com/data.ndjson"]})
+    assert source.kind == "ndjson"
+    assert not hasattr(source, "sheet")
+    assert not hasattr(source, "delimiter")
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        NDJSON.model_validate({"kind": "ndjson", "local": "./data.ndjson", "url": ["https://example.com/data.ndjson"], "sheet": "Sheet1"})
+
+
 def test_section_accepts_all_source_kinds() -> None:
-    """``Section.source`` validates ``kind: ipc`` alongside ``text``/``excel``/``parquet``.
+    """``Section.source`` validates every ``kind`` against its named model.
 
     The union is pydantic's smart union on the ``kind`` literal, so adding a new member must
     keep every existing kind parsing (no union ambiguity) and resolve each config to the model
-    its ``kind`` names. This is the config-author-facing contract of the new source kind.
+    its ``kind`` names. This is the config-author-facing contract of a new source kind.
     """
     base: dict[str, Any] = {
         "statement": {"subject": {"method": "value", "encoding": "BRCA1"}, "object": {"method": "value", "encoding": "TP53"}},
         "provenance": {"repo": "PMC", "publication": "PMC0000000"},
     }
-    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet), ("ipc", IPC)]:
+    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet), ("ipc", IPC), ("ndjson", NDJSON)]:
         payload: dict[str, Any] = {**base, "source": {"kind": kind, "local": f"./table.{kind}", "url": [f"https://example.com/table.{kind}"]}}
         section: Section = Section.model_validate(payload)
         assert section.source.kind == kind
@@ -121,7 +136,7 @@ def test_section_accepts_all_source_kinds() -> None:
 
 
 def test_section_source_label_per_kind() -> None:
-    """The diagnostic label appends the sheet only for Excel; text, parquet, and ipc render the bare path.
+    """The diagnostic label appends the sheet only for Excel; the other kinds render the bare path.
 
     ``_section_source_label`` feeds read-failure diagnostics, so a new kind must render without
     hitting the Excel-only ``source.sheet`` access (parquet has no ``sheet`` attribute at all).
@@ -131,5 +146,6 @@ def test_section_source_label_per_kind() -> None:
     assert _section_source_label(Text.model_validate({"kind": "text", "local": "./t.tsv", "url": urls})) == "`t.tsv`"
     assert _section_source_label(Parquet.model_validate({"kind": "parquet", "local": "./t.parquet", "url": urls})) == "`t.parquet`"
     assert _section_source_label(IPC.model_validate({"kind": "ipc", "local": "./t.arrow", "url": urls})) == "`t.arrow`"
+    assert _section_source_label(NDJSON.model_validate({"kind": "ndjson", "local": "./t.ndjson", "url": urls})) == "`t.ndjson`"
     excel: Excel = Excel.model_validate({"kind": "excel", "local": "./t.xlsx", "url": urls, "sheet": "S1"})
     assert _section_source_label(excel) == "`t.xlsx` (sheet `S1`)"

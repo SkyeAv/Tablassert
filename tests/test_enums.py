@@ -86,6 +86,7 @@ def test_files_values() -> None:
     assert Files.EXCEL == "excel"
     assert Files.PARQUET == "parquet"
     assert Files.IPC == "ipc"
+    assert Files.NDJSON == "ndjson"
 
 
 def test_comparisons_membership() -> None:

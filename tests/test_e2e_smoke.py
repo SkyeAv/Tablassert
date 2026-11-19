@@ -298,6 +298,67 @@ def test_build_pipeline_over_ipc_source(tmp_path: Path, monkeypatch: pytest.Monk
     assert "HGNC:6871" in edge_text
 
 
+def test_build_pipeline_over_ndjson_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
+    """SMOKE: the same six-stage build reads a ``kind: ndjson`` source end to end.
+
+    Mirrors the parquet smoke exactly except for the source kind: the declared ``kind``
+    must select the NDJSON reader, its positional ``column_1..`` convention must drive
+    the column encodings (the same ``A``/``B`` letters), and the rows must reach the real
+    redb and come back as resolved CURIEs in the KGX output.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+
+    # Two-row NDJSON source: first key = subject term, second key = object term.
+    data: Path = tmp_path / "data.ndjson"
+    data.write_text('{"gene_a": "brca1", "gene_b": "mapk1"}\n{"gene_a": "brca1", "gene_b": "mapk1"}\n')
+
+    table: Path = tmp_path / "table.yaml"
+    table_config: dict[str, Any] = {
+        "template": {
+            "source": {"kind": "ndjson", "local": str(data), "url": ["https://example.com/data.ndjson"]},
+            "statement": {
+                "subject": {"method": "column", "encoding": "A"},
+                "predicate": "associated_with",
+                "object": {"method": "column", "encoding": "B"},
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        }
+    }
+    to_yaml(table, table_config)
+
+    graph: Path = tmp_path / "graph.yaml"
+    graph_config: dict[str, Any] = {
+        "name": "NDJSON_KG",
+        "version": "1.0.0",
+        "tables": [str(table)],
+        "fullmap": str(fullmap),
+        "rig": rig_factory(tmp_path, infores_id="infores:ndjson-kg", source_info={"description": "ndjson source smoke graph"}),
+    }
+    to_yaml(graph, graph_config)
+
+    build_pipeline(graph, PipelineProgress(total_stages=6))
+
+    nodes: Path = tmp_path / "NDJSON_KG_1.0.0.nodes.ndjson"
+    edges: Path = tmp_path / "NDJSON_KG_1.0.0.edges.ndjson"
+    assert nodes.is_file()
+    assert edges.is_file()
+
+    node_text: str = nodes.read_text()
+    edge_text: str = edges.read_text()
+    assert node_text.strip()
+    assert edge_text.strip()
+
+    # Only the real redb knows these CURIEs, so their presence proves the NDJSON rows flowed
+    # through load, encode, and resolve under the positional column contract.
+    assert "HGNC:1100" in node_text
+    assert "HGNC:6871" in node_text
+    assert "HGNC:1100" in edge_text
+    assert "HGNC:6871" in edge_text
+
+
 def test_validate_command_happy_path(tmp_path: Path) -> None:
     """SMOKE (ii): ``validate`` (cli.py wrapper) + ``validate_pipeline`` accept a valid table.
 
