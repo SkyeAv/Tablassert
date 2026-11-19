@@ -218,6 +218,24 @@ def changed_ops(real_lines: list[str], bumped_lines: list[str]) -> list[tuple[st
     return [op for op in matcher.get_opcodes() if op[0] != "equal"]
 
 
+def expected_changelog_after_bump(real_lines: list[str], new_version: str, release_date: str) -> list[str]:
+    """Derive the changelog transformation the real file must undergo.
+
+    Mirrors the two supported shapes: an existing ``## Unreleased`` heading is
+    replaced by the dated heading with its body preserved byte-for-byte, and a
+    file without one gets the dated heading block inserted above the first
+    released section. Deriving from the real file keeps the round-trip test
+    green under both changelog shapes instead of hardcoding the insert shape
+    (which false-failed whenever main carried an Unreleased entry).
+    """
+    heading = f"## {new_version} - {release_date}"
+    for index, line in enumerate(real_lines):
+        if line.strip() == "## Unreleased":
+            return [*real_lines[:index], heading, *real_lines[index + 1 :]]
+    first_heading = next(i for i, line in enumerate(real_lines) if line.startswith("## "))
+    return [*real_lines[:first_heading], heading, "", *real_lines[first_heading:]]
+
+
 def test_real_repo_files_round_trip(tmp_path: Path) -> None:
     """Smoke the script against copies of the real checkout's four files.
 
@@ -239,13 +257,41 @@ def test_real_repo_files_round_trip(tmp_path: Path) -> None:
         assert j2 - j1 == 1, f"{name}: unexpected edit {ops[0]}"
         bumped_lines = (tmp_path / name).read_text(encoding="utf-8").split("\n")
         assert new_version in bumped_lines[j1]
-    changelog_ops = changed_ops(
-        (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n"), (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8").split("\n")
-    )
-    assert len(changelog_ops) == 1
-    assert changelog_ops[0][0] == "insert", f"CHANGELOG.md: expected a single insertion, got {changelog_ops}"
-    real = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n")
-    first_heading = next(i for i, line in enumerate(real) if line.startswith("## "))
-    heading_block = [f"## {new_version} - 2000-01-01", ""]
-    expected = [*real[:first_heading], *heading_block, *real[first_heading:]]
+    real_changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n")
+    expected = expected_changelog_after_bump(real_changelog, new_version, "2000-01-01")
     assert (tmp_path / "CHANGELOG.md").read_text(encoding="utf-8").split("\n") == expected
+
+
+def test_expected_changelog_both_shapes() -> None:
+    """The derived expectation handles both supported changelog shapes.
+
+    Pins the derivation itself (the real file only ever exercises one shape at
+    a time): Unreleased roll keeps the body under the dated heading, while a
+    file without Unreleased gets an empty dated section inserted.
+    """
+    with_unreleased = ["# Changelog", "", "## Unreleased", "", "### Added", "", "- A pending note.", "", "## 1.2.3 - 2026-01-01", "", "- Old.", ""]
+    assert expected_changelog_after_bump(with_unreleased, "1.2.4", "2026-02-02") == [
+        "# Changelog",
+        "",
+        "## 1.2.4 - 2026-02-02",
+        "",
+        "### Added",
+        "",
+        "- A pending note.",
+        "",
+        "## 1.2.3 - 2026-01-01",
+        "",
+        "- Old.",
+        "",
+    ]
+    without_unreleased = ["# Changelog", "", "## 1.2.3 - 2026-01-01", "", "- Old.", ""]
+    assert expected_changelog_after_bump(without_unreleased, "1.2.4", "2026-02-02") == [
+        "# Changelog",
+        "",
+        "## 1.2.4 - 2026-02-02",
+        "",
+        "## 1.2.3 - 2026-01-01",
+        "",
+        "- Old.",
+        "",
+    ]

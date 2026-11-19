@@ -140,6 +140,32 @@ jobs:
       - name: html-validate (```html fences in markdown)
         run: npx -y -p html-validate@11.16.4 -p html-validate-markdown@6.0.0 html-validate "**/*.md"
 
+  # Changelog gate: every pull request must add a new Unreleased entry. Deliberately NOT
+  # path-gated by the `changes` job -- a PR that forgot the changelog edit is exactly the
+  # failure this catches, so it runs unconditionally. Cheap by design: a stdlib-only
+  # script on the preinstalled python3, no uv sync. Fork-safe: checkout and the base-branch
+  # fetch below need only read access, so forked PRs cannot bypass the check. Release and
+  # dependency PRs self-exempt via their title prefix, and documentation-only PRs (every
+  # changed path is markdown or under the docs tree) skip the requirement entirely via
+  # --exempt-docs-only (see scripts/check_changelog.py).
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Full history so the script can diff against the merge base even when the PR
+          # branched many commits ago; the explicit fetch keeps the base ref fresh.
+          fetch-depth: 0
+      - name: Require a new Unreleased changelog entry
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          git fetch origin "+refs/heads/${{ github.event.pull_request.base.ref }}"
+          python3 scripts/check_changelog.py --base "origin/${{ github.event.pull_request.base.ref }}" --pr-title "$PR_TITLE" --exempt-docs-only
+
   # PR gate for the docs site: the same build docs.yml deploys from main, minus the Pages
   # publish. mkdocs builds without installing the project (the API pages are hand-written
   # markdown), so no Rust/maturin build is needed here.
