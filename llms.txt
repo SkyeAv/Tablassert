@@ -9,8 +9,8 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## Quickstart
 - [README](README.md): high-level overview, install snippets, and one-command graph build.
 - [Documentation Site Home](docs/index.md): docs landing page and navigation context.
-- [Installation Guide](docs/installation.md): three install paths (PyPI, GitHub main, development from source), platform and Rust-toolchain notes, and the missing-extra behavior. Optional extras: `cli`, `rt`, `aria2`, `qc`, and `log`.
-- [CLI Reference](docs/cli.md): the five commands (`build-fullmap`, `build-kg`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
+- [Installation Guide](docs/installation.md): three install paths (PyPI, GitHub main, development from source), platform and Rust-toolchain notes, and the missing-extra behavior. Optional extras: `cli`, `rt`, `aria2`, `qc`, `log`, and `hf`.
+- [CLI Reference](docs/cli.md): the six commands (`build-fullmap`, `build-kg`, `publish-hf`, `quick-map`, `validate`, and `validate-kgx`) plus the app-level `--version` flag.
 - [Tutorial](docs/tutorial.md): first end-to-end run from CSV input to KGX NDJSON output.
 
 ## YAML Authoring
@@ -35,7 +35,7 @@ Current CLI behavior queries an embedded redb database whose primary file is `fu
 ## Contributor Development
 - [Contributing Guide](CONTRIBUTING.md): setup, style conventions, checks, and PR expectations.
 - [Development](docs/development.md): docs-site contributor setup and the local `uv run mkdocs build --strict` docs gate.
-- [Project Metadata](pyproject.toml): dependencies, tooling config, and CLI entrypoint. Optional extras: `cli`, `rt`, `aria2`, `qc`, and `log`.
+- [Project Metadata](pyproject.toml): dependencies, tooling config, and CLI entrypoint. Optional extras: `cli`, `rt`, `aria2`, `qc`, `log`, and `hf`.
 - [Tests](tests/): pytest coverage and fixtures.
 - [MkDocs Configuration](mkdocs.yml): docs navigation and published pages.
 - [GitHub Workflows](.github/workflows/): `ci.yml` runs lint, format, type, dead-code (vulture, deptry), test, rust (clippy, machete), and mkdocs checks when a release changes the project version or on manual dispatch; `docs.yml` builds and deploys MkDocs; `pipy.yml` checks the project version, builds sdist and wheel artifacts, and publishes to PyPI; `tag-version.yml` tags changed project versions; `paper.yml` tests the JOSS paper compile and uploads the PDF artifact; `security.yml` scans commits for leaked secrets with gitleaks and audits dependencies against advisory databases with pip-audit and cargo-audit for the Rust lockfile.
