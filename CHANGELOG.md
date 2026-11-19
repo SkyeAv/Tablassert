@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## 22.3.3 - 2026-11-19
+
+### Added
+
+- **Dead-code and unused-dependency gates run in pre-commit and the Makefile.** vulture flags unreachable Python code against a committed `vulture_whitelist.py` allowlist, deptry flags imports that are undeclared or declared-but-unused in `pyproject.toml`, and cargo-machete flags unused Rust manifest dependencies; all three block commits until resolved, with Makefile targets for standalone runs. ([#257](https://github.com/SkyeAv/Tablassert/pull/257))
+- **A security workflow audits secrets and dependency advisories.** Gitleaks scans committed secrets, cargo-audit checks the Rust extension against RustSec advisories, and pip-audit checks the Python environment against PyPI advisories on pushes and pull requests. ([#257](https://github.com/SkyeAv/Tablassert/pull/257))
+
+### Removed
+
+- **Dead code found by vulture is pruned from the Python package.** The unused `default_rig_contributions()` helper and its `DEFAULT_RIG_CONTRIBUTIONS` constant, the unused `DEFAULT_FETCH_CONCURRENCY` constant in `net.py`, and related dead symbols in `biolink.py` and `models.py` are deleted; public APIs and behavior are unchanged. ([#257](https://github.com/SkyeAv/Tablassert/pull/257))
+
+### Changed
+
+- **Python lockfile is refreshed.** cyclopts 5.5.0, loguru 0.8.0, and sentence-transformers 6.3.0 move their lock entries alongside the development-only ruff 0.17.5; the `pyproject.toml` requirement ranges are unchanged, so published package metadata is identical to 22.3.2 and no source changes are included. ([#260](https://github.com/SkyeAv/Tablassert/pull/260))
+- **Rust lockfile is refreshed.** uuid 1.29.2, xxhash-rust 0.8.21, and the zstd stack (zstd 0.14.4, zstd-safe 8.3.0, zstd-sys 2.1.3+zstd.1.5.7) move their lock entries; the manifest ranges in `rust/Cargo.toml` are unchanged, so the extension's public API and on-disk formats are untouched, but released wheels are rebuilt against the new dependency versions. ([#258](https://github.com/SkyeAv/Tablassert/pull/258))
+- **`actions/upload-artifact` moves from v4 to v7 in CI.** Workflow-only change; uploaded artifact names and paths are unchanged. ([#259](https://github.com/SkyeAv/Tablassert/pull/259))
+
 ## 22.3.2 - 2026-11-17
 
 ### Fixed
