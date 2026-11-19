@@ -1532,7 +1532,6 @@ EXTRA_TABLE_ROW: re.Pattern[str] = re.compile(r"^\|\s*`(?P<extra>[A-Za-z0-9_-]+)
 BACKTICKED_TOKEN: re.Pattern[str] = re.compile(r"`([^`]+)`")
 LLMS_LIST_ITEM: re.Pattern[str] = re.compile(r"^-\s*\[(?P<label>[^\]]+)\]\([^)]*\):\s*(?P<body>.*)$")
 LLMS_EXTRAS_ITEMS: tuple[str, str] = ("Installation Guide", "Project Metadata")
-PREFLIGHT_FUNCTIONS: frozenset[str] = frozenset({"require", "is_installed"})
 
 
 def _declared_extras() -> dict[str, list[str]]:

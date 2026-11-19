@@ -1287,17 +1287,12 @@ class RIGConfig(TablaBase):
         return text.rstrip("/")
 
 
-DEFAULT_RIG_CONTRIBUTIONS: list[str] = ["Tablassert: KGX and RIG generation"]
 DEFAULT_RIG_UI_EXPLANATION: str = (
     "Source Tablassert data provides assertions derived from configured tabular records. "
     "The source record used to create this Translator edge was transformed into a "
     "Biolink association using the subject, predicate, object, provenance, and "
     "annotation mappings declared in Tablassert's Table Configuration."
 )
-
-
-def default_rig_contributions() -> list[str]:
-    return DEFAULT_RIG_CONTRIBUTIONS.copy()
 
 
 #: Top-level graph keys that moved under `rig:`. Their presence is a hard error:

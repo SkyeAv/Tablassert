@@ -48,8 +48,8 @@ jobs:
           set -euo pipefail
           has() { grep -E -q "$1" changed_files.txt; }
           # python includes rust/: python-test rebuilds the extension, and pyright runs
-          # against the installed package.
-          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$)'; then python=true; else python=false; fi
+          # against the installed package. vulture_whitelist.py is a dead-code gate input.
+          if has '^(src/|tests/|rust/|pyproject\.toml$|uv\.lock$|vulture_whitelist\.py$)'; then python=true; else python=false; fi
           if has '^rust/'; then rust=true; else rust=false; fi
           if has '^(docs/|mkdocs\.yml$|pyproject\.toml$|uv\.lock$|llms\.txt$)'; then docs=true; else docs=false; fi
           if has '(^|/)[^/]+\.md$|^\.markdownlint-cli2\.jsonc$|^\.htmlvalidate\.json$'; then markdown=true; else markdown=false; fi
@@ -184,6 +184,12 @@ jobs:
         run: uv sync --frozen ${{ env.SYNC_ARGS }}
       - name: Pyright
         run: uv run pyright
+      # Dead-code gate: same vulture pin and [tool.vulture] config as the pre-push hook.
+      - name: Vulture (dead code)
+        run: uv run vulture
+      # Dependency hygiene: same deptry pin and [tool.deptry] config as the pre-push hook.
+      - name: Deptry (dependency hygiene)
+        run: uv run deptry .
 
   # Deliberately NOT sharded across a matrix. Measured on this repo: ~21s of every pytest
   # run is fixed overhead (interpreter start, imports, xdist workers, coverage init) against
@@ -269,5 +275,12 @@ jobs:
       # cargo fmt is enforced by the autofix job, which can also fix it automatically.
       - name: Cargo clippy
         run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+      # Unused-dependency gate; same cargo-machete pin as the pre-push hook in
+      # .pre-commit-config.yaml. Options must precede paths; the fresh checkout has no
+      # target/ dirs, so no --skip-targets is needed.
+      - name: Cargo machete (unused dependencies)
+        uses: bnjbvr/cargo-machete@v0.10.1
+        with:
+          args: rust/
       - name: Cargo test
         run: cargo test --manifest-path rust/Cargo.toml

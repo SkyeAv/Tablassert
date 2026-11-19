@@ -19,6 +19,14 @@ repos:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
+  # Secret scanning on the commit stage: the official hook scans only staged changes, so it
+  # stays fast while keeping leaked keys out of history entirely. The CI security.yml
+  # workflow runs the same tool over PR commits and, weekly, over the full history of main.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
   # markdownlint-cli2 (Markdown structure rules + custom unicode rule) and html-validate
   # (HTML inside markdown, ```html fences only) — the whole-repo gates re-run both with the
   # same pins in the `markdown-lint` job in .github/workflows/ci.yml; keep the pins in sync.
@@ -80,6 +88,25 @@ repos:
         types_or: [python, pyi]
         pass_filenames: false
         stages: [pre-push]
+      # Whole-repo dead-code gate (unused functions/methods/classes/attributes that ruff
+      # and pyright cannot see). Scope and suppressions come from [tool.vulture] in
+      # pyproject.toml + vulture_whitelist.py, so pass_filenames must stay false.
+      - id: vulture
+        name: vulture
+        entry: uv run vulture
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        stages: [pre-push]
+      # Dependency-hygiene gate (unused declared deps, imports only reachable transitively).
+      # Whole-repo scan configured by [tool.deptry]; triggers on the inputs it reads.
+      - id: deptry
+        name: deptry
+        entry: uv run deptry .
+        language: system
+        files: ^(src/.*\.py|pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+        stages: [pre-push]
       - id: cargo-clippy
         name: cargo-clippy
         entry: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
@@ -87,4 +114,12 @@ repos:
         types: [rust]
         files: ^rust/
         pass_filenames: false
+        stages: [pre-push]
+  # Unused-Rust-dependency gate; mirrors the CI `rust` job step. Keep the rev in sync
+  # with the bnjbvr/cargo-machete action pin in .github/workflows/ci.yml. The hook's
+  # own types_or (cargo/cargo-lock) already scopes it to manifest changes.
+  - repo: https://github.com/bnjbvr/cargo-machete
+    rev: v0.10.1
+    hooks:
+      - id: cargo-machete
         stages: [pre-push]

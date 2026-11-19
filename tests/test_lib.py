@@ -156,9 +156,6 @@ class SyncPool:
     def map(self, fn: Any, items: list[Any]) -> list[Any]:
         return [fn(item) for item in items]
 
-    def starmap(self, fn: Any, items: object) -> list[Any]:
-        return [fn(*item) for item in items]  # pyright: ignore
-
     def imap_unordered(self, fn: Any, items: object) -> list[Any]:
         # Synchronous stand-in: yields fn(item) for each input (consumed by a for-loop, so a list suffices).
         return [fn(item) for item in items]  # pyright: ignore

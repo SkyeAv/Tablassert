@@ -1016,7 +1016,7 @@ def test_babel_url_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
             return self
 
         def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
-            return None
+            del exc_type, exc_value, traceback
 
         def read(self) -> bytes:
             return self._body

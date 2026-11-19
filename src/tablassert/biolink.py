@@ -492,7 +492,6 @@ if TYPE_CHECKING:
         DISEASE: Categories
         GENE: Categories
         GENOMIC_ENTITY: Categories
-        NAMED_THING: Categories
         PHENOTYPIC_FEATURE: Categories
         PROTEIN: Categories
 
