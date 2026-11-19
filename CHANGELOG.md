@@ -2,12 +2,6 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased
-
-### Added
-
-- **Arrow IPC (Feather v2) is a fourth table source kind.** `kind: ipc` scans a `.arrow` file lazily with `pl.scan_ipc` and renames its columns positionally to `column_1..` in schema order, matching the `parquet` reader contract so `method: column` encodings keep using Excel-style letters. Only IPC file layout is supported; a stream-layout file fails fast with a coded `ipc-stream-unsupported` error naming the conversion fix instead of polars' opaque `InvalidFooter` compute error. ([#281](https://github.com/SkyeAv/Tablassert/pull/281), [#264](https://github.com/SkyeAv/Tablassert/issues/264))
-
 ## 22.3.3 - 2026-11-19
 
 ### Added
