@@ -267,6 +267,22 @@ source:
   row_slice: [1, auto]
 ```
 
+#### Apache Iceberg Source
+
+Reads an Apache Iceberg table from a PyIceberg catalog via `pl.scan_iceberg` (requires the optional
+`[iceberg]` extra). Columns are renamed positionally to `column_1..` in schema order. Set
+`snapshot_id` to pin a specific Iceberg snapshot for reproducible builds.
+
+| Field | Type | Required | Description |
+| ------- | ------ | ---------- | ------------- |
+| `kind` | String | Yes | Source kind (`"iceberg"`). Required as the discriminated-union tag. |
+| `catalog` | Mapping[String, String] | Yes | PyIceberg catalog properties (for example `uri` and `warehouse`). |
+| `table_identifier` | String | Yes | Iceberg table identifier (for example `namespace.table`). |
+| `snapshot_id` | NonNegativeInt | No | Optional Iceberg snapshot id to pin for reproducible builds. |
+| `url` | List[URL] | Yes | One or more source URLs recorded as provenance. At least one URL is required; format-validated only. |
+| `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Mutually exclusive with `rows`. |
+| `rows` | List[NonNegativeInt] | No | Zero-based row indices to keep after any `row_slice` crop. Mutually exclusive with `row_slice`. |
+| `reindex` | List[Reindex] | No | Conditional row filtering |
 #### Reindexing (Conditional Filtering)
 
 Filter rows based on column values.

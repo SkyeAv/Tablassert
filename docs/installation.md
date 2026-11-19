@@ -38,6 +38,7 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact match, fuzzy match, abbreviation expansion, then a SapBERT embedding audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
+| `iceberg` | Apache Iceberg source reader (`kind: iceberg`) | `pyiceberg` |
 
 Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
 `pip install "tablassert[<extra>]"`, and combine them as `"tablassert[cli,qc]"`. Wheels ship for
@@ -72,6 +73,7 @@ fails, not a failure report):
 | `tablassert` | `[cli]` | Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error |
 | `build-kg --qc` | `[qc]` | Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass |
 | `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
+| `kind: iceberg` | `[iceberg]` | Before loading an Iceberg catalog and scanning a table via `pl.scan_iceberg` |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example
