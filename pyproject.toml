@@ -56,7 +56,6 @@ dependencies = [
     "rapidfuzz>=3.14.3",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.3",
-    "fastexcel>=0.21.0",
 ]
 
 [project.urls]
@@ -97,6 +96,9 @@ qc = [
 ]
 log = [
     "loguru>=0.7.3",
+]
+excel = [
+    "fastexcel>=0.21.0",
 ]
 
 [dependency-groups]

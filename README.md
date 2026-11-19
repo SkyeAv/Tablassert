@@ -154,6 +154,7 @@ Python API to your project. Other extras are opt-in:
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact match, fuzzy match, abbreviation expansion, and SapBERT embeddings) | `pip install "tablassert[qc]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
+| `excel` | Excel (`.xlsx`) input via Polars' `calamine` engine | `pip install "tablassert[excel]"` |
 
 Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
 names the missing package and the install command that fixes it. QC is opt-in at build time
@@ -191,7 +192,7 @@ no LazyFrame setup or NLP preprocessing required. See the
 ## Developing
 
 ```bash
-uv sync --group dev --extra cli --extra qc --extra log
+uv sync --group dev --extra cli --extra qc --extra log --extra excel
 uv run maturin develop --manifest-path rust/Cargo.toml
 make check
 ```

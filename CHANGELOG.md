@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- **BREAKING: `fastexcel` moved from core dependencies to the optional `[excel]` extra.** `lib.excel()` preflights `extras.require("excel", required_by="Excel input")` before `pl.read_excel()` when `engine == "calamine"`, raising `MissingExtraError` with install commands instead of failing inside Polars; explicit non-calamine engines such as `openpyxl` remain usable without `[excel]`. ([#300](https://github.com/SkyeAv/Tablassert/issues/300))
 - **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
 
 ### Added

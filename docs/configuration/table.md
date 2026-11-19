@@ -89,6 +89,11 @@ Defines the data file location and format.
 
 #### Excel Source
 
+> **Requires `[excel]` extra.** Reading `kind: excel` workbooks with the default `calamine`
+> engine requires `fastexcel` (`pip install "tablassert[excel]"` or
+> `uv tool install "tablassert[excel]"`). See [Optional Extras](../installation.md#optional-extras)
+> for details.
+
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
 | `kind` | String | Yes | Source kind (`"excel"`). Required as the discriminated-union tag. |

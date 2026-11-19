@@ -4,7 +4,7 @@ Tablassert turns biomedical spreadsheets into KGX knowledge graphs for NCATS Tra
 
 ## Build / Test / Lint
 
-- One-time setup: `make setup` (`uv sync --group dev --extra cli --extra qc --extra log`, then debug `maturin develop`).  [verified]
+- One-time setup: `make setup` (`uv sync --group dev --extra cli --extra qc --extra log --extra excel`, then debug `maturin develop`).  [verified]
 - After any Rust change, or when the extension may be stale: `make dev` (debug build; `make build` for release-mode performance checks only).  [verified]
 - Full local gate before a PR: `make check` (ruff lint + format check + pyright + vulture + deptry dead-code scans + pytest + cargo test + clippy -D warnings).  [verified]
 - Release version bump: `make patch` / `make minor` / `make major` bumps `pyproject.toml`, `uv.lock`, `CITATION.cff` and rolls the `CHANGELOG.md` Unreleased section (changelog prose stays manual).  [verified]
