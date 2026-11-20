@@ -40,7 +40,7 @@ def test_registry_covers_every_declared_extra() -> None:
     assert set(extras.EXTRA_PACKAGES) == declared - {"rt"}
 
 
-@pytest.mark.parametrize("extra", ["cli", "qc", "aria2", "log"])
+@pytest.mark.parametrize("extra", ["cli", "qc", "aria2", "log", "delta"])
 def test_registered_packages_are_actually_shipped_by_their_extra(extra: str) -> None:
     """Each import name maps to a distribution that its extra really installs.
 
@@ -65,6 +65,7 @@ def test_module_lookup_is_derived_and_unambiguous() -> None:
     assert extras.EXTRA_FOR_MODULE["sklearn"] == "qc"
     assert extras.EXTRA_FOR_MODULE["sentence_transformers"] == "qc"
     assert extras.EXTRA_FOR_MODULE["loguru"] == "log"
+    assert extras.EXTRA_FOR_MODULE["deltalake"] == "delta"
     assert len(extras.EXTRA_FOR_MODULE) == sum(len(packages) for packages in extras.EXTRA_PACKAGES.values())
 
 

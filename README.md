@@ -154,6 +154,7 @@ Python API to your project. Other extras are opt-in:
 | `aria2` | bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `pip install "tablassert[aria2]"` |
 | `qc` | four-stage QC audit (exact match, fuzzy match, abbreviation expansion, and SapBERT embeddings) | `pip install "tablassert[qc]"` |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `pip install "tablassert[log]"` |
+| `delta` | Delta Lake source reader (`kind: delta`) | `pip install "tablassert[delta]"` |
 
 Reaching a feature whose extra is missing never produces a bare `ModuleNotFoundError`: the failure
 names the missing package and the install command that fixes it. QC is opt-in at build time
