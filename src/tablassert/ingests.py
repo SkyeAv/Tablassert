@@ -7,6 +7,11 @@ from typing import Any
 import yaml
 from yaml import CSafeLoader
 
+from tablassert.errors import YamlParseError
+
+SourceLocation = tuple[Path, int, int]
+LocationMap = dict[tuple[str | int, ...], SourceLocation]
+
 
 def fastmerge(a: list[Any] | dict[str, Any], b: list[Any] | dict[str, Any]) -> Any:
     """Recursively merge ``b`` into ``a`` in place and return the result.
@@ -42,6 +47,51 @@ def fastmerge(a: list[Any] | dict[str, Any], b: list[Any] | dict[str, Any]) -> A
     return b
 
 
+def _collect_yaml_locations(node: yaml.Node | None, path: Path, prefix: tuple[str | int, ...], out: LocationMap) -> None:
+    """Recursively record 1-based ``(path, line, column)`` for every YAML mapping/sequence node."""
+    if node is None:
+        return
+    if prefix:
+        out[prefix] = (path, node.start_mark.line + 1, node.start_mark.column + 1)
+    if isinstance(node, yaml.MappingNode):
+        for key_node, value_node in node.value:
+            key: object = key_node.value
+            if isinstance(key, (str, int)):
+                child_prefix: tuple[str | int, ...] = (*prefix, key)
+                out[child_prefix] = (path, value_node.start_mark.line + 1, value_node.start_mark.column + 1)
+                _collect_yaml_locations(value_node, path, child_prefix, out)
+    elif isinstance(node, yaml.SequenceNode):
+        for idx, item_node in enumerate(node.value):
+            _collect_yaml_locations(item_node, path, (*prefix, idx), out)
+
+
+def from_yaml_with_locations(p: Path) -> tuple[object, LocationMap]:
+    """Read a YAML config file and return ``(parsed_data, location_map)``.
+
+    Raises:
+        YamlParseError: With exact ``file:line:column`` when PyYAML reports a ``problem_mark``.
+    """
+    text: str = p.read_text(encoding="utf-8")
+    try:
+        data: object = yaml.load(text, Loader=CSafeLoader)
+    except yaml.constructor.ConstructorError:
+        raise
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        line: int | None = mark.line + 1 if mark is not None else None
+        col: int | None = mark.column + 1 if mark is not None else None
+        problem: str = str(getattr(exc, "problem", None) or exc)
+        raise YamlParseError(p, line, col, problem) from exc
+    locations: LocationMap = {}
+    loader = yaml.SafeLoader(text)
+    try:
+        root: yaml.Node | None = loader.get_single_node()
+        _collect_yaml_locations(root, p, (), locations)
+    finally:
+        loader.dispose()
+    return data, locations
+
+
 def from_yaml(p: Path) -> object:
     """Read a YAML config file into a Python object.
 
@@ -55,7 +105,16 @@ def from_yaml(p: Path) -> object:
         # CSafeLoader (not CLoader): config files may be untrusted, and CLoader honors
         # tags like !!python/object/apply that construct arbitrary Python objects -> RCE.
         # CSafeLoader keeps libyaml's C speed while refusing unsafe object construction.
-        return yaml.load(f, Loader=CSafeLoader)
+        try:
+            return yaml.load(f, Loader=CSafeLoader)
+        except yaml.constructor.ConstructorError:
+            raise
+        except yaml.YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            line: int | None = mark.line + 1 if mark is not None else None
+            col: int | None = mark.column + 1 if mark is not None else None
+            problem: str = str(getattr(exc, "problem", None) or exc)
+            raise YamlParseError(p, line, col, problem) from exc
 
 
 class _IndentedSafeDumper(yaml.SafeDumper):
@@ -106,3 +165,21 @@ def to_sections(instructions: dict[str, Any], table: Path) -> list[dict[str, Any
     for index, section in enumerate(merged, start=1):
         section["section_index"] = index
     return merged
+
+
+def to_sections_with_locations(instructions: dict[str, Any], table: Path, locations: LocationMap) -> tuple[list[dict[str, Any]], list[LocationMap]]:
+    """Expand a table config and preserve per-section YAML source locations.
+
+    Template-inherited keys keep their ``template.<path>`` coordinates in ``table``;
+    section-level overrides overwrite with their ``sections.<i>.<path>`` coordinates.
+    """
+    merged: list[dict[str, Any]] = to_sections(instructions, table)
+    template_locs: LocationMap = {key[1:]: loc for key, loc in locations.items() if len(key) > 1 and key[0] == "template"}
+    section_locs: list[LocationMap] = []
+    for idx in range(len(merged)):
+        loc_map: LocationMap = dict(template_locs)
+        for key, loc in locations.items():
+            if len(key) > 2 and key[0] == "sections" and key[1] == idx:
+                loc_map[key[2:]] = loc
+        section_locs.append(loc_map)
+    return merged, section_locs
