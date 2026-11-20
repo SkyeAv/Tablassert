@@ -52,6 +52,43 @@ fn xxh64_file(path: PathBuf) -> PyResult<String> {
     Ok(format!("{:016x}", hasher.digest()))
 }
 
+fn format_py_4e(value: f64) -> String {
+    use std::fmt::Write as _;
+
+    if value.is_nan() {
+        return "nan".to_string();
+    }
+    if value.is_infinite() {
+        return if value.is_sign_negative() {
+            "-inf".to_string()
+        } else {
+            "inf".to_string()
+        };
+    }
+    let mut raw = String::with_capacity(16);
+    let _ = write!(&mut raw, "{value:.4e}");
+    if let Some(e_pos) = raw.find('e') {
+        let exp: i32 = raw[e_pos + 1..].parse().unwrap_or(0);
+        raw.truncate(e_pos + 1);
+        let _ = write!(&mut raw, "{exp:+03}");
+    }
+    raw
+}
+
+/// Format a batch of optional floats using Python-compatible ``{:.4e}`` notation.
+#[pyfunction]
+fn format_scientific_4e(py: Python<'_>, values: Vec<Option<f64>>) -> Vec<Option<String>> {
+    use rayon::prelude::*;
+
+    py.detach(|| {
+        if values.len() >= 10_000 {
+            values.into_par_iter().map(|opt| opt.map(format_py_4e)).collect()
+        } else {
+            values.into_iter().map(|opt| opt.map(format_py_4e)).collect()
+        }
+    })
+}
+
 // Public re-exports of the fullmap `#[pyfunction]`s so Rust integration tests
 // (`rust/tests/`) and other non-Python embedders can drive the exact production
 // build/read path.  The `fullmap` module itself stays private; only these
@@ -89,6 +126,7 @@ fn rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(uuid::namespace_uuid, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64, module)?)?;
     module.add_function(wrap_pyfunction!(xxh64_file, module)?)?;
+    module.add_function(wrap_pyfunction!(format_scientific_4e, module)?)?;
     Ok(())
 }
 
@@ -117,6 +155,20 @@ mod tests {
         let empty = dir.path().join("empty");
         std::fs::write(&empty, b"").unwrap();
         assert_eq!(xxh64_file(empty).unwrap(), "ef46db3751d8e999");
+    }
+
+    #[test]
+    fn format_py_4e_matches_python_contract() {
+        use super::format_py_4e;
+
+        assert_eq!(format_py_4e(0.0), "0.0000e+00");
+        assert_eq!(format_py_4e(-0.0), "-0.0000e+00");
+        assert_eq!(format_py_4e(1e-3), "1.0000e-03");
+        assert_eq!(format_py_4e(0.05), "5.0000e-02");
+        assert_eq!(format_py_4e(1e100), "1.0000e+100");
+        assert_eq!(format_py_4e(f64::NAN), "nan");
+        assert_eq!(format_py_4e(f64::INFINITY), "inf");
+        assert_eq!(format_py_4e(f64::NEG_INFINITY), "-inf");
     }
 
     #[test]

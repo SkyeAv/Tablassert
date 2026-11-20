@@ -797,7 +797,10 @@ def format_numeric(lf: pl.LazyFrame) -> pl.LazyFrame:
                 df = df.with_columns(pl.when(valid_count).then(number.cast(pl.Int64, strict=False)).otherwise(None).alias(c))
                 continue
             fmt = "{:.4g}"
-        formatted: list[str | None] = [None if v is None else fmt.format(v) for v in df[c].to_list()]
+        if fmt == "{:.4e}":
+            formatted: list[str | None] = rs.format_scientific_4e(df[c].to_list())
+        else:
+            formatted = [None if v is None else fmt.format(v) for v in df[c].to_list()]
         df = df.with_columns(pl.Series(c, formatted))
     return df.lazy()
 
