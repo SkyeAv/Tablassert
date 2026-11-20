@@ -86,6 +86,8 @@ def _section_source_label(source: Source) -> str:
         A backtick-quoted local path, suffixed with the worksheet name when the source is an
         Excel file reading one.
     """
+    if isinstance(source, Iceberg):
+        return f"`{source.table_identifier}`"
     label: str = f"`{source.local}`"
     if isinstance(source, Excel) and source.sheet is not None:
         label += f" (sheet `{source.sheet}`)"
@@ -322,9 +324,28 @@ class SQL(BaseSource):
         return self
 
 
-Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]
+class Iceberg(TablaBase):
+    kind: Literal[Files.ICEBERG] = Field(Files.ICEBERG, description="Source kind; must be 'iceberg'.")
+    catalog: dict[str, str] = Field(..., description="PyIceberg catalog properties (e.g. `uri`, `warehouse`).")
+    table_identifier: str = Field(..., min_length=1, description="Iceberg table identifier (e.g. `namespace.table`).")
+    snapshot_id: NonNegativeInt | None = Field(None, description="Optional Iceberg snapshot id to pin for reproducible builds.")
+    url: list[HttpUrl] = Field(..., min_length=1, description="One or more source URLs recorded as provenance.")
+    row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]] | None = Field(
+        None, min_length=2, max_length=2, description="Zero-based [start, stop] row slice bounds (mutually exclusive with `rows`)."
+    )
+    rows: list[NonNegativeInt] | None = Field(None, description="Explicit zero-based row indices to retain (mutually exclusive with `row_slice`).")
+    reindex: list[Reindex] | None = Field(None, description="Sequential row filters applied using source column values.")
+
+    @model_validator(mode="after")
+    def reject_row_slice_and_rows_together(self: Self) -> Self:
+        if self.row_slice is not None and self.rows is not None:
+            raise TablassertValidationError(
+                "`row_slice` and `rows` are mutually exclusive on one source; pick one.", code="config-rows-and-row-slice-conflict"
+            )
+        return self
 
 
+Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL | Iceberg, Field(discriminator="kind")]
 class Regex(TablaBase):
     pattern: int | float | str = Field(..., description="Regex pattern passed to string replacement.", examples=["\\s+", "\\.$"])
 

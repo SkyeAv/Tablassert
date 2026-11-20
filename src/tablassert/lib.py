@@ -1170,6 +1170,20 @@ def ndjson(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def iceberg(catalog: dict[str, str], table_identifier: str, snapshot_id: int | None = None) -> pl.LazyFrame:
+    """Read an Apache Iceberg table as a LazyFrame with positional ``column_<n>`` names."""
+    from tablassert import extras
+
+    extras.require("iceberg", required_by="kind: iceberg")
+    from pyiceberg.catalog import load_catalog  # pyright: ignore[reportMissingImports]
+
+    cat_obj = load_catalog("tablassert", **catalog)
+    table = cat_obj.load_table(table_identifier)
+    lf: pl.LazyFrame = pl.scan_iceberg(table, snapshot_id=snapshot_id) if snapshot_id is not None else pl.scan_iceberg(table)
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1696,6 +1710,7 @@ class Tcode(Section):
             (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
             if self.source.kind == Files.SQL
             else None,  # pyright: ignore
+            (iceberg, (self.source.catalog, self.source.table_identifier, self.source.snapshot_id)) if self.source.kind == Files.ICEBERG else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
@@ -1938,6 +1953,7 @@ PHASE_OF: dict[Callable, str] = {
     csv: "load",
     excel: "load",
     parquet: "load",
+    iceberg: "load",
     idx: "load",
     crop: "filter",
     pick: "filter",

@@ -98,6 +98,9 @@ qc = [
 log = [
     "loguru>=0.7.3",
 ]
+iceberg = [
+    "pyiceberg>=0.9.0",
+]
 
 [dependency-groups]
 test = [
