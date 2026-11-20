@@ -1636,7 +1636,7 @@
 <li>Output knowledge graph name and version</li>
 <li>List of table configurations to process</li>
 <li>Database location for entity resolution</li>
-<li>The <strong>required <code>rig:</code> section</strong>: all Resource Ingest Guide (RIG) metadata emitted as <code>&lt;name&gt;_&lt;version&gt;.RIG.yaml</code></li>
+<li>The <strong>optional <code>rig:</code> section</strong>: all Resource Ingest Guide (RIG) metadata emitted as <code>&lt;name&gt;_&lt;version&gt;.RIG.yaml</code>; omit it for drafts and internal pipelines (KGX artifacts still build)</li>
 </ul>
 <p>QC auditing and verbose logging are controlled at build time via the <code>build-kg --qc</code> and <code>build-kg --log</code> flags: they are <strong>not</strong> graph-config fields.</p>
 <h2 id="schema">Schema<a class="headerlink" href="#schema" title="Permanent link">&para;</a></h2>
@@ -1670,14 +1670,8 @@
 <td>Path</td>
 <td>Path to the fullmap redb file, or a base directory containing it</td>
 </tr>
-<tr>
-<td><code>rig</code></td>
-<td>RIGConfig</td>
-<td>Resource Ingest Guide metadata (see below)</td>
-</tr>
 </tbody>
 </table>
-<p>The legacy top-level RIG fields (<code>description</code>, <code>contributions</code>, <code>ui_explanation</code>, <code>infores</code>) are <strong>rejected</strong> with a migration pointer; they now live under <code>rig:</code>.</p>
 <h3 id="optional-fields">Optional Fields<a class="headerlink" href="#optional-fields" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1689,6 +1683,21 @@
 </thead>
 <tbody>
 <tr>
+<td><code>rig</code></td>
+<td>RIGConfig</td>
+<td>Resource Ingest Guide metadata emitted as <code>&lt;name&gt;_&lt;version&gt;.RIG.yaml</code> (see below). Omit it for draft/internal builds: KGX artifacts still build, a build-time warning notes the absent publication metadata, and no <code>.RIG.yaml</code> is emitted</td>
+</tr>
+<tr>
+<td><code>infores</code></td>
+<td>String</td>
+<td>RIG-less builds only: graph-level primary knowledge source infores recorded as node <code>provided_by</code> (must be a valid infores CURIE). Mutually exclusive with <code>rig:</code>; defaults to <code>infores:tablassert</code></td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td>Path</td>
+<td>RIG-less builds only: local output directory for the KGX artifacts (<code>rig.artifact_base_path</code> owns it otherwise). Mutually exclusive with <code>rig:</code>; defaults to the current directory</td>
+</tr>
+<tr>
 <td><code>uuid_fields</code></td>
 <td>List[str]</td>
 <td>Edge fields that constitute edge identity. Only these feed the derived edge <code>id</code> (see <a href="#stable-edge-ids">Stable edge ids</a>)</td>
@@ -1696,7 +1705,7 @@
 <tr>
 <td><code>uuid_domain</code></td>
 <td>String</td>
-<td>Explicit UUID namespace. Defaults to <code>rig.source_info.infores_id</code> when <code>uuid_fields</code> is set, <code>TABLASSERT</code> otherwise</td>
+<td>Explicit UUID namespace. Defaults to the graph infores (<code>rig.source_info.infores_id</code>, else the <code>infores</code> fallback) when <code>uuid_fields</code> is set, <code>TABLASSERT</code> otherwise</td>
 </tr>
 <tr>
 <td><code>uuid_on_collision</code></td>
@@ -1725,6 +1734,7 @@
 </tr>
 </tbody>
 </table>
+<p>The legacy top-level RIG fields (<code>description</code>, <code>contributions</code>, <code>ui_explanation</code>, <code>infores</code>) are <strong>rejected when <code>rig:</code> is set</strong> with a migration pointer; they live under <code>rig:</code>. (<code>infores</code> at the top level without <code>rig:</code> is the RIG-less fallback field, not a legacy key.)</p>
 <h2 id="stable-edge-ids">Stable edge ids<a class="headerlink" href="#stable-edge-ids" title="Permanent link">&para;</a></h2>
 <p>Every edge gets a deterministic <code>id</code>: a UUID v3 derived from the edge itself. By default it is
 derived from the <strong>whole record</strong>, which makes it change on any field edit: a corrected <code>p_value</code>, a new
@@ -1826,7 +1836,7 @@ end-of-stream, where the default path streams and holds 24 bytes per edge. That 
 opt-in. The default <code>error</code> behavior is unchanged in every respect.</p>
 <h3 id="namespacing">Namespacing<a class="headerlink" href="#namespacing" title="Permanent link">&para;</a></h3>
 <p>Because a narrow field set no longer distinguishes graphs by accident, declaring <code>uuid_fields</code>
-moves the UUID namespace onto the graph's own <code>rig.source_info.infores_id</code>. Two graphs asserting
+moves the UUID namespace onto the graph's own infores (<code>rig.source_info.infores_id</code>, or the <code>infores</code> fallback on RIG-less graphs). Two graphs asserting
 the same triple from the same publication then still derive different ids, structurally.</p>
 <p>Set <code>uuid_domain</code> only when graphs must deliberately <strong>share</strong> an id space: a KG compiled in
 shards, or one renamed across versions that has to keep its published ids.</p>
@@ -2162,7 +2172,7 @@ tell your consumers.</p>
 <h2 id="processing-flow">Processing Flow<a class="headerlink" href="#processing-flow" title="Permanent link">&para;</a></h2>
 <p>When you run <code>tablassert build-kg graph.yaml</code>:</p>
 <ol>
-<li><strong>Load graph configuration</strong> - Parse YAML, validate schema (including the full <code>rig:</code> section)</li>
+<li><strong>Load graph configuration</strong> - Parse YAML, validate schema (including the full <code>rig:</code> section when present)</li>
 <li><strong>Load table configurations</strong> - Parse each YAML in <code>tables</code></li>
 <li><strong>Extract sections</strong> - Expand templates into per-section <code>Tcode</code> instances</li>
 <li><strong>Collect instructions (per section):</strong></li>
@@ -2170,7 +2180,7 @@ tell your consumers.</p>
 <li>Apply transformations and resolve entities using <code>fullmap</code></li>
 <li>Validate with the QC audit when <code>build-kg --qc</code> is passed</li>
 <li><strong>Build subgraphs</strong> - Compile each section's resolved data into a parquet file</li>
-<li><strong>Compile graph</strong> - Aggregate all subgraph parquets, export <code>{name}_{version}.nodes.ndjson</code> / <code>.edges.ndjson</code> into <code>rig.artifact_base_path</code>, summarize the final graph, audit the RIG document, and write <code>{name}_{version}.RIG.yaml</code></li>
+<li><strong>Compile graph</strong> - Aggregate all subgraph parquets, export <code>{name}_{version}.nodes.ndjson</code> / <code>.edges.ndjson</code> into <code>rig.artifact_base_path</code> (or <code>output_dir</code>, defaulting to the current directory, when <code>rig:</code> is omitted). With <code>rig:</code> set, also summarize the final graph, audit the RIG document, and write <code>{name}_{version}.RIG.yaml</code></li>
 <li><strong>Study graph</strong> (<code>--qc</code> only) - Run the QC audit over the compiled graph</li>
 </ol>
 <h2 id="output-files">Output Files<a class="headerlink" href="#output-files" title="Permanent link">&para;</a></h2>

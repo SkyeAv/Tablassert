@@ -1578,7 +1578,7 @@ a slot all mint a brand-new id, and downstream consumers see a new edge rather t
 </ul>
 <h3 id="namespace">Namespace<a class="headerlink" href="#namespace" title="Permanent link">&para;</a></h3>
 <p>The domain defaults to <code>"TABLASSERT"</code>. When <code>uuid_fields</code> is declared it becomes the graph's
-<code>rig.source_info.infores_id</code>, so two graphs asserting the same triple can never mint the same id:
+infores (<code>rig.source_info.infores_id</code>, or the top-level <code>infores</code> fallback when <code>rig:</code> is omitted), so two graphs asserting the same triple can never mint the same id:
 the uniqueness that full-record hashing provided by accident becomes structural. <code>uuid_domain</code>
 overrides it for graphs that must deliberately share an id space.</p>
 <h3 id="uniqueness">Uniqueness<a class="headerlink" href="#uniqueness" title="Permanent link">&para;</a></h3>

@@ -1679,7 +1679,7 @@ YAML configuration file.</p>
 <td>Flag</td>
 <td>No</td>
 <td><code>False</code></td>
-<td>Append the EdgeLinkouts per-edge record URL (<code>https://linkouts.skyelanegoetz.com/edges/{edge_id}</code>, resolved to the final edge id after dedup) to the graph infores entry (<code>rig.source_info.infores_id</code>) in every emitted edge's <code>sources</code> list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring <code>provenance.override</code> are untouched; cached under a <code>.linkouts</code> store suffix, never clobbers a full build</td>
+<td>Append the EdgeLinkouts per-edge record URL (<code>https://linkouts.skyelanegoetz.com/edges/{edge_id}</code>, resolved to the final edge id after dedup) to the graph infores entry (<code>rig.source_info.infores_id</code>, or the <code>infores</code> fallback on RIG-less graphs) in every emitted edge's <code>sources</code> list, so linkouts.skyelanegoetz.com can deep-link each edge; sections declaring <code>provenance.override</code> are untouched; cached under a <code>.linkouts</code> store suffix, never clobbers a full build</td>
 </tr>
 </tbody>
 </table>
