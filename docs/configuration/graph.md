@@ -323,7 +323,7 @@ rig:
 
 When you run `tablassert build-kg graph.yaml`:
 
-1. **Load graph configuration** - Parse YAML, validate schema (including the full `rig:` section)
+1. **Load graph configuration** - Parse YAML, validate schema (including the full `rig:` section when present)
 2. **Load table configurations** - Parse each YAML in `tables`
 3. **Extract sections** - Expand templates into per-section `Tcode` instances
 4. **Collect instructions (per section):**
@@ -331,7 +331,7 @@ When you run `tablassert build-kg graph.yaml`:
    - Apply transformations and resolve entities using `fullmap`
    - Validate with the QC audit when `build-kg --qc` is passed
 5. **Build subgraphs** - Compile each section's resolved data into a parquet file
-6. **Compile graph** - Aggregate all subgraph parquets, export `{name}_{version}.nodes.ndjson` / `.edges.ndjson` into `rig.artifact_base_path`, summarize the final graph, audit the RIG document, and write `{name}_{version}.RIG.yaml`
+6. **Compile graph** - Aggregate all subgraph parquets, export `{name}_{version}.nodes.ndjson` / `.edges.ndjson` into `rig.artifact_base_path` (or `output_dir`, defaulting to the current directory, when `rig:` is omitted). With `rig:` set, also summarize the final graph, audit the RIG document, and write `{name}_{version}.RIG.yaml`
 7. **Study graph** (`--qc` only) - Run the QC audit over the compiled graph
 
 ## Output Files

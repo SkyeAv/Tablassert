@@ -787,7 +787,8 @@ class ManualProvenance(TablaBase):
     When present under :class:`Provenance`, these values replace the legacy
     repo/publication-derived provenance while keeping the same KL/AT defaults.
     The primary ``sources`` entry (``resource_role: primary_knowledge_source``)
-    derives from the graph-level ``rig.source_info.infores_id`` unless an
+    derives from the graph-level infores (``rig.source_info.infores_id``, or the
+    top-level ``infores`` fallback on RIG-less graphs) unless an
     explicit ``sources`` template is given; manual infores CURIEs otherwise
     belong in ``upstream_resource_ids``.
     """
@@ -1346,7 +1347,7 @@ class Graph(TablaBase):
     )
     uuid_domain: str | None = Field(
         default=None,
-        description="Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise. Set it only when graphs must deliberately share an id space.",
+        description="Explicit UUID namespace. Defaults to the graph infores (`rig.source_info.infores_id`, else the `infores` fallback) when `uuid_fields` is set, `TABLASSERT` otherwise. Set it only when graphs must deliberately share an id space.",
         examples=["infores:multiomicskg"],
     )
     qc_similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="SapBERT cosine threshold for QC.")
