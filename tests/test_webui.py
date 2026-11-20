@@ -108,3 +108,25 @@ def test_webui_routes_when_fastapi_installed(tmp_path: Path, monkeypatch: pytest
     events: list[dict[str, Any]] = [json.loads(line) for line in build_resp.text.splitlines() if line.strip()]
     assert events[-1]["event"] == "done"
     assert called == [tmp_path / "graph.yaml"]
+
+
+def test_webui_serves_built_solidjs_static_assets(tmp_path: Path) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient  # pyright: ignore[reportMissingImports]
+
+    dist_dir = webui.DEFAULT_STATIC_DIR
+    assert (dist_dir / "index.html").is_file()
+    asset_files = list((dist_dir / "assets").glob("index-*.js"))
+    assert asset_files, "Expected built SolidJS 2.0 JS bundle under _webui_dist/assets/"
+
+    app = webui.create_app(output_dir=tmp_path)
+    client = TestClient(app)
+
+    home = client.get("/")
+    assert home.status_code == 200
+    assert '<div id="root"></div>' in home.text
+
+    js_resp = client.get(f"/assets/{asset_files[0].name}")
+    assert js_resp.status_code == 200
+    assert len(js_resp.content) > 0
