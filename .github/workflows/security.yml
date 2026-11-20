@@ -19,7 +19,7 @@ concurrency:
 
 env:
   # Keep in sync with SYNC_ARGS in ci.yml so this workflow restores the same warm uv cache.
-  SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log
+  SYNC_ARGS: --no-default-groups --group ci --extra cli --extra qc --extra log --extra webui
 
 jobs:
   secrets:

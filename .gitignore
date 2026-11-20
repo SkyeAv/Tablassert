@@ -43,3 +43,6 @@ paper/*.fdb_latexmk
 
 .ralph/
 .paperdraft/
+frontend/node_modules/
+!src/tablassert/_webui_dist/
+!src/tablassert/_webui_dist/**
