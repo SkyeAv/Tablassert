@@ -1,0 +1,28 @@
+{
+  "name": "tablassert-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint src vite.config.ts",
+    "format": "biome format --write src vite.config.ts",
+    "format:check": "biome format src vite.config.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@solidjs/web": "^2.0.0",
+    "solid-js": "^2.0.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/bun": "^1.4.5",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0",
+    "vite": "^8.0.0",
+    "vite-plugin-solid": "^3.0.0-next.27"
+  }
+}

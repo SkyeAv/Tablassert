@@ -4,14 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
-### Added
-
 ### Changed
 
 - **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
 
 ### Added
 
+- **Full-stack Web UI CI job (`webui-frontend`) and `make webui-check` target.** Runs Bun (`--frozen-lockfile`), Biome TypeScript/TSX formatting & linting, TypeScript typechecking, Vite + SolidJS 2.0 production build, and `bun test` alongside the Python and Rust CI jobs. ([#261](https://github.com/SkyeAv/Tablassert/issues/261))
+- **SolidJS 2.0 + Vite + Tailwind CSS static frontend for `tablassert webui`.** Built with Bun under `frontend/` into `src/tablassert/_webui_dist/` and served directly by FastAPI on `GET /` and `/assets/*`. ([#261](https://github.com/SkyeAv/Tablassert/issues/261))
+- **Localhost Web UI (`tablassert webui`) and typed FastAPI backend behind the optional `[webui]` extra.** Installs `fastapi` and `uvicorn`, binds strictly to loopback (`127.0.0.1` by default), exposes typed Pydantic request/response models (`/api/health`, `/api/validate`, `/api/build`), validates inline against `Section`/`Graph`, emits plain editable YAML, and streams `build-kg` progress. ([#261](https://github.com/SkyeAv/Tablassert/issues/261))
 - **SQL (SQLite) is a sixth table source kind.** `kind: sql` reads a table or query result from a SQLite database via the stdlib `sqlite3` driver (zero new dependencies), with `local` carrying the database file and exactly one of `table` / `query` selecting the rows. `table` scans in `rowid` order and a `query` must carry its own `ORDER BY` (coded `sql-query-needs-order-by` otherwise), so row indices and `row:<N>` StudyResult ids stay reproducible across runs; columns rename positionally to `column_1..` per the reader contract. ([#285](https://github.com/SkyeAv/Tablassert/pull/285), [#263](https://github.com/SkyeAv/Tablassert/issues/263))
 
 ## 22.4.0 - 2026-11-19

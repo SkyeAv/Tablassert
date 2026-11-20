@@ -24,6 +24,7 @@ COMMAND_NAME_DOCS: dict[str, tuple[str, ...]] = {
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
+    "webui": ("cli.md",),
     "validate": ("cli.md",),
     "validate-kgx": ("cli.md",),
 }
@@ -31,6 +32,7 @@ COMMAND_FLAG_DOCS: dict[str, tuple[str, ...]] = {
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
+    "webui": ("cli.md",),
     "validate": ("cli.md",),
     "validate-kgx": ("cli.md",),
 }

@@ -2,8 +2,8 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **five subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
-and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
+exposes **six subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`, `validate-kgx`,
+and `webui`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
 ## Command index
@@ -13,6 +13,7 @@ for the live surface.
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
+| [`webui`](#webui) | Start the localhost-only Web UI for YAML-free config authoring and builds |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model and the Translator registry |
 
@@ -354,6 +355,24 @@ The validator supplies that `id` to its own in-memory copy of the record wheneve
 requires it, so compliant output validates without the duplicate identifier ever being written to disk.
 The decoded record and the built NDJSON are untouched, and the alias stops being applied on its own
 once a model release drops the requirement.
+
+---
+
+## webui
+
+Start a localhost-only Web UI (`[webui]` extra) to author `tables/table.yaml` and `graph.yaml`
+without writing YAML by hand, run inline `validate`, and stream `build-kg`.
+
+```bash
+tablassert webui
+tablassert webui --port 9000 --output-dir ./my-project
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `--host` | String | No | `127.0.0.1` | Loopback interface to bind (`127.0.0.1`, `localhost`, or `::1`) |
+| `--port`, `-p` | Integer | No | `8765` | TCP port to listen on |
+| `--output-dir`, `-o` | Path | No | `.` | Directory where generated `graph.yaml` and `tables/table.yaml` are written |
 
 ---
 
