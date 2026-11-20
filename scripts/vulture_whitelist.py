@@ -20,6 +20,7 @@ entry when the name gains a static reference.
 
 from typing import Any
 
+from tablassert.cli import init
 from tablassert.enums import ContentCategories, DataFormats, FillMethods, IngestCategories, ModelingCategories, ProvisionMechanisms, SourceStatuses
 from tablassert.models import (
     RIGFilteredContent,
@@ -105,3 +106,6 @@ RIGFutureContentConsideration.consideration
 RIGFutureModelingConsideration.consideration
 RIGSupportingDataSourceInfo.terms_of_use_info
 RIGProvenanceInfo.artifacts
+
+# cli.py: Cyclopts @APP.command callbacks registered dynamically at import time.
+init
