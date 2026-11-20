@@ -403,7 +403,16 @@ def build_graph_pipeline(
             raise SectionValidationError(configuration_file, h, flatten_pydantic_error(e)) from e
         advance()
 
-    db: Path = fullmap_db_path(g.fullmap)
+    db: Path | None = None
+    if g.fullmap is not None:
+        db = fullmap_db_path(g.fullmap)
+    elif any(x.requires_fullmap() for x in tcode):
+        from tablassert.errors import TablassertError
+
+        raise TablassertError(
+            "fullmap is required because at least one table section uses entity resolution; omit `fullmap` only when every subject/object uses `identified` passthrough.",
+            code="fullmap-required",
+        )
 
     # Stage 4/6: collect instructions.
     progress.stage("Collecting Instructions")
@@ -612,14 +621,23 @@ def validate_graph_pipeline(configuration_file: Path, progress: PipelineProgress
             table_sections.append((table, section))
     n: int = len(table_sections)
     start, advance, _ = progress.section_loop(n, "Validate")
+    needs_fullmap: bool = False
     for table, s in table_sections:
         h: str = mkhash(s)
         start(f"{Path(str(s['config'])).stem} · {h[:8]}")
         try:
-            Tcode.model_validate({**s, "store": (STORE / f"{h}.parquet")})
+            tc: Tcode = Tcode.model_validate({**s, "store": (STORE / f"{h}.parquet")})
         except pydantic.ValidationError as e:
             raise SectionValidationError(table, h, flatten_pydantic_error(e)) from e
+        if tc.requires_fullmap():
+            needs_fullmap = True
         advance()
+
+    if g.fullmap is None and needs_fullmap:
+        raise GraphValidationError(
+            configuration_file,
+            "fullmap is required because at least one table section uses entity resolution; omit `fullmap` only when every subject/object uses `identified` passthrough.",
+        )
 
     logger.info("Validated graph {name}: {n} sections across {tables} tables", name=g.name, n=n, tables=len(g.tables))
 

@@ -79,6 +79,7 @@ from tablassert.models import (
     Encoding,
     Excel,
     Graph,
+    IdentifiedSpec,
     ManualProvenance,
     NodeEncoding,
     Parquet,
@@ -114,7 +115,7 @@ ConfigKind = Literal["graph", "table"]
 # Keys whose presence makes a parsed block a COMPLETE config for one live schema. Mirrors the
 # required fields of `models.Section` (source/statement/provenance) and `models.Graph`.
 TABLE_KEYS: frozenset[str] = frozenset({"provenance", "source", "statement"})
-GRAPH_KEYS: frozenset[str] = frozenset({"fullmap", "name", "rig", "tables", "version"})
+GRAPH_KEYS: frozenset[str] = frozenset({"name", "rig", "tables", "version"})
 # Elision markers. A block carrying one is an excerpt by construction and cannot validate.
 PLACEHOLDER_TOKENS: tuple[str, ...] = ("{...}", "...")
 
@@ -594,6 +595,7 @@ CONFIG_MODEL_BINDINGS: tuple[ModelTableBinding, ...] = (
     ModelTableBinding(Reindex, TABLE_CONFIGURATION, ("Reindexing (Conditional Filtering)",)),
     ModelTableBinding(Statement, TABLE_CONFIGURATION, ("Statement (Triple Definition)",)),
     ModelTableBinding(NodeEncoding, TABLE_CONFIGURATION, ("NodeEncoding",)),
+    ModelTableBinding(IdentifiedSpec, TABLE_CONFIGURATION, ("IdentifiedSpec",)),
     ModelTableBinding(Qualifier, TABLE_CONFIGURATION, ("Qualifiers",)),
     ModelTableBinding(Provenance, TABLE_CONFIGURATION, ("Provenance",)),
     ModelTableBinding(ManualProvenance, TABLE_CONFIGURATION, ("Manual provenance override",)),
