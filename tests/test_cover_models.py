@@ -10,6 +10,7 @@ never run their after-validators), which the happy-path tests never do.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -41,6 +42,7 @@ def test_graph_explicit_none_rig_ui_explanation_short_circuits(rig_factory: Any)
     graph: Graph = Graph.model_validate(  # pyright: ignore
         {"name": "TEST", "version": "1.0.0", "tables": ["./table.yaml"], "fullmap": "./fullmap", "rig": rig_data}
     )
+    assert graph.rig is not None
     assert graph.rig.ui_explanation is None
 
 
@@ -149,3 +151,50 @@ def test_section_source_label_per_kind() -> None:
     assert _section_source_label(NDJSON.model_validate({"kind": "ndjson", "local": "./t.ndjson", "url": urls})) == "`t.ndjson`"
     excel: Excel = Excel.model_validate({"kind": "excel", "local": "./t.xlsx", "url": urls, "sheet": "S1"})
     assert _section_source_label(excel) == "`t.xlsx` (sheet `S1`)"
+
+
+def test_graph_without_rig_validates_with_documented_fallbacks(rig_factory: Any) -> None:
+    """A RIG-less graph validates (#274): infores defaults to `infores:tablassert`, artifacts to CWD."""
+    graph: Graph = Graph(name="TEST", version="1.0.0", tables=[Path("./table.yaml")], fullmap=Path("./fullmap"))
+    assert graph.rig is None
+    assert graph.infores_id == "infores:tablassert"
+    assert graph.artifact_path == Path(".")
+    assert graph.uuid_namespace == "TABLASSERT"  # whole-record hash default unchanged
+    explicit: Graph = Graph(
+        name="TEST", version="1.0.0", tables=[Path("./table.yaml")], fullmap=Path("./fullmap"), infores="infores:draft-kg", output_dir=Path("./out")
+    )
+    assert explicit.infores_id == "infores:draft-kg"
+    assert explicit.artifact_path == Path("./out")
+    namespaced: Graph = Graph(
+        name="TEST",
+        version="1.0.0",
+        tables=[Path("./table.yaml")],
+        fullmap=Path("./fullmap"),
+        infores="infores:draft-kg",
+        uuid_fields=["subject", "predicate", "object"],
+    )
+    assert namespaced.uuid_namespace == "infores:draft-kg"
+
+
+def test_graph_rig_conflict_with_fallback_fields(rig_factory: Any) -> None:
+    """`infores`/`output_dir` are RIG-less fallbacks; with `rig:` set they are rejected."""
+    with pytest.raises(ValidationError):
+        Graph(name="TEST", version="1.0.0", tables=[Path("./table.yaml")], fullmap=Path("./fullmap"), rig=rig_factory(), infores="infores:draft-kg")
+    with pytest.raises(ValidationError):
+        Graph(name="TEST", version="1.0.0", tables=[Path("./table.yaml")], fullmap=Path("./fullmap"), rig=rig_factory(), output_dir=Path("./out"))
+
+
+def test_graph_rig_output_unchanged_for_rig_bearing_graphs(rig_factory: Any) -> None:
+    """RIG-bearing graphs keep identical infores/uuid behavior (#274 pin)."""
+    graph: Graph = Graph(
+        name="TEST",
+        version="1.0.0",
+        tables=[Path("./table.yaml")],
+        fullmap=Path("./fullmap"),
+        rig=rig_factory(),
+        uuid_fields=["subject", "predicate", "object"],
+    )
+    assert graph.rig is not None
+    assert graph.infores_id == graph.rig.source_info.infores_id
+    assert graph.artifact_path == Path(graph.rig.artifact_base_path)
+    assert graph.uuid_namespace == graph.rig.source_info.infores_id

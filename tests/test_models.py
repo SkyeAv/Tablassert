@@ -44,23 +44,27 @@ def test_section_from_minimal_yaml(fixtures_path: Path) -> None:
     assert section.provenance.repo == "PMC"
 
 
-def test_graph_rig_section_is_required_and_defaults_apply(rig_factory: Any) -> None:
-    """the required rig: section validates, with RIG-schema defaults where honest."""
+def test_graph_rig_section_defaults_apply(rig_factory: Any) -> None:
+    """the optional rig: section validates when provided, with RIG-schema defaults where honest."""
     graph: Graph = Graph(  # pyright: ignore
         name="TEST", version="1.0.0", tables=[Path("./table.yaml")], fullmap=Path("./fullmap"), rig=rig_factory()
     )
     assert graph.infores_id == "infores:test-kg"
     # Default ingest category reflects what Tablassert builds: knowledge from tables.
+    assert graph.rig is not None
     assert graph.rig.ingest_info.ingest_categories == ["translator_knowledge_creator"]
     # The UI prefix is optional; compose_ui_explanation always keeps the default text.
+    assert graph.rig is not None
     assert graph.rig.ui_explanation is None
 
 
-def test_graph_rejects_missing_rig_section() -> None:
-    """a graph without a rig: section cannot build a PR-worthy RIG and is rejected."""
+def test_graph_accepts_missing_rig_section() -> None:
+    """a graph without a rig: section validates and falls back to the documented defaults (#274)."""
     data: dict[str, Any] = {"name": "TEST", "version": "1.0.0", "tables": [Path("./table.yaml")], "fullmap": Path("./fullmap")}
-    with pytest.raises(ValidationError):
-        Graph.model_validate(data)
+    graph: Graph = Graph.model_validate(data)
+    assert graph.rig is None
+    assert graph.infores_id == "infores:tablassert"
+    assert graph.artifact_path == Path(".")
 
 
 def test_graph_rejects_legacy_top_level_rig_keys(rig_factory: Any) -> None:

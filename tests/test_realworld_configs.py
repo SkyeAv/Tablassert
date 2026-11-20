@@ -188,8 +188,11 @@ def test_multisection_v12_expands_all_sections() -> None:
 def test_dakp_graph_rig_populated() -> None:
     """The DAKP graph configuration validates with a fully populated RIG."""
     graph: Graph = Graph.model_validate(from_yaml(POSITIVE / "dakp" / "graph.yaml"))
+    assert graph.rig is not None
     assert graph.rig.source_info.infores_id == "infores:multiomics-drugapprovals"
+    assert graph.rig is not None
     assert graph.rig.ingest_info is not None
+    assert graph.rig is not None
     assert graph.rig.provenance_info.contributions
 
 

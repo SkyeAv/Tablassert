@@ -153,7 +153,7 @@ Before hashing, the record is normalized so that only *meaning* reaches the dige
 ### Namespace
 
 The domain defaults to `"TABLASSERT"`. When `uuid_fields` is declared it becomes the graph's
-`rig.source_info.infores_id`, so two graphs asserting the same triple can never mint the same id:
+infores (`rig.source_info.infores_id`, or the top-level `infores` fallback when `rig:` is omitted), so two graphs asserting the same triple can never mint the same id:
 the uniqueness that full-record hashing provided by accident becomes structural. `uuid_domain`
 overrides it for graphs that must deliberately share an id space.
 

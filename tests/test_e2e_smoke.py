@@ -701,3 +701,128 @@ def test_prune_command_cleans_the_final_built_graph(tmp_path: Path, monkeypatch:
     current: list[str] = text.splitlines()
     pending_built = iter(built_lines)
     assert all(line in pending_built for line in current)
+
+
+def test_build_pipeline_without_rig_emits_kgx_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """SMOKE (#274): a RIG-less graph config validates, builds KGX, passes validate_kgx, and emits no RIG.
+
+    Node ``provided_by`` falls back to the configured ``infores`` (or ``infores:tablassert``
+    default), and no ``<name>_<version>.RIG.yaml`` appears in the output directory.
+    """
+    from tablassert.biolink import validate_kgx
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+
+    data: Path = tmp_path / "data.tsv"
+    data.write_text("brca1\tmapk1\nbrca1\tmapk1\n")
+
+    table: Path = tmp_path / "table.yaml"
+    table_config: dict[str, Any] = {
+        "template": {
+            "source": {"kind": "text", "local": str(data), "url": ["https://example.com/data.tsv"], "delimiter": "\t"},
+            "statement": {
+                "subject": {"method": "column", "encoding": "A"},
+                "predicate": "associated_with",
+                "object": {"method": "column", "encoding": "B"},
+            },
+            "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+        }
+    }
+    to_yaml(table, table_config)
+
+    out_dir: Path = tmp_path / "release"
+    graph: Path = tmp_path / "graph.yaml"
+    graph_config: dict[str, Any] = {
+        "name": "DRAFT_KG",
+        "version": "1.0.0",
+        "tables": [str(table)],
+        "fullmap": str(fullmap),
+        "infores": "infores:draft-kg",
+        "output_dir": str(out_dir),
+    }
+    to_yaml(graph, graph_config)
+
+    build_pipeline(graph, PipelineProgress(total_stages=6))
+
+    nodes: Path = out_dir / "DRAFT_KG_1.0.0.nodes.ndjson"
+    edges: Path = out_dir / "DRAFT_KG_1.0.0.edges.ndjson"
+    assert nodes.is_file()
+    assert edges.is_file()
+    assert not (out_dir / "DRAFT_KG_1.0.0.RIG.yaml").exists(), "RIG-less builds must not emit a RIG"
+
+    node_records: list[dict[str, Any]] = [json.loads(line) for line in nodes.read_text().splitlines() if line.strip()]
+    edge_records: list[dict[str, Any]] = [json.loads(line) for line in edges.read_text().splitlines() if line.strip()]
+    assert node_records
+    assert edge_records
+    for record in node_records:
+        assert record["provided_by"] == ["infores:draft-kg"]
+    assert "HGNC:1100" in edges.read_text()
+    report: dict[str, Any] = validate_kgx(nodes, edges)
+    assert report["ok"] is True
+
+
+def test_build_pipeline_rig_and_rigless_kgx_byte_parity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rig_factory: Any) -> None:
+    """SMOKE (#274): RIG-bearing and RIG-less builds with the same infores emit byte-identical KGX."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".tablassert" / "store").mkdir(parents=True)
+
+    fullmap: Path = _build_real_redb(tmp_path / "fullmap")
+    data: Path = tmp_path / "data.tsv"
+    data.write_text("brca1\tmapk1\n")
+
+    table: Path = tmp_path / "table.yaml"
+    to_yaml(
+        table,
+        {
+            "template": {
+                "source": {"kind": "text", "local": str(data), "url": ["https://example.com/data.tsv"], "delimiter": "\t"},
+                "statement": {
+                    "subject": {"method": "column", "encoding": "A"},
+                    "predicate": "associated_with",
+                    "object": {"method": "column", "encoding": "B"},
+                },
+                "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+            }
+        },
+    )
+
+    out_with_rig: Path = tmp_path / "out_rig"
+    out_without_rig: Path = tmp_path / "out_rigless"
+    graph_with_rig: Path = tmp_path / "graph_rig.yaml"
+    graph_without_rig: Path = tmp_path / "graph_rigless.yaml"
+    to_yaml(
+        graph_with_rig,
+        {
+            "name": "PARITY_KG",
+            "version": "1.0.0",
+            "tables": [str(table)],
+            "fullmap": str(fullmap),
+            "uuid_fields": ["subject", "predicate", "object"],
+            "rig": rig_factory(
+                tmp_path, infores_id="infores:parity-kg", artifact_base_path=str(out_with_rig), source_info={"description": "parity graph"}
+            ),
+        },
+    )
+    to_yaml(
+        graph_without_rig,
+        {
+            "name": "PARITY_KG",
+            "version": "1.0.0",
+            "tables": [str(table)],
+            "fullmap": str(fullmap),
+            "uuid_fields": ["subject", "predicate", "object"],
+            "infores": "infores:parity-kg",
+            "output_dir": str(out_without_rig),
+        },
+    )
+
+    build_pipeline(graph_with_rig, PipelineProgress(total_stages=6))
+    build_pipeline(graph_without_rig, PipelineProgress(total_stages=6))
+
+    assert (out_with_rig / "PARITY_KG_1.0.0.RIG.yaml").is_file()
+    assert not (out_without_rig / "PARITY_KG_1.0.0.RIG.yaml").exists()
+    assert (out_with_rig / "PARITY_KG_1.0.0.nodes.ndjson").read_bytes() == (out_without_rig / "PARITY_KG_1.0.0.nodes.ndjson").read_bytes()
+    assert (out_with_rig / "PARITY_KG_1.0.0.edges.ndjson").read_bytes() == (out_without_rig / "PARITY_KG_1.0.0.edges.ndjson").read_bytes()

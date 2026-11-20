@@ -131,7 +131,7 @@ rig:
 **Important:** Replace `fullmap` with the path to your fullmap redb file or its base directory (the
 `tablassert build-fullmap --output ./fullmap/data/fullmap.redb` invocation in
 [Prerequisites](#prerequisites) makes `./fullmap` correct), and adjust `tables` if your table
-config lives elsewhere. The `rig:` section is required; see the
+config lives elsewhere. The `rig:` section is optional; omit it for drafts and internal builds (KGX artifacts still build, without a `.RIG.yaml`). See the
 [Graph configuration reference](configuration/graph.md) for every field.
 
 **What this does:**

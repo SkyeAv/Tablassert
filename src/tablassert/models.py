@@ -787,7 +787,8 @@ class ManualProvenance(TablaBase):
     When present under :class:`Provenance`, these values replace the legacy
     repo/publication-derived provenance while keeping the same KL/AT defaults.
     The primary ``sources`` entry (``resource_role: primary_knowledge_source``)
-    derives from the graph-level ``rig.source_info.infores_id`` unless an
+    derives from the graph-level infores (``rig.source_info.infores_id``, or the
+    top-level ``infores`` fallback on RIG-less graphs) unless an
     explicit ``sources`` template is given; manual infores CURIEs otherwise
     belong in ``upstream_resource_ids``.
     """
@@ -1247,7 +1248,7 @@ class RIGProvenanceInfo(TablaBase):
 
 
 class RIGConfig(TablaBase):
-    """The required ``rig:`` graph-config section driving `.RIG.yaml` generation.
+    """The optional ``rig:`` graph-config section driving `.RIG.yaml` generation.
 
     Carries every human-authored RIG fact. The generator derives only the
     mechanical pieces (generated artifact file entries, observed target
@@ -1325,7 +1326,20 @@ class Graph(TablaBase):
     version: str = Field(..., description="Graph version label.")
     tables: list[Path] = Field(..., description="Paths to table YAML files included in this graph.", examples=[["tables/tutorial-table.yaml"]])
     fullmap: Path = Field(..., description="Base fullmap directory or fullmap redb file for entity resolution.", examples=[".fullmap"])
-    rig: RIGConfig = Field(..., description="Resource Ingest Guide metadata emitted as <name>_<version>.RIG.yaml.")
+    rig: RIGConfig | None = Field(
+        default=None,
+        description="Optional Resource Ingest Guide metadata emitted as <name>_<version>.RIG.yaml. Omit it for draft/internal builds: KGX artifacts still build, with `infores` and `output_dir` supplying the fallbacks RIG metadata normally provides.",
+    )
+    infores: str | None = Field(
+        default=None,
+        description="Graph-level primary knowledge source infores for builds WITHOUT `rig:`. Must be a valid infores CURIE; mutually exclusive with `rig:`. Defaults to `infores:tablassert`.",
+        examples=["infores:my-draft-kg"],
+    )
+    output_dir: Path | None = Field(
+        default=None,
+        description="Local output directory for the KGX artifacts when `rig:` is absent (`rig.artifact_base_path` owns it otherwise). Mutually exclusive with `rig:`; defaults to the current directory.",
+        examples=["./release"],
+    )
     uuid_fields: list[str] | None = Field(
         default=None,
         description="Edge fields that constitute edge identity; only these feed the derived edge `id`, so an attribute-only change leaves it alone. Unset hashes the whole record.",
@@ -1333,7 +1347,7 @@ class Graph(TablaBase):
     )
     uuid_domain: str | None = Field(
         default=None,
-        description="Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise. Set it only when graphs must deliberately share an id space.",
+        description="Explicit UUID namespace. Defaults to the graph infores (`rig.source_info.infores_id`, else the `infores` fallback) when `uuid_fields` is set, `TABLASSERT` otherwise. Set it only when graphs must deliberately share an id space.",
         examples=["infores:multiomicskg"],
     )
     qc_similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="SapBERT cosine threshold for QC.")
@@ -1400,21 +1414,65 @@ class Graph(TablaBase):
         each stale key and its new home under ``rig:`` so migration is mechanical.
         """
         if isinstance(data, dict):
-            found: list[str] = sorted(k for k in data if k in LEGACY_RIG_KEYS)
+            # Legacy RIG keys never belong at the top level; only `infores` doubles as
+            # the RIG-less fallback field (#274), so it is exempt from the legacy check
+            # when no `rig:` section is present. With `rig:` set the top level is owned
+            # by `rig.source_info.infores_id` and every legacy key is rejected.
+            found: list[str] = sorted(k for k in data if k in LEGACY_RIG_KEYS and (k != "infores" or data.get("rig")))
             if found:
                 moves: str = "; ".join(f"`{k}` -> `{LEGACY_RIG_KEYS[k]}`" for k in found)
                 raise TablassertValidationError(
-                    f"RIG metadata moved under the required `rig:` section: {moves}. "
+                    f"RIG metadata moved under the `rig:` section: {moves}. "
                     "Top-level placement is rejected so a build can never emit a RIG that "
                     "silently disagrees with its graph config.",
                     code="rig-legacy-keys",
                 )
         return data
 
+    @model_validator(mode="after")
+    def rig_fallback_fields(self: Self) -> Self:
+        """Resolve the RIG-less fallback fields.
+
+        ``infores`` and ``output_dir`` only exist for builds without ``rig:`` — with a RIG
+        section its ``source_info.infores_id`` / ``artifact_base_path`` are authoritative,
+        so a duplicate declaration is rejected instead of silently drifting. ``infores``
+        must still be a valid infores CURIE: node ``provided_by`` and validate-kgx
+        identity checks read it either way.
+        """
+        if self.rig is not None:
+            if self.infores is not None or self.output_dir is not None:
+                raise TablassertValidationError(
+                    "`infores` and `output_dir` are RIG-less fallbacks; remove them when `rig:` is set (rig.source_info.infores_id and rig.artifact_base_path own both values).",
+                    code="graph-bad-infores",
+                )
+            return self
+        if self.infores is not None:
+            # object.__setattr__: plain assignment re-runs mode="before" validators with the
+            # default-filled dict under validate_assignment, where rig=None looks "present".
+            object.__setattr__(self, "infores", validate_infores_curie(self.infores, "graph-bad-infores"))
+        return self
+
     @property
     def infores_id(self) -> str:
-        """Graph-level primary knowledge source infores (from ``rig.source_info.infores_id``)."""
-        return self.rig.source_info.infores_id
+        """Graph-level primary knowledge source infores.
+
+        From ``rig.source_info.infores_id`` when `rig:` is set, else the explicit
+        ``infores`` fallback, else the documented ``infores:tablassert`` default.
+        """
+        if self.rig is not None:
+            return self.rig.source_info.infores_id
+        return self.infores or "infores:tablassert"
+
+    @property
+    def artifact_path(self) -> Path:
+        """Local directory the KGX artifacts are written to.
+
+        ``rig.artifact_base_path`` when `rig:` is set, else the explicit ``output_dir``
+        fallback, else the current directory.
+        """
+        if self.rig is not None:
+            return Path(self.rig.artifact_base_path)
+        return self.output_dir or Path(".")
 
     @property
     def uuid_namespace(self) -> str:

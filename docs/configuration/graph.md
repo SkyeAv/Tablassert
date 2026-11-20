@@ -9,7 +9,7 @@ A graph configuration file specifies:
 - Output knowledge graph name and version
 - List of table configurations to process
 - Database location for entity resolution
-- The **required `rig:` section**: all Resource Ingest Guide (RIG) metadata emitted as `<name>_<version>.RIG.yaml`
+- The **optional `rig:` section**: all Resource Ingest Guide (RIG) metadata emitted as `<name>_<version>.RIG.yaml`; omit it for drafts and internal pipelines (KGX artifacts still build)
 
 QC auditing and verbose logging are controlled at build time via the `build-kg --qc` and `build-kg --log` flags: they are **not** graph-config fields.
 
@@ -23,21 +23,23 @@ QC auditing and verbose logging are controlled at build time via the `build-kg -
 | `version` | String | Knowledge graph version (used in output filenames) |
 | `tables` | List[Path] | Paths to table configuration YAML files |
 | `fullmap` | Path | Path to the fullmap redb file, or a base directory containing it |
-| `rig` | RIGConfig | Resource Ingest Guide metadata (see below) |
-
-The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation`, `infores`) are **rejected** with a migration pointer; they now live under `rig:`.
 
 ### Optional Fields
 
 | Field | Type | Description |
 | ------- | ------ | ------------- |
+| `rig` | RIGConfig | Resource Ingest Guide metadata emitted as `<name>_<version>.RIG.yaml` (see below). Omit it for draft/internal builds: KGX artifacts still build, a build-time warning notes the absent publication metadata, and no `.RIG.yaml` is emitted |
+| `infores` | String | RIG-less builds only: graph-level primary knowledge source infores recorded as node `provided_by` (must be a valid infores CURIE). Mutually exclusive with `rig:`; defaults to `infores:tablassert` |
+| `output_dir` | Path | RIG-less builds only: local output directory for the KGX artifacts (`rig.artifact_base_path` owns it otherwise). Mutually exclusive with `rig:`; defaults to the current directory |
 | `uuid_fields` | List[str] | Edge fields that constitute edge identity. Only these feed the derived edge `id` (see [Stable edge ids](#stable-edge-ids)) |
-| `uuid_domain` | String | Explicit UUID namespace. Defaults to `rig.source_info.infores_id` when `uuid_fields` is set, `TABLASSERT` otherwise |
+| `uuid_domain` | String | Explicit UUID namespace. Defaults to the graph infores (`rig.source_info.infores_id`, else the `infores` fallback) when `uuid_fields` is set, `TABLASSERT` otherwise |
 | `uuid_on_collision` | `error` \| `merge` | What to do when two different edges derive one id. `error` (default) aborts; `merge` folds them into one edge. Requires `uuid_fields` (see [Merging collisions instead](#merging-collisions-instead)) |
 | `qc_similarity_threshold` | Float 0-1 | SapBERT cosine threshold used by QC (default 0.5) |
 | `qc_fuzzy_ratio_threshold` | Float 0-100 | RapidFuzz ratio threshold used by QC (default 70) |
 | `qc_fuzzy_partial_threshold` | Float 0-100 | RapidFuzz partial/token-set threshold used by QC (default 80) |
 | `qc_aliases` | Mapping[String, String] | Source-text aliases applied before QC similarity stages (default empty) |
+
+The legacy top-level RIG fields (`description`, `contributions`, `ui_explanation`, `infores`) are **rejected when `rig:` is set** with a migration pointer; they live under `rig:`. (`infores` at the top level without `rig:` is the RIG-less fallback field, not a legacy key.)
 
 ## Stable edge ids
 
@@ -153,7 +155,7 @@ opt-in. The default `error` behavior is unchanged in every respect.
 ### Namespacing
 
 Because a narrow field set no longer distinguishes graphs by accident, declaring `uuid_fields`
-moves the UUID namespace onto the graph's own `rig.source_info.infores_id`. Two graphs asserting
+moves the UUID namespace onto the graph's own infores (`rig.source_info.infores_id`, or the `infores` fallback on RIG-less graphs). Two graphs asserting
 the same triple from the same publication then still derive different ids, structurally.
 
 Set `uuid_domain` only when graphs must deliberately **share** an id space: a KG compiled in
@@ -321,7 +323,7 @@ rig:
 
 When you run `tablassert build-kg graph.yaml`:
 
-1. **Load graph configuration** - Parse YAML, validate schema (including the full `rig:` section)
+1. **Load graph configuration** - Parse YAML, validate schema (including the full `rig:` section when present)
 2. **Load table configurations** - Parse each YAML in `tables`
 3. **Extract sections** - Expand templates into per-section `Tcode` instances
 4. **Collect instructions (per section):**
@@ -329,7 +331,7 @@ When you run `tablassert build-kg graph.yaml`:
    - Apply transformations and resolve entities using `fullmap`
    - Validate with the QC audit when `build-kg --qc` is passed
 5. **Build subgraphs** - Compile each section's resolved data into a parquet file
-6. **Compile graph** - Aggregate all subgraph parquets, export `{name}_{version}.nodes.ndjson` / `.edges.ndjson` into `rig.artifact_base_path`, summarize the final graph, audit the RIG document, and write `{name}_{version}.RIG.yaml`
+6. **Compile graph** - Aggregate all subgraph parquets, export `{name}_{version}.nodes.ndjson` / `.edges.ndjson` into `rig.artifact_base_path` (or `output_dir`, defaulting to the current directory, when `rig:` is omitted). With `rig:` set, also summarize the final graph, audit the RIG document, and write `{name}_{version}.RIG.yaml`
 7. **Study graph** (`--qc` only) - Run the QC audit over the compiled graph
 
 ## Output Files
