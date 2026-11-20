@@ -2,7 +2,7 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **five subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
+exposes **six subcommands**: `build-fullmap`, `build-kg`, `publish-hf`, `quick-map`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -12,6 +12,7 @@ for the live surface.
 | --- | --- |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
+| [`publish-hf`](#publish-hf) | Validate and publish KGX outputs and RIG metadata to Hugging Face Hub |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model and the Translator registry |
@@ -239,6 +240,26 @@ Exits non-zero on any schema error. See [Table Configuration](configuration/tabl
 tablassert validate table-config.yaml --schema table
 tablassert validate graph.yaml --schema graph
 ```
+
+---
+
+## publish-hf
+
+Validate built KGX artifacts with `validate-kgx` and publish them (Parquet-converted `nodes` and
+`edges` configs, raw NDJSONs, `.RIG.yaml`, and a RIG-derived `README.md` dataset card) to the
+Hugging Face Hub (requires the `[hf]` extra).
+
+```bash
+tablassert publish-hf graph.yaml --repo-id org/my-kg --dry-run
+tablassert publish-hf -f graph.yaml -r org/my-kg
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `GRAPH-CONFIGURATION-FILE` (`--configuration-file`, `-f`) | Path | Yes | n/a | Graph YAML configuration file |
+| `--repo-id`, `-r` | String | Yes | n/a | Target Hugging Face dataset repository ID (`org/dataset`) |
+| `--private` | Flag | No | `false` | Create the dataset repository as private if it does not exist |
+| `--dry-run` | Flag | No | `false` | Print the upload plan without contacting the Hugging Face Hub |
 
 ---
 

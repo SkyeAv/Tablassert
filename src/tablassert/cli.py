@@ -994,6 +994,116 @@ def validate(
         run(3, validate_pipeline, configuration_file)
 
 
+def _hf_dataset_card(g: Any) -> str:
+    """Render a Hugging Face dataset card README.md from Graph and RIG metadata."""
+    rig = getattr(g, "rig", None)
+    if rig is not None:
+        src = rig.source_info
+        terms = src.terms_of_use_info
+        license_line: str = terms.license_name or terms.terms_of_use_description or "See source terms of use"
+        contributions: str = "\n".join(f"- {c}" for c in rig.provenance_info.contributions)
+        description: str = src.description or rig.ingest_info.utility
+        infores_id: str = src.infores_id
+    else:
+        license_line = "See source terms of use"
+        contributions = "- Tablassert"
+        description = f"Knowledge graph {g.name} ({g.version}) built with Tablassert."
+        infores_id = getattr(g, "infores_id", "infores:tablassert")
+    return (
+        "---\n"
+        "configs:\n"
+        "  - config_name: nodes\n"
+        "    data_files:\n"
+        "      - split: train\n"
+        "        path: nodes/*.parquet\n"
+        "  - config_name: edges\n"
+        "    data_files:\n"
+        "      - split: train\n"
+        "        path: edges/*.parquet\n"
+        "---\n\n"
+        f"# {g.name} ({g.version})\n\n"
+        f"{description}\n\n"
+        f"- **Infores:** `{infores_id}`\n"
+        f"- **Terms of use:** {license_line}\n\n"
+        "## Contributions\n\n"
+        f"{contributions}\n"
+    )
+
+
+@APP.command(name="publish-hf")
+def publish_hf(
+    graph_configuration_file: Annotated[Path, cyclopts.Parameter(name=["--configuration-file", "-f"])],
+    repo_id: Annotated[str, cyclopts.Parameter(name=["--repo-id", "-r"])],
+    private: Annotated[bool, cyclopts.Parameter(name=["--private"], negative="")] = False,
+    dry_run: Annotated[bool, cyclopts.Parameter(name=["--dry-run"], negative="")] = False,
+) -> None:
+    """Validate and publish built KGX outputs and RIG metadata as a Hugging Face dataset.
+
+    Args:
+        graph_configuration_file: Path to the Graph YAML configuration file.
+        repo_id: Target Hugging Face dataset repository ID (e.g. ``org/my-kg``).
+        private: Create the dataset repository as private if it does not exist.
+        dry_run: Print the upload plan without contacting the Hugging Face Hub.
+    """
+    from tempfile import TemporaryDirectory
+
+    extras.require("hf", required_by="publish-hf")
+    from tablassert import biolink, ingests
+    from tablassert.models import Graph
+
+    raw: object = ingests.from_yaml(graph_configuration_file)
+    g: Graph = Graph.model_validate(raw)
+    stem: str = f"{g.name}_{g.version}"
+    rig = getattr(g, "rig", None)
+    configured_dir: Path = g.artifact_path if hasattr(g, "artifact_path") else (rig.artifact_base_path if rig is not None else Path("."))  # pyright: ignore[reportAttributeAccessIssue]
+    base_dir: Path = configured_dir if (configured_dir / f"{stem}.nodes.ndjson").is_file() else Path(".")
+    nodes_path: Path = base_dir / f"{stem}.nodes.ndjson"
+    edges_path: Path = base_dir / f"{stem}.edges.ndjson"
+    rig_path: Path = base_dir / f"{stem}.RIG.yaml"
+
+    if not nodes_path.is_file() or not edges_path.is_file():
+        print(f"tablassert publish-hf: built KGX artifacts not found ({nodes_path}, {edges_path}).", file=sys.stderr)
+        raise SystemExit(1)
+
+    report: dict[str, Any] = biolink.validate_kgx(nodes_path, edges_path)
+    if not report.get("ok", report["nodes"]["failures"] == 0 and report["edges"]["failures"] == 0):
+        print(
+            f"tablassert publish-hf: refusing to publish invalid KGX "
+            f"(nodes failures={report['nodes']['failures']}, edges failures={report['edges']['failures']}).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    staged_files: list[str] = ["README.md", "nodes/data.parquet", "edges/data.parquet", nodes_path.name, edges_path.name]
+    if rig_path.is_file():
+        staged_files.append(rig_path.name)
+
+    if dry_run:
+        print(f"Dry run for Hugging Face dataset {repo_id} (private={private}):")
+        for item in staged_files:
+            print(f"  - {item}")
+        return
+
+    from huggingface_hub import HfApi  # pyright: ignore[reportMissingImports]
+
+    with TemporaryDirectory() as tmp:
+        stage: Path = Path(tmp)
+        (stage / "nodes").mkdir()
+        (stage / "edges").mkdir()
+        pl.read_ndjson(nodes_path).write_parquet(stage / "nodes" / "data.parquet")
+        pl.read_ndjson(edges_path).write_parquet(stage / "edges" / "data.parquet")
+        (stage / nodes_path.name).write_bytes(nodes_path.read_bytes())
+        (stage / edges_path.name).write_bytes(edges_path.read_bytes())
+        if rig_path.is_file():
+            (stage / rig_path.name).write_bytes(rig_path.read_bytes())
+        (stage / "README.md").write_text(_hf_dataset_card(g), encoding="utf-8")
+
+        api = HfApi()
+        api.create_repo(repo_id=repo_id, repo_type="dataset", private=private, exist_ok=True)
+        api.upload_folder(folder_path=str(stage), repo_id=repo_id, repo_type="dataset")
+    print(f"Published {g.name} ({g.version}) to Hugging Face dataset {repo_id}.", file=sys.stderr)
+
+
 def _print_kgx_section(label: str, section: dict[str, Any], path: Path) -> None:
     """Print one ``validate-kgx`` per-file section (shared by the plain and ``--prune`` paths)."""
     if section["missing"]:
