@@ -2,7 +2,7 @@
 
 Tablassert extracts knowledge assertions from tabular data into KGX NDJSON. The `tablassert` app
 requires the `[cli]` extra (`pip install "tablassert[cli]"` or `uv tool install "tablassert[cli]"`) and
-exposes **five subcommands**: `build-fullmap`, `build-kg`, `quick-map`, `validate`,
+exposes **six subcommands**: `build-fullmap`, `build-kg`, `draft`, `quick-map`, `validate`,
 and `validate-kgx`, plus an app-level `--version` flag. Run `tablassert --help` (or `<command> --help`)
 for the live surface.
 
@@ -12,6 +12,7 @@ for the live surface.
 | --- | --- |
 | [`build-fullmap`](#build-fullmap) | Build the embedded fullmap redb used for entity resolution |
 | [`build-kg`](#build-kg) | Build a KGX NDJSON knowledge graph from a YAML configuration |
+| [`draft`](#draft) | Generate a schema-valid draft graph config from one or more table configs |
 | [`quick-map`](#quick-map) | Show what fullmap entity resolution does with one or more terms |
 | [`validate`](#validate) | Validate a graph or table configuration without executing it |
 | [`validate-kgx`](#validate-kgx) | Validate built KGX NDJSON against the Biolink Model and the Translator registry |
@@ -239,6 +240,28 @@ Exits non-zero on any schema error. See [Table Configuration](configuration/tabl
 tablassert validate table-config.yaml --schema table
 tablassert validate graph.yaml --schema graph
 ```
+
+---
+
+## draft
+
+Generate a schema-valid draft graph configuration from one or more existing table YAML files, with
+explicit `DRAFT` placeholders for RIG metadata so `tablassert validate --schema graph` passes
+immediately.
+
+```bash
+tablassert draft TABLES...
+tablassert draft table.yaml -o graph.yaml
+```
+
+| Option | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `TABLES` | Path (1+) | Yes | n/a | One or more existing table YAML configuration files |
+| `--output`, `-o` | Path | No | `./graph.yaml` | Destination path for the generated draft graph config |
+| `--force`, `-f` | Flag | No | `false` | Overwrite `--output` if it already exists |
+
+Refuses to overwrite an existing file unless `--force` is passed. Replace all `DRAFT` placeholders
+before publishing.
 
 ---
 

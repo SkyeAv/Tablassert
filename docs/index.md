@@ -32,7 +32,7 @@ expectations.
 
 ### How-to guides
 
-- **[CLI Reference](cli.md)**: every command and flag: `build-kg`, `build-fullmap`, `validate`,
+- **[CLI Reference](cli.md)**: every command and flag: `build-kg`, `build-fullmap`, `draft`, `validate`,
   `validate-kgx`, `quick-map`
 - **[Fullmap](fullmap.md)**: obtain and build the entity-resolution database
 
