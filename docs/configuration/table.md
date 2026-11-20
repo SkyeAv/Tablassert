@@ -91,7 +91,7 @@ Defines the data file location and format.
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"excel"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"excel"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `sheet` | String | No | Sheet name. Defaults to `"Sheet1"`. |
@@ -111,13 +111,13 @@ source:
   row_slice: [1, auto]  # Start at the second physical row, read to end
 ```
 
-> **Specify `kind` explicitly.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally), `ipc` scans an Arrow IPC file (columns renamed positionally), `ndjson` scans newline-delimited JSON (columns renamed positionally), `sql` queries a SQLite database (`table` or `query`); the file on disk is never inspected to infer its format. Because `kind` carries a default, a source whose `kind` is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating `kind` explicitly makes a mis-declared source fail fast.
+> **`kind` is required.** Tablassert selects the reader purely from the declared `kind`: `excel` reads a workbook (`sheet`), `text` scans delimited text (`delimiter`), `parquet` scans a parquet file (columns renamed positionally), `ipc` scans an Arrow IPC file (columns renamed positionally), `ndjson` scans newline-delimited JSON (columns renamed positionally), `sql` queries a SQLite database (`table` or `query`); the file on disk is never inspected to infer its format. Omitting `kind` fails config validation (`union_tag_not_found`).
 
 #### Text Source (CSV/TSV)
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"text"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"text"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `delimiter` | String | No | Field delimiter. Defaults to `","`. |
@@ -149,7 +149,7 @@ as-is.
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"parquet"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"parquet"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
@@ -180,7 +180,7 @@ Only IPC **file layout** is supported; a stream-layout file fails with a clear
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"ipc"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"ipc"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
@@ -213,7 +213,7 @@ from no records.
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"ndjson"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"ndjson"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local file path the source is read from. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `row_slice` | List[NonNegativeInt\|"auto"] | No | Two-value zero-based crop bounds: `[start, stop]`. Each value may be a non-negative integer or `"auto"`. Mutually exclusive with `rows`. |
@@ -246,7 +246,7 @@ StudyResult ids are reproducible across runs. Exactly one of `table` / `query` i
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `kind` | String | No | Source kind. Model default is `"sql"`, but specify it explicitly in configs. |
+| `kind` | String | Yes | Source kind (`"sql"`). Required as the discriminated-union tag. |
 | `local` | Path | Yes | Local path of the SQLite database file. The file must already exist here; Tablassert does not download it. |
 | `url` | List[URL] | Yes | One or more source URLs recorded as provenance (derived sections emit them as the upstream repository supporting entry's `source_record_urls` list, infores:pubmed-central for PMC sections, and in the RIG; when `provenance.override.upstream_source_record_urls` is set, RIG only; the per-upstream mapping determines edge placement instead). At least one URL is required; supply multiple to back a single section with several links. Format-validated only; not fetched. |
 | `table` | String | No | Table to scan, in `rowid` order. Exactly one of `table` / `query`. Plain identifiers only (letters, digits, underscore, not starting with a digit). |

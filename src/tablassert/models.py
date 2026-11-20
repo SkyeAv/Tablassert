@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, NonNegativeInt, PositiveInt, field_validator, model_validator
 
@@ -76,7 +76,7 @@ def _shown(name: str, target: str) -> str:
     return f"`{name}` (coerced to `{target}`)" if target != name else f"`{name}`"
 
 
-def _section_source_label(source: Excel | Text | Parquet | IPC | NDJSON | SQL) -> str:
+def _section_source_label(source: Source) -> str:
     """Render a section's source for a diagnostic message: the local path, plus the sheet for Excel.
 
     Args:
@@ -320,6 +320,9 @@ class SQL(BaseSource):
             )
 
         return self
+
+
+Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]
 
 
 class Regex(TablaBase):
@@ -1017,7 +1020,7 @@ class Annotation(Encoding):
 class Section(TablaBase):
     """Pydantic section model and coercion target for a single table configuration."""
 
-    source: Excel | Text | Parquet | IPC | NDJSON | SQL = Field(..., description="Input source definition for reading tabular rows.")
+    source: Source = Field(..., description="Input source definition for reading tabular rows.")
     statement: Statement = Field(..., description="Subject-object statement mapping for this section.")
     provenance: Provenance = Field(..., description="Provenance metadata applied to all produced edges.")
     annotations: list[Annotation] | None = Field(None, description="Optional extra encoded columns added to each row.")
