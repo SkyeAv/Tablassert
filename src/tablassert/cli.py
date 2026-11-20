@@ -115,29 +115,34 @@ def _section_store_key_for_build(
     from tablassert.utils import file_content_hash, mkhash, section_store_key
 
     config_hash: str = mkhash(section)
-    source: object = section.get("source")
-    local: object = source.get("local") if isinstance(source, dict) else None
-    if local is None:
+    source_entries: list[dict[str, Any]] = []
+    if isinstance(section.get("source"), dict):
+        source_entries.append(section["source"])
+    elif isinstance(section.get("sources"), dict):
+        source_entries.extend(v for v in section["sources"].values() if isinstance(v, dict))
+
+    locals_list: list[str] = [str(s["local"]) for s in source_entries if s.get("local") is not None]
+    if not locals_list:
         return section_store_key(section), config_hash
 
-    resolved: Path = Path(str(local)).resolve()
     config_value: object = section.get("config", "section")
     section_label: str = f"{Path(str(config_value)).stem} · {config_hash[:8]}"
-    digest: str | None = None
-    try:
-        stat = resolved.stat()
-    except OSError:
-        # Reuse the contextual helper so missing/unreadable paths never leak a raw OS error.
-        digest = file_content_hash(resolved, config=configuration_file, section_label=section_label)
-        return section_store_key(section, content_digest=digest), config_hash
-
-    signature: tuple[Path, int, int] = (resolved, stat.st_mtime_ns, stat.st_size)
-    if digest is None:
-        digest = content_hashes.get(signature)
-    if digest is None:
-        digest = file_content_hash(resolved, config=configuration_file, section_label=section_label)
-        content_hashes[signature] = digest
-    return section_store_key(section, content_digest=digest), config_hash
+    digests: list[str] = []
+    for local in locals_list:
+        resolved: Path = Path(local).resolve()
+        try:
+            stat = resolved.stat()
+        except OSError:
+            digests.append(file_content_hash(resolved, config=configuration_file, section_label=section_label))
+            continue
+        signature: tuple[Path, int, int] = (resolved, stat.st_mtime_ns, stat.st_size)
+        digest: str | None = content_hashes.get(signature)
+        if digest is None:
+            digest = file_content_hash(resolved, config=configuration_file, section_label=section_label)
+            content_hashes[signature] = digest
+        digests.append(digest)
+    combined_digest: str = digests[0] if len(digests) == 1 else mkhash(digests)
+    return section_store_key(section, content_digest=combined_digest), config_hash
 
 
 def _load_table_indexed(args: tuple[int, Path]) -> tuple[int, object]:
@@ -363,8 +368,13 @@ def build_graph_pipeline(
     # each entry records the section's local file name and its validated source URLs.
     section_sources: list[dict[str, Any]] = []
     for s in sections:
-        src: dict[str, Any] = s.get("source") or {}
-        section_sources.append({"local": str(src.get("local") or ""), "urls": [str(u) for u in src.get("url") or []]})
+        if isinstance(s.get("sources"), dict):
+            for src in s["sources"].values():
+                if isinstance(src, dict):
+                    section_sources.append({"local": str(src.get("local") or ""), "urls": [str(u) for u in src.get("url") or []]})
+        else:
+            src_single: dict[str, Any] = s.get("source") or {}
+            section_sources.append({"local": str(src_single.get("local") or ""), "urls": [str(u) for u in src_single.get("url") or []]})
 
     # Stage 3/6: build Tcode.
     progress.stage("Building TCode")

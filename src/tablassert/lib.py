@@ -1502,24 +1502,91 @@ def drop_low_number_of_cases(lf: pl.LazyFrame, col: str = "number_of_cases", thr
     return lf.filter(pl.col(col).cast(pl.Float64, strict=False).ge(threshold).fill_null(True))
 
 
-def idxname(col: Any) -> str:
-    """Convert Excel-style column letters (e.g. ``"AA"``) to a polars-style ``column_<n>`` name.
+def _scan_source_dict(src: dict[str, Any]) -> pl.LazyFrame:
+    """Scan a single source dict (used by ``compose_sources``)."""
+    kind: str = str(src["kind"])
+    local: Path = Path(src["local"])
+    if kind == Files.TEXT.value:
+        lf = csv(local, src.get("delimiter", ","))
+    elif kind == Files.EXCEL.value:
+        lf = excel(local, src.get("sheet", "Sheet1"))
+    elif kind == Files.PARQUET.value:
+        lf = parquet(local)
+    elif kind == Files.IPC.value:
+        lf = ipc(local)
+    elif kind == Files.NDJSON.value:
+        lf = ndjson(local)
+    elif kind == Files.SQL.value:
+        lf = sql(local, src.get("table"), src.get("query"))
+    else:
+        raise TablassertError(f"Unsupported source kind: {kind!r}", code="source-file-unreadable")
+    lf = idx(lf)
+    if src.get("row_slice"):
+        lf = crop(lf, src["row_slice"])
+    if src.get("rows"):
+        lf = pick(lf, src["rows"])
+    return lf
 
-    Args:
-        col: Excel column letter (or any value whose ``str`` form is one).
 
-    Returns:
-        ``f"column_{idx}"`` where ``idx`` is the 1-based column number.
+def compose_sources(sources: dict[str, dict[str, Any]], compose: list[dict[str, Any]] | None) -> pl.LazyFrame:
+    """Scan named sources and execute lazy polars join/antijoin composition.
+
+    Each source's ``column_<n>`` columns are namespaced to ``<alias>__column_<n>`` so
+    columns never collide across joined tables. The first declared source's ``row_index``
+    is preserved as the composed frame's row identity.
     """
+    frames: dict[str, pl.LazyFrame] = {}
+    for alias, src in sources.items():
+        lf = _scan_source_dict(src)
+        schema_names: list[str] = lf.collect_schema().names()
+        renames: dict[str, str] = {c: f"{alias}__{c}" for c in schema_names if c.startswith("column_")}
+        if renames:
+            lf = lf.rename(renames)
+        frames[alias] = lf
+
+    primary_alias: str = next(iter(sources))
+    composed: pl.LazyFrame = frames[primary_alias]
+    if not compose:
+        return composed
+
+    for i, step in enumerate(compose):
+        left_name: str = str(step["left"])
+        right_name: str = str(step["right"])
+        how: Literal["inner", "left", "right", "full", "semi", "anti"] = step["how"]
+        on: str | dict[str, str] = step["on"]
+        if isinstance(on, str):
+            left_letter = right_letter = on
+        else:
+            left_letter = on["left"]
+            right_letter = on["right"]
+
+        left_prefix_alias: str = primary_alias if (i > 0 and left_name == "composed") else left_name
+        left_lf: pl.LazyFrame = composed if (i > 0 or left_name == primary_alias) else frames[left_name]
+        right_lf: pl.LazyFrame = (
+            frames[right_name].drop("extracted_from_row_number")
+            if "extracted_from_row_number" in frames[right_name].collect_schema().names()
+            else frames[right_name]
+        )
+        left_on: str = f"{left_prefix_alias}__{idxname(left_letter)}"
+        right_on: str = f"{right_name}__{idxname(right_letter)}"
+        composed = left_lf.join(right_lf, left_on=left_on, right_on=right_on, how=how)
+    return composed
+
+
+def idxname(col: Any, primary_prefix: str = "") -> str:
+    """Convert Excel-style column letters (e.g. ``"AA"`` or ``"lookup:B"``) to a polars column name."""
     scol: str = str(col)
+    if ":" in scol:
+        alias, letter = scol.split(":", 1)
+        return f"{alias}__{idxname(letter)}"
     idx: int = 0
     for char in scol:
         idx = idx * 26 + (ord(char) - 65 + 1)
 
-    return f"column_{idx}"
+    return f"{primary_prefix}column_{idx}"
 
 
-def trim(lf: pl.LazyFrame, regex: str = r"^column_\d+$") -> pl.LazyFrame:
+def trim(lf: pl.LazyFrame, regex: str = r"^(?:[a-zA-Z_][a-zA-Z0-9_]*__)?column_\d+$") -> pl.LazyFrame:
     """Remove columns whose names match the Excel-style ``column_<n>`` convention.
 
     Args:
@@ -1637,9 +1704,10 @@ class Tcode(Section):
             Flat list of ``Any`` items (tuples or lists of tuples, possibly
             containing ``None`` placeholders) ready for ``clean`` to filter.
         """
+        primary_prefix: str = f"{next(iter(self.sources))}__" if self.sources else ""
         return [
             (value, (col, x.encoding)) if x.method == EncodingMethods.VALUE else None,
-            (column, (col, idxname(x.encoding))) if x.method == EncodingMethods.COLUMN else None,
+            (column, (col, idxname(x.encoding, primary_prefix))) if x.method == EncodingMethods.COLUMN else None,
             (column, (f"original_{col}", col)) if table_literal else None,
             (fill, (col, x.fill)) if x.fill else None,
             (explode, (col, x.explode_by)) if x.explode_by else None,
@@ -1681,25 +1749,29 @@ class Tcode(Section):
         return [op for x in tcode if x for op in (self.clean(x) if isinstance(x, list) else [x])]
 
     def _source_ops(self: Self) -> list[Any]:
-        """Collect the load/filter/clean/significance ops that precede entity resolution.
-
-        Returns:
-            Raw (possibly nested, possibly ``None``-padded) op list ready for
-            ``clean``; order matches the pre-resolution pipeline exactly.
-        """
+        """Collect the load/filter/clean/significance ops that precede entity resolution."""
+        if self.sources is not None:
+            dumped_sources: dict[str, dict[str, Any]] = {k: v.model_dump() for k, v in self.sources.items()}
+            dumped_compose: list[dict[str, Any]] | None = [step.model_dump() for step in self.compose] if self.compose else None
+            load_and_filter_ops: list[Any] = [(compose_sources, (dumped_sources, dumped_compose))]
+        else:
+            assert self.source is not None
+            load_and_filter_ops = [
+                (csv, (self.source.local, self.source.delimiter)) if self.source.kind == Files.TEXT else None,  # pyright: ignore
+                (excel, (self.source.local, self.source.sheet)) if self.source.kind == Files.EXCEL else None,  # pyright: ignore
+                (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
+                (ipc, (self.source.local,)) if self.source.kind == Files.IPC else None,  # pyright: ignore
+                (ndjson, (self.source.local,)) if self.source.kind == Files.NDJSON else None,  # pyright: ignore
+                (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
+                if self.source.kind == Files.SQL
+                else None,  # pyright: ignore
+                (idx, ()),
+                (crop, (self.source.row_slice,)) if self.source.row_slice else None,
+                (pick, (self.source.rows,)) if self.source.rows else None,
+                [reindex_op(x) for x in self.source.reindex] if self.source.reindex else None,
+            ]
         return [
-            (csv, (self.source.local, self.source.delimiter)) if self.source.kind == Files.TEXT else None,  # pyright: ignore
-            (excel, (self.source.local, self.source.sheet)) if self.source.kind == Files.EXCEL else None,  # pyright: ignore
-            (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
-            (ipc, (self.source.local,)) if self.source.kind == Files.IPC else None,  # pyright: ignore
-            (ndjson, (self.source.local,)) if self.source.kind == Files.NDJSON else None,  # pyright: ignore
-            (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
-            if self.source.kind == Files.SQL
-            else None,  # pyright: ignore
-            (idx, ()),
-            (crop, (self.source.row_slice,)) if self.source.row_slice else None,
-            (pick, (self.source.rows,)) if self.source.rows else None,
-            [reindex_op(x) for x in self.source.reindex] if self.source.reindex else None,
+            *load_and_filter_ops,
             # --head preview: randomly sample min(HEAD_ROWS, height) rows before any encoding/resolve.
             (head, (HEAD_ROWS,)) if self.head else None,
             [
@@ -1850,7 +1922,7 @@ class Tcode(Section):
         # template into override.sources): an upstream_source_record_urls mapping
         # re-homes URLs exactly as specified (primary gets nothing), any other override
         # keeps the legacy primary-entry emission, and the flag injects nothing there.
-        record_urls: list[str] = [str(u) for u in self.source.url]
+        record_urls: list[str] = [str(u) for u in self.primary_source.url]
         upstream_ids = override.upstream_resource_ids if override else upstream_resource_ids(self.provenance.repo)
         primary_urls: list[str]
         upstream_urls: dict[str, list[str]] | None
@@ -1938,6 +2010,7 @@ PHASE_OF: dict[Callable, str] = {
     csv: "load",
     excel: "load",
     parquet: "load",
+    compose_sources: "load",
     idx: "load",
     crop: "filter",
     pick: "filter",

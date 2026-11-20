@@ -391,9 +391,11 @@ class Encoding(TablaBase):
     @model_validator(mode="after")
     def excel_style_columns(self: Self) -> Self:
         if self.method == EncodingMethods.COLUMN:
-            x = self.encoding
-            if not re.search(r"^[A-Z]{1,3}$", str(x)):
-                raise TablassertValidationError(f"`encoding` must be an Excel-style column name (A-ZZ), got {x!r}.", code="encoding-bad-excel-column")
+            x = str(self.encoding)
+            if not re.search(r"^(?:[a-zA-Z_][a-zA-Z0-9_]*:)?[A-Z]{1,3}$", x):
+                raise TablassertValidationError(
+                    f"`encoding` must be an Excel-style column name (A-ZZ) or `source:COL`, got {x!r}.", code="encoding-bad-excel-column"
+                )
 
         return self
 
@@ -1017,13 +1019,80 @@ class Annotation(Encoding):
         return self
 
 
+class ComposeStep(TablaBase):
+    """One join or antijoin step composing named section sources."""
+
+    left: str = Field(..., min_length=1, description="Left source alias (or `'composed'` for the running frame).")
+    right: str = Field(..., min_length=1, description="Right source alias to join against.")
+    how: Literal["inner", "left", "right", "full", "semi", "anti"] = Field("left", description="Polars join strategy.")
+    on: str | dict[str, str] = Field(
+        ..., description='Join key column letter(s): one Excel column (`A`) for both sides, or `{"left": "A", "right": "B"}`.'
+    )
+
+    @field_validator("on", mode="after")
+    @classmethod
+    def valid_join_columns(cls, value: str | dict[str, str]) -> str | dict[str, str]:
+        col_re = re.compile(r"^[A-Z]{1,3}$")
+        if isinstance(value, str):
+            if not col_re.match(value):
+                raise TablassertValidationError(f"`compose.on` column must be an Excel column letter (A-ZZ), got {value!r}.", code="compose-bad-on")
+            return value
+        if set(value.keys()) != {"left", "right"} or not all(col_re.match(str(v)) for v in value.values()):
+            raise TablassertValidationError(
+                f"`compose.on` mapping must have `left` and `right` Excel column letters (A-ZZ), got {value!r}.", code="compose-bad-on"
+            )
+        return value
+
+
 class Section(TablaBase):
     """Pydantic section model and coercion target for a single table configuration."""
 
-    source: Source = Field(..., description="Input source definition for reading tabular rows.")
+    source: Source | None = Field(None, description="Input source definition for reading tabular rows.")
+    sources: dict[str, Source] | None = Field(
+        None, description="Named input sources for multi-source join/antijoin composition."
+    )
+    compose: list[ComposeStep] | None = Field(None, description="Ordered join/antijoin steps composing `sources`.")
     statement: Statement = Field(..., description="Subject-object statement mapping for this section.")
     provenance: Provenance = Field(..., description="Provenance metadata applied to all produced edges.")
     annotations: list[Annotation] | None = Field(None, description="Optional extra encoded columns added to each row.")
+
+    @property
+    def primary_source(self: Self) -> Source:
+        """Return the single `source` or the first entry in `sources`."""
+        if self.source is not None:
+            return self.source
+        assert self.sources
+        return next(iter(self.sources.values()))
+
+    @model_validator(mode="after")
+    def validate_sources_and_compose(self: Self) -> Self:
+        if self.source is not None and self.sources is not None:
+            raise TablassertValidationError("`source` and `sources` are mutually exclusive; declare one.", code="section-source-conflict")
+        if self.source is None and not self.sources:
+            raise TablassertValidationError("Section requires either `source` or a non-empty `sources` mapping.", code="section-source-required")
+        if self.compose is not None and self.sources is None:
+            raise TablassertValidationError("`compose` requires `sources` to be declared on the section.", code="compose-requires-sources")
+        if self.sources is not None:
+            known: set[str] = set(self.sources.keys())
+            for i, step in enumerate(self.compose or ()):
+                if step.left not in known and not (i > 0 and step.left == "composed"):
+                    raise TablassertValidationError(
+                        f"`compose[{i}].left` references unknown source {step.left!r} (known: {sorted(known)}).", code="compose-unknown-source"
+                    )
+                if step.right not in known:
+                    raise TablassertValidationError(
+                        f"`compose[{i}].right` references unknown source {step.right!r} (known: {sorted(known)}).", code="compose-unknown-source"
+                    )
+            encodings: list[Encoding] = [self.statement.subject, self.statement.object, *(self.statement.qualifiers or ()), *(self.annotations or ())]
+            for enc in encodings:
+                if enc.method == EncodingMethods.COLUMN and ":" in str(enc.encoding):
+                    alias, _ = str(enc.encoding).split(":", 1)
+                    if alias not in known:
+                        raise TablassertValidationError(
+                            f"Column encoding {enc.encoding!r} references unknown source {alias!r} (known: {sorted(known)}).",
+                            code="encoding-unknown-source",
+                        )
+        return self
 
     @model_validator(mode="after")
     def drop_unpaired_effect_annotations(self) -> Self:
@@ -1056,7 +1125,7 @@ class Section(TablaBase):
 
         dropped_target: str = "effect_size" if has_size else "effect_type"
         sibling: str = "effect_type" if has_size else "effect_size"
-        where: str = _section_source_label(self.source)
+        where: str = _section_source_label(self.primary_source)
         kept: list[Annotation] = []
         for annotation in annotations:
             name: str = str(annotation.annotation)
