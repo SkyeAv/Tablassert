@@ -1170,6 +1170,21 @@ def ndjson(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def hf(repo_id: str, config: str | None = None, split: str = "train", revision: str | None = None) -> pl.LazyFrame:
+    """Read a Hugging Face dataset split as a LazyFrame with positional ``column_<n>`` names."""
+    from tablassert import extras
+
+    extras.require("hf", required_by="kind: hf")
+    from datasets import load_dataset  # pyright: ignore[reportMissingImports]
+
+    ds = load_dataset(repo_id, name=config, split=split, revision=revision)
+    arrow_tbl = getattr(getattr(ds, "data", None), "table", None)
+    df: pl.DataFrame = pl.from_arrow(arrow_tbl) if arrow_tbl is not None else pl.from_dicts(list(ds))  # pyright: ignore[reportAssignmentType]
+    lf: pl.LazyFrame = df.lazy()
+    names: list[str] = list(lf.collect_schema().names())
+    return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
+
+
 def crop(lf: pl.LazyFrame, row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]]) -> pl.LazyFrame:
     """Take a contiguous slice from a LazyFrame.
 
@@ -1696,6 +1711,7 @@ class Tcode(Section):
             (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
             if self.source.kind == Files.SQL
             else None,  # pyright: ignore
+            (hf, (self.source.repo_id, self.source.config, self.source.split, self.source.revision)) if self.source.kind == Files.HF else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,
@@ -1938,6 +1954,7 @@ PHASE_OF: dict[Callable, str] = {
     csv: "load",
     excel: "load",
     parquet: "load",
+    hf: "load",
     idx: "load",
     crop: "filter",
     pick: "filter",

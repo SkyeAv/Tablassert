@@ -86,6 +86,8 @@ def _section_source_label(source: Source) -> str:
         A backtick-quoted local path, suffixed with the worksheet name when the source is an
         Excel file reading one.
     """
+    if isinstance(source, HFSource):
+        return f"`hf:{source.repo_id}`"
     label: str = f"`{source.local}`"
     if isinstance(source, Excel) and source.sheet is not None:
         label += f" (sheet `{source.sheet}`)"
@@ -322,9 +324,31 @@ class SQL(BaseSource):
         return self
 
 
-Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]
+class HFSource(TablaBase):
+    kind: Literal[Files.HF] = Field(Files.HF, description="Source kind; must be 'hf'.")
+    repo_id: str = Field(..., min_length=1, description="Hugging Face dataset repository ID (e.g. `org/dataset`).")
+    config: str | None = Field(None, description="Optional dataset configuration/subset name.")
+    split: str = Field("train", description="Dataset split to load (defaults to `train`).")
+    revision: str | None = Field(None, description="Optional git revision or commit SHA to pin for reproducible builds.")
+    url: list[HttpUrl] = Field(default_factory=list, description="Provenance URLs; defaults to the Hugging Face dataset URL.")
+    row_slice: list[NonNegativeInt | Literal[Tokens.AUTO]] | None = Field(
+        None, min_length=2, max_length=2, description="Zero-based [start, stop] row slice bounds (mutually exclusive with `rows`)."
+    )
+    rows: list[NonNegativeInt] | None = Field(None, description="Explicit zero-based row indices to retain (mutually exclusive with `row_slice`).")
+    reindex: list[Reindex] | None = Field(None, description="Sequential row filters applied using source column values.")
+
+    @model_validator(mode="after")
+    def default_hf_url_and_row_slice(self: Self) -> Self:
+        if not self.url:
+            self.url = [HttpUrl(f"https://huggingface.co/datasets/{self.repo_id}")]
+        if self.row_slice is not None and self.rows is not None:
+            raise TablassertValidationError(
+                "`row_slice` and `rows` are mutually exclusive on one source; pick one.", code="config-rows-and-row-slice-conflict"
+            )
+        return self
 
 
+Source: TypeAlias = Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL | HFSource, Field(discriminator="kind")]
 class Regex(TablaBase):
     pattern: int | float | str = Field(..., description="Regex pattern passed to string replacement.", examples=["\\s+", "\\.$"])
 

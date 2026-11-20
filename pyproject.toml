@@ -98,6 +98,10 @@ qc = [
 log = [
     "loguru>=0.7.3",
 ]
+hf = [
+    "datasets>=3.0.0",
+    "huggingface-hub>=0.25.0",
+]
 
 [dependency-groups]
 test = [
@@ -229,4 +233,4 @@ aria2 = "aria2c"
 #   distribution "aria2" exposes import module "aria2c" (see the [aria2] extra comment).
 # - sentence-transformers: loaded through LazyModule("sentence_transformers") in qc.py.
 # - pyarrow/fastexcel: polars Excel/IPC engines (pl.read_excel engine="calamine" loads fastexcel).
-DEP002 = ["polars", "aria2", "sentence-transformers", "pyarrow", "fastexcel"]
+DEP002 = ["polars", "aria2", "sentence-transformers", "pyarrow", "fastexcel", "huggingface-hub"]

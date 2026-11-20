@@ -60,6 +60,7 @@ class Files(str, Enum):
     IPC = "ipc"
     NDJSON = "ndjson"
     SQL = "sql"
+    HF = "hf"
 
 
 class EncodingMethods(str, Enum):
