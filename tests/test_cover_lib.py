@@ -121,6 +121,44 @@ def test_excel_reads_sheet_without_header(tmp_path: Path) -> None:
     assert df.rows() == [("a", "b"), ("c", "d")]
 
 
+def test_excel_missing_extra_raises_before_read_excel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default ``calamine`` Excel reads preflight ``[excel]`` before ``pl.read_excel``."""
+    from tablassert import extras
+    from tablassert.errors import MissingExtraError
+
+    real_find_spec = extras.find_spec
+
+    def _no_fastexcel(name: str, package: str | None = None) -> Any:
+        if name == "fastexcel":
+            return None
+        return real_find_spec(name, package)
+
+    def _fail_read_excel(*_args: Any, **_kwargs: Any) -> pl.DataFrame:
+        raise AssertionError("pl.read_excel must not be called when fastexcel is missing")
+
+    monkeypatch.setattr(extras, "find_spec", _no_fastexcel)
+    monkeypatch.setattr(pl, "read_excel", _fail_read_excel)
+
+    with pytest.raises(MissingExtraError) as exc_info:
+        lib.excel(tmp_path / "book.xlsx", "Sheet1")
+    message: str = str(exc_info.value)
+    assert "fastexcel" in message
+    assert 'pip install "tablassert[excel]"' in message
+    assert 'uv tool install "tablassert[excel]"' in message
+
+    wb: openpyxl.Workbook = openpyxl.Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Sheet1"
+    ws.append(["x", "y"])
+    xp: Path = tmp_path / "openpyxl.xlsx"
+    wb.save(xp)
+    monkeypatch.undo()
+    monkeypatch.setattr(extras, "find_spec", _no_fastexcel)
+    df: pl.DataFrame = lib.excel(xp, "Sheet1", engine="openpyxl").collect()
+    assert df.rows() == [("x", "y")]
+
+
 def test_parquet_reads_schema_and_renames_columns_positionally(tmp_path: Path) -> None:
     """``parquet`` scans lazily and maps the file's real names to positional ``column_<n>``.
 

@@ -950,11 +950,19 @@ def excel(p: Path, sheet: str, engine: str = "calamine") -> pl.LazyFrame:
     Returns:
         LazyFrame over the sheet contents (no header inference).
 
+    Raises:
+        MissingExtraError: When ``engine == "calamine"`` and the ``[excel]`` extra
+            (``fastexcel``) is not installed.
+
     Notes:
         Headerless auto column names are remapped to the 1-based ``column_1``..
         convention so existing table configs keep referencing the same names as
         under polars 1.x (output parity).
     """
+    if engine == "calamine":
+        from tablassert.extras import require
+
+        require("excel", required_by="Excel input")
     df: pl.DataFrame = pl.read_excel(
         source=p,
         sheet_name=sheet,

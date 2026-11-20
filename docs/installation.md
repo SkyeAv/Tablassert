@@ -1,6 +1,6 @@
 # Installation
 
-Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `log` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, or loguru-backed logging).
+Install Tablassert's Python API, then add the `[cli]` extra to use the `tablassert` command and any of the `rt` / `aria2` / `qc` / `log` / `excel` extras that match how you will use it (runtime compatibility, accelerated fullmap downloads, auditing mappings, loguru-backed logging, or Excel input).
 
 ## Prerequisites
 
@@ -38,6 +38,7 @@ uv tool install "tablassert[cli]"   # or: pip install "tablassert[cli]"
 | `aria2` | Bundled aria2c downloader, used automatically by `build-fullmap` when installed (Linux/Windows wheels only) | `aria2==0.0.1b0` (imports as `aria2c`, bundles aria2c) |
 | `qc` | QC runtime (exact match, fuzzy match, abbreviation expansion, then a SapBERT embedding audit) | `scikit-learn`, `sentence-transformers` (`torch` + `numpy` arrive transitively; `rapidfuzz` is a core dependency) |
 | `log` | loguru-backed file/progress logging (rotation, enqueue) | `loguru` |
+| `excel` | Excel (`.xlsx`) input via Polars' `calamine` engine | `fastexcel` |
 
 Install any extra the same way: `uv tool install "tablassert[<extra>]"` or
 `pip install "tablassert[<extra>]"`, and combine them as `"tablassert[cli,qc]"`. Wheels ship for
@@ -48,9 +49,9 @@ Linux and macOS; elsewhere pip builds from the sdist, which needs a Rust toolcha
 
     The bundled aria2c dependency is GPL-2.0. Tablassert remains Apache-2.0 and does not vendor aria2c, but redistributors who ship the optional extra should review GPL-2.0 obligations.
 
-Excel (`.xlsx`) input is read through Polars' `calamine` engine, which ships with the base install
-(`fastexcel`). Workbooks that calamine cannot parse are rejected with its error; there is no fallback
-engine.
+Excel (`.xlsx`) input defaults to Polars' `calamine` engine, which requires the `[excel]` extra
+(`fastexcel`). When `fastexcel` is absent, `lib.excel()` raises `MissingExtraError` before calling
+`pl.read_excel()`. Passing an explicit non-calamine engine such as `openpyxl` does not require `[excel]`.
 
 #### When an extra is missing
 
@@ -72,6 +73,7 @@ fails, not a failure report):
 | `tablassert` | `[cli]` | Before importing the command application, so a base Python-API install reports the exact install command instead of a bare module error |
 | `build-kg --qc` | `[qc]` | Before the build starts: the QC audit runs at the very end of the build, so a late failure would cost the entire entity-resolution pass |
 | `build-fullmap` | `[aria2]` | Before the first download, to pick the downloader: bundled aria2c when the extra is installed, Python downloader otherwise (announced on stderr and logged either way; never a missing-extra failure) |
+| `lib.excel()` | `[excel]` | Before `pl.read_excel()` when `engine == "calamine"` (explicit non-calamine engines such as `openpyxl` remain independent) |
 
 A partially installed extra names every package it is still missing, so installing them is one step
 rather than a retry loop. Library calls that reach an optional import directly (for example
@@ -101,7 +103,7 @@ Editable install plus the development tools; needs `uv` and a Rust toolchain.
 ```bash
 git clone https://github.com/SkyeAv/Tablassert.git
 cd Tablassert
-uv sync --group dev --extra cli --extra qc --extra log
+uv sync --group dev --extra cli --extra qc --extra log --extra excel
 uv run maturin develop --manifest-path rust/Cargo.toml
 uv run tablassert --help
 ```

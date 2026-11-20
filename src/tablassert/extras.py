@@ -34,6 +34,7 @@ EXTRA_PACKAGES: Final[dict[str, dict[str, str]]] = {
     "aria2": {"aria2c": "aria2"},
     "qc": {"sklearn": "scikit-learn", "sentence_transformers": "sentence-transformers"},
     "log": {"loguru": "loguru"},
+    "excel": {"fastexcel": "fastexcel"},
 }
 
 # Import name -> owning extra, derived so the two can never drift apart.
@@ -46,6 +47,7 @@ FEATURES: Final[dict[str, str]] = {
     "aria2": "the bundled aria2c downloader (used automatically by build-fullmap when installed)",
     "qc": "the QC audit",
     "log": "file and progress logging",
+    "excel": "Excel input",
 }
 
 
