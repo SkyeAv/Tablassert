@@ -98,6 +98,10 @@ qc = [
 log = [
     "loguru>=0.7.3",
 ]
+webui = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+]
 
 [dependency-groups]
 test = [

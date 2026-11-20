@@ -994,6 +994,32 @@ def validate(
         run(3, validate_pipeline, configuration_file)
 
 
+@APP.command(name="webui")
+def webui(
+    host: Annotated[str, cyclopts.Parameter(name=["--host"])] = "127.0.0.1",
+    port: Annotated[int, cyclopts.Parameter(name=["--port", "-p"])] = 8765,
+    output_dir: Annotated[Path, cyclopts.Parameter(name=["--output-dir", "-o"])] = Path("."),
+) -> None:
+    """Start the localhost-only Web UI for YAML-free config authoring and builds.
+
+    Requires the ``[webui]`` extra (``fastapi`` and ``uvicorn``). Binds to localhost
+    only (``127.0.0.1``, ``localhost``, or ``::1``) with no remote exposure.
+
+    Args:
+        host: Loopback interface to bind (default: ``127.0.0.1``).
+        port: TCP port to listen on (default: ``8765``).
+        output_dir: Directory where generated ``graph.yaml`` and ``tables/table.yaml`` are written.
+    """
+    extras.require("webui", required_by="tablassert webui")
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        print(f"tablassert webui: refusing non-localhost host {host!r}; bind to 127.0.0.1, localhost, or ::1.", file=sys.stderr)
+        raise SystemExit(1)
+
+    from tablassert.webui import run_server
+
+    run_server(host=host, port=port, output_dir=output_dir)
+
+
 def _print_kgx_section(label: str, section: dict[str, Any], path: Path) -> None:
     """Print one ``validate-kgx`` per-file section (shared by the plain and ``--prune`` paths)."""
     if section["missing"]:

@@ -20,6 +20,7 @@ entry when the name gains a static reference.
 
 from typing import Any
 
+from tablassert.cli import webui
 from tablassert.enums import ContentCategories, DataFormats, FillMethods, IngestCategories, ModelingCategories, ProvisionMechanisms, SourceStatuses
 from tablassert.models import (
     RIGFilteredContent,
@@ -30,6 +31,7 @@ from tablassert.models import (
     RIGSourceInfo,
     RIGSupportingDataSourceInfo,
 )
+from tablassert.webui import HealthResponse, ValidationResponse
 
 # Stand-in receiver for names that are not importable symbols (parameters and
 # instance attributes); vulture only needs to see the name used.
@@ -105,3 +107,10 @@ RIGFutureContentConsideration.consideration
 RIGFutureModelingConsideration.consideration
 RIGSupportingDataSourceInfo.terms_of_use_info
 RIGProvenanceInfo.artifacts
+
+# cli.py / webui.py: Cyclopts subcommand and FastAPI response model fields.
+webui
+HealthResponse.status
+HealthResponse.version
+ValidationResponse.table_yaml
+ValidationResponse.graph_yaml
