@@ -1973,8 +1973,8 @@
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"excel"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"excel"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
@@ -2024,7 +2024,7 @@
 <a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">row_slice</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">auto</span><span class="p p-Indicator">]</span><span class="w">  </span><span class="c1"># Start at the second physical row, read to end</span>
 </code></pre></div>
 <blockquote>
-<p><strong>Specify <code>kind</code> explicitly.</strong> Tablassert selects the reader purely from the declared <code>kind</code>: <code>excel</code> reads a workbook (<code>sheet</code>), <code>text</code> scans delimited text (<code>delimiter</code>), <code>parquet</code> scans a parquet file (columns renamed positionally), <code>ipc</code> scans an Arrow IPC file (columns renamed positionally), <code>ndjson</code> scans newline-delimited JSON (columns renamed positionally), <code>sql</code> queries a SQLite database (<code>table</code> or <code>query</code>); the file on disk is never inspected to infer its format. Because <code>kind</code> carries a default, a source whose <code>kind</code> is omitted or does not match the actual file is still accepted and fed to the wrong reader, surfacing only later as a read error or garbled rows. Stating <code>kind</code> explicitly makes a mis-declared source fail fast.</p>
+<p><strong><code>kind</code> is required.</strong> Tablassert selects the reader purely from the declared <code>kind</code>: <code>excel</code> reads a workbook (<code>sheet</code>), <code>text</code> scans delimited text (<code>delimiter</code>), <code>parquet</code> scans a parquet file (columns renamed positionally), <code>ipc</code> scans an Arrow IPC file (columns renamed positionally), <code>ndjson</code> scans newline-delimited JSON (columns renamed positionally), <code>sql</code> queries a SQLite database (<code>table</code> or <code>query</code>); the file on disk is never inspected to infer its format. Omitting <code>kind</code> fails config validation (<code>union_tag_not_found</code>).</p>
 </blockquote>
 <h4 id="text-source-csvtsv">Text Source (CSV/TSV)<a class="headerlink" href="#text-source-csvtsv" title="Permanent link">&para;</a></h4>
 <table>
@@ -2040,8 +2040,8 @@
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"text"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"text"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
@@ -2111,8 +2111,8 @@ as-is.</p>
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"parquet"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"parquet"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
@@ -2176,8 +2176,8 @@ Only IPC <strong>file layout</strong> is supported; a stream-layout file fails w
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"ipc"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"ipc"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
@@ -2243,8 +2243,8 @@ from no records.</p>
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"ndjson"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"ndjson"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
@@ -2310,8 +2310,8 @@ StudyResult ids are reproducible across runs. Exactly one of <code>table</code> 
 <tr>
 <td><code>kind</code></td>
 <td>String</td>
-<td>No</td>
-<td>Source kind. Model default is <code>"sql"</code>, but specify it explicitly in configs.</td>
+<td>Yes</td>
+<td>Source kind (<code>"sql"</code>). Required as the discriminated-union tag.</td>
 </tr>
 <tr>
 <td><code>local</code></td>
