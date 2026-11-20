@@ -255,6 +255,7 @@ OP_COST: dict[Callable, int] = {
     lib.parquet: 2,
     lib.ipc: 2,
     lib.ndjson: 2,
+    lib.sql: 2,
     # Filter: single lazy row predicates/slices.
     lib.idx: 1,
     lib.crop: 1,

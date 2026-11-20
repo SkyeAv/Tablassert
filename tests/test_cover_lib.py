@@ -173,6 +173,131 @@ def test_ipc_rename_tracks_schema_order_not_name_order(tmp_path: Path) -> None:
     assert df["column_2"].to_list() == ["x", "y"]
 
 
+def test_sql_reads_table_in_rowid_order(tmp_path: Path) -> None:
+    """``sql`` scans a table via stdlib sqlite3 and renames columns positionally.
+
+    The whole-table path appends ``ORDER BY rowid`` so row indices and ``row:<N>`` ids are
+    reproducible across runs.
+    """
+    import sqlite3
+
+    db: Path = tmp_path / "genes.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT, gene_b TEXT, p REAL)")
+    conn.executemany("INSERT INTO genes VALUES (?, ?, ?)", [("brca1", "mapk1", 0.5), ("brca1", "mapk1", 0.01)])
+    conn.commit()
+    conn.close()
+
+    lf: pl.LazyFrame = lib.sql(db, "genes", None)
+    assert isinstance(lf, pl.LazyFrame)
+    df: pl.DataFrame = lf.collect()
+    assert df.columns == ["column_1", "column_2", "column_3"]
+    assert df["column_1"].to_list() == ["brca1", "brca1"]
+    assert df["column_3"].to_list() == [0.5, 0.01]
+
+
+def test_sql_query_rename_and_empty_result(tmp_path: Path) -> None:
+    """A ``query`` renames in result order; a zero-row result keeps its column schema."""
+    import sqlite3
+
+    db: Path = tmp_path / "genes.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT, gene_b TEXT)")
+    conn.executemany("INSERT INTO genes VALUES (?, ?)", [("brca1", "mapk1")])
+    conn.commit()
+    conn.close()
+
+    df: pl.DataFrame = lib.sql(db, None, "SELECT gene_b, gene_a FROM genes ORDER BY gene_a").collect()
+    assert df.columns == ["column_1", "column_2"]
+    assert df["column_1"].to_list() == ["mapk1"]
+
+    empty: pl.LazyFrame = lib.sql(db, None, "SELECT gene_a FROM genes WHERE 0 ORDER BY gene_a")
+    assert empty.collect_schema().names() == ["column_1"]
+    assert empty.collect().shape == (0, 1)
+
+
+def test_sql_query_requires_order_by(tmp_path: Path) -> None:
+    """An ORDER BY-less query would give non-reproducible row order; fail coded."""
+    import sqlite3
+
+    db: Path = tmp_path / "genes.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(TablassertError, match="sql-query-needs-order-by"):
+        lib.sql(db, None, "SELECT * FROM genes")
+
+
+def test_sql_rejects_non_plain_identifier_table(tmp_path: Path) -> None:
+    """The table name is interpolated as a quoted identifier; only plain names pass."""
+    import sqlite3
+
+    db: Path = tmp_path / "genes.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(TablassertError, match="sql-invalid-table-name"):
+        lib.sql(db, 'genes"; DROP TABLE genes; --', None)
+
+
+def test_sql_missing_db_raises_source_file_error(tmp_path: Path) -> None:
+    """A missing SQLite file fails with ``source-file-unreadable`` without creating an empty DB."""
+    missing: Path = tmp_path / "missing.db"
+    with pytest.raises(TablassertError, match="source-file-unreadable"):
+        lib.sql(missing, "genes", None)
+    assert not missing.exists()
+
+
+def test_sql_rejects_write_query_and_fake_order_by(tmp_path: Path) -> None:
+    """Read-only authorizer blocks DML/DDL even with a trailing ``-- order by`` comment."""
+    import sqlite3
+
+    db: Path = tmp_path / "genes.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT)")
+    conn.execute("INSERT INTO genes VALUES ('brca1')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(TablassertError, match="sql-query-needs-order-by"):
+        lib.sql(db, None, "DELETE FROM genes RETURNING * -- order by")
+    with pytest.raises(TablassertError, match="sql-query-needs-order-by"):
+        lib.sql(db, None, "SELECT * FROM (SELECT gene_a FROM genes ORDER BY gene_a)")
+    with pytest.raises(TablassertError, match="sql-query-not-read-only"):
+        lib.sql(db, None, "INSERT INTO genes SELECT gene_a FROM genes ORDER BY gene_a")
+    with pytest.raises(TablassertError, match="sql-query-not-read-only"):
+        lib.sql(db, None, "CREATE TABLE evil AS SELECT gene_a FROM genes ORDER BY gene_a")
+
+    df: pl.DataFrame = lib.sql(db, None, "SELECT gene_a, gene_a FROM genes ORDER\nBY gene_a").collect()
+    assert df.columns == ["column_1", "column_2"]
+    assert df.rows() == [("brca1", "brca1")]
+
+    empty_dup: pl.DataFrame = lib.sql(db, None, "SELECT gene_a, gene_a FROM genes WHERE 0 ORDER BY gene_a").collect()
+    assert empty_dup.columns == ["column_1", "column_2"]
+    assert empty_dup.shape == (0, 2)
+
+
+def test_sql_allows_read_only_recursive_cte(tmp_path: Path) -> None:
+    """Read-only recursive CTEs (``SQLITE_RECURSIVE``) are permitted by the authorizer."""
+    import sqlite3
+
+    db: Path = tmp_path / "cte.db"
+    conn: sqlite3.Connection = sqlite3.connect(db)
+    conn.execute("CREATE TABLE genes (gene_a TEXT)")
+    conn.commit()
+    conn.close()
+
+    df: pl.DataFrame = lib.sql(
+        db, None, "WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 3) SELECT x FROM cnt ORDER BY x"
+    ).collect()
+    assert df.columns == ["column_1"]
+    assert df["column_1"].to_list() == [1, 2, 3]
+
+
 def test_ipc_reads_empty_frame(tmp_path: Path) -> None:
     """An empty IPC file still yields its (renamed) schema, so downstream ops see the columns."""
     ap: Path = tmp_path / "empty.arrow"

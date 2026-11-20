@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import operator
 import re
@@ -46,7 +47,7 @@ from tablassert.coerce import (
     study_size_target,
 )
 from tablassert.enums import Comparisons, EncodingMethods, Files, Functions, InformationResources, Repositories, Tokens
-from tablassert.errors import TablassertError
+from tablassert.errors import SourceFileError, TablassertError
 from tablassert.fullmap import ResolveSpec, fullmap_db_path, resolve, resolve_batch
 from tablassert.log import cat
 from tablassert.models import EDGE_ID_PLACEHOLDER, Encoding, NodeEncoding, Qualifier, Reindex, RIGConfig, Section
@@ -986,6 +987,125 @@ def parquet(p: Path) -> pl.LazyFrame:
     return lf.rename(dict(zip(names, (f"column_{i + 1}" for i in range(len(names))), strict=True)))
 
 
+def _has_top_level_order_by(query: str) -> bool:
+    """Return True if ``query`` contains an ``ORDER BY`` clause at parenthesis depth 0 outside comments and literals."""
+    tokens: list[str] = []
+    depth: int = 0
+    i: int = 0
+    n: int = len(query)
+    while i < n:
+        ch: str = query[i]
+        nxt: str = query[i + 1] if i + 1 < n else ""
+        if ch == "-" and nxt == "-":
+            end: int = query.find("\n", i + 2)
+            i = n if end == -1 else end + 1
+            tokens.append(" ")
+            continue
+        if ch == "/" and nxt == "*":
+            end = query.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            tokens.append(" ")
+            continue
+        if ch in ("'", '"', "`"):
+            quote: str = ch
+            i += 1
+            while i < n:
+                if query[i] == quote:
+                    if i + 1 < n and query[i + 1] == quote:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            tokens.append(" ")
+            continue
+        if ch == "[":
+            end = query.find("]", i + 1)
+            i = n if end == -1 else end + 1
+            tokens.append(" ")
+            continue
+        if ch == "(":
+            depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            depth = max(0, depth - 1)
+            i += 1
+            continue
+        if depth == 0:
+            tokens.append(ch)
+        i += 1
+    top_level: str = "".join(tokens)
+    return re.search(r"\bORDER\s+BY\b", top_level, re.IGNORECASE) is not None
+
+
+def sql(p: Path, table: str | None, query: str | None) -> pl.LazyFrame:
+    """Read a SQLite source as a LazyFrame with positional ``column_<n>`` names.
+
+    Args:
+        p: Path to the SQLite database file.
+        table: Table to scan as ``SELECT * FROM "table" ORDER BY rowid``.
+        query: Full SELECT query; must carry its own top-level ``ORDER BY`` clause.
+
+    Returns:
+        LazyFrame whose columns are named ``column_1..`` in result order.
+
+    Raises:
+        SourceFileError: ``source-file-unreadable`` when ``p`` does not exist as a file.
+        TablassertError: ``sql-invalid-table-name`` when ``table`` is not a plain identifier.
+        TablassertError: ``sql-query-needs-order-by`` when a ``query`` has no top-level ORDER BY —
+            row indices and ``row:<N>`` StudyResult ids must be reproducible across runs.
+        TablassertError: ``sql-query-not-read-only`` when a ``query`` attempts writes or non-read-only operations.
+
+    Notes:
+        The result carries its own column names, but the config contract addresses columns
+        positionally (Excel-style ``A-ZZ`` encoding letters resolve to ``column_<n>``), so
+        the reader names result columns ``column_1..`` directly at DataFrame construction --
+        the same convention the ``parquet`` reader produces. Opens the database in read-only
+        mode (``?mode=ro``) with an authorizer permitting only ``SELECT`` / ``READ`` /
+        ``FUNCTION``. Uses stdlib ``sqlite3``: zero new dependencies, single-engine by design;
+        multi-engine ``connection`` strings are a documented follow-up. ``table`` quoting uses
+        bound-parameter-style double quotes with the identifier validated as a plain name first.
+    """
+    import sqlite3
+
+    if not p.is_file():
+        raise SourceFileError(p, "SQLite database file does not exist.")
+
+    if query is not None:
+        if not _has_top_level_order_by(query):
+            raise TablassertError(
+                f"`sql` query for {p} has no top-level ORDER BY clause; row order (and row:<N> ids) would not be reproducible across runs.",
+                code="sql-query-needs-order-by",
+            )
+        statement: str = query
+    else:
+        if not table or not table.replace("_", "a").isalnum() or table[0].isdigit():
+            raise TablassertError(f"`sql` table name {table!r} for {p} is not a plain identifier.", code="sql-invalid-table-name")
+        statement = f'SELECT * FROM "{table}" ORDER BY rowid'
+
+    allowed_actions: frozenset[int] = frozenset({sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION, sqlite3.SQLITE_RECURSIVE})
+
+    def _authorizer(action: int, _arg1: str | None, _arg2: str | None, _db_name: str | None, _trigger: str | None) -> int:
+        return sqlite3.SQLITE_OK if action in allowed_actions else sqlite3.SQLITE_DENY
+
+    uri: str = f"{p.resolve().as_uri()}?mode=ro"
+    with contextlib.closing(sqlite3.connect(uri, uri=True)) as conn:
+        conn.set_authorizer(_authorizer)
+        try:
+            cur: sqlite3.Cursor = conn.execute(statement)
+            if cur.description is None:
+                raise TablassertError(f"`sql` query for {p} did not return a result set.", code="sql-query-not-read-only")
+            col_names: list[str] = [f"column_{i + 1}" for i in range(len(cur.description))]
+            rows: list[tuple[Any, ...]] = cur.fetchall()
+        except sqlite3.DatabaseError as exc:
+            if "not authorized" in str(exc).lower():
+                raise TablassertError(f"`sql` query for {p} must be read-only: {exc}", code="sql-query-not-read-only") from exc
+            raise
+    df: pl.DataFrame = pl.DataFrame(rows, schema=col_names, orient="row") if rows else pl.DataFrame({n: [] for n in col_names})
+    return df.lazy()
+
+
 def ipc(p: Path) -> pl.LazyFrame:
     """Read an Arrow IPC (Feather v2 / `.arrow`) source as a LazyFrame with positional ``column_<n>`` names.
 
@@ -1573,6 +1693,9 @@ class Tcode(Section):
             (parquet, (self.source.local,)) if self.source.kind == Files.PARQUET else None,  # pyright: ignore
             (ipc, (self.source.local,)) if self.source.kind == Files.IPC else None,  # pyright: ignore
             (ndjson, (self.source.local,)) if self.source.kind == Files.NDJSON else None,  # pyright: ignore
+            (sql, (self.source.local, getattr(self.source, "table", None), getattr(self.source, "query", None)))
+            if self.source.kind == Files.SQL
+            else None,  # pyright: ignore
             (idx, ()),
             (crop, (self.source.row_slice,)) if self.source.row_slice else None,
             (pick, (self.source.rows,)) if self.source.rows else None,

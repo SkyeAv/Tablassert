@@ -17,7 +17,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from tablassert.biolink import _build_str_enum, _category_name
-from tablassert.models import IPC, NDJSON, Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
+from tablassert.models import IPC, NDJSON, SQL, Excel, Graph, ManualProvenance, Parquet, Section, Text, _section_source_label
 
 
 def test_manual_provenance_explicit_none_publications_short_circuits() -> None:
@@ -130,8 +130,11 @@ def test_section_accepts_all_source_kinds() -> None:
         "statement": {"subject": {"method": "value", "encoding": "BRCA1"}, "object": {"method": "value", "encoding": "TP53"}},
         "provenance": {"repo": "PMC", "publication": "PMC0000000"},
     }
-    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet), ("ipc", IPC), ("ndjson", NDJSON)]:
-        payload: dict[str, Any] = {**base, "source": {"kind": kind, "local": f"./table.{kind}", "url": [f"https://example.com/table.{kind}"]}}
+    for kind, model in [("text", Text), ("excel", Excel), ("parquet", Parquet), ("ipc", IPC), ("ndjson", NDJSON), ("sql", SQL)]:
+        source: dict[str, Any] = {"kind": kind, "local": f"./table.{kind}", "url": [f"https://example.com/table.{kind}"]}
+        if kind == "sql":
+            source["table"] = "t"  # `sql` requires exactly one of table/query.
+        payload: dict[str, Any] = {**base, "source": source}
         section: Section = Section.model_validate(payload)
         assert section.source.kind == kind
         assert type(section.source) is model
@@ -149,6 +152,7 @@ def test_section_source_label_per_kind() -> None:
     assert _section_source_label(Parquet.model_validate({"kind": "parquet", "local": "./t.parquet", "url": urls})) == "`t.parquet`"
     assert _section_source_label(IPC.model_validate({"kind": "ipc", "local": "./t.arrow", "url": urls})) == "`t.arrow`"
     assert _section_source_label(NDJSON.model_validate({"kind": "ndjson", "local": "./t.ndjson", "url": urls})) == "`t.ndjson`"
+    assert _section_source_label(SQL.model_validate({"kind": "sql", "local": "./t.db", "url": urls, "table": "t"})) == "`t.db`"
     excel: Excel = Excel.model_validate({"kind": "excel", "local": "./t.xlsx", "url": urls, "sheet": "S1"})
     assert _section_source_label(excel) == "`t.xlsx` (sheet `S1`)"
 
@@ -198,3 +202,16 @@ def test_graph_rig_output_unchanged_for_rig_bearing_graphs(rig_factory: Any) -> 
     assert graph.infores_id == graph.rig.source_info.infores_id
     assert graph.artifact_path == Path(graph.rig.artifact_base_path)
     assert graph.uuid_namespace == graph.rig.source_info.infores_id
+
+
+def test_sql_source_requires_exactly_one_selector() -> None:
+    """``table`` and ``query`` are mutually exclusive and one is required."""
+    base: dict[str, Any] = {"kind": "sql", "local": "./data.db", "url": ["https://example.com/data.db"]}
+    selected: SQL = SQL.model_validate({**base, "table": "t"})
+    assert selected.table == "t"
+    queried: SQL = SQL.model_validate({**base, "query": "SELECT 1 ORDER BY 1"})
+    assert queried.query == "SELECT 1 ORDER BY 1"
+    with pytest.raises(ValidationError):
+        SQL.model_validate(base)
+    with pytest.raises(ValidationError):
+        SQL.model_validate({**base, "table": "t", "query": "SELECT 1 ORDER BY 1"})

@@ -76,7 +76,7 @@ def _shown(name: str, target: str) -> str:
     return f"`{name}` (coerced to `{target}`)" if target != name else f"`{name}`"
 
 
-def _section_source_label(source: Excel | Text | Parquet | IPC | NDJSON) -> str:
+def _section_source_label(source: Excel | Text | Parquet | IPC | NDJSON | SQL) -> str:
     """Render a section's source for a diagnostic message: the local path, plus the sheet for Excel.
 
     Args:
@@ -298,6 +298,28 @@ class IPC(BaseSource):
 # writes), so like parquet it adds no format-specific fields beyond `BaseSource`.
 class NDJSON(BaseSource):
     kind: Literal[Files.NDJSON] = Field(Files.NDJSON, description="Source kind; must be 'ndjson'.")
+
+
+class SQL(BaseSource):
+    """SQLite database source: ``local`` carries the database file (as with the file kinds).
+
+    Exactly one of ``table`` / ``query`` selects the rows. ``table`` scans the whole table
+    in ``rowid`` order; a ``query`` must carry its own ``ORDER BY`` so row indices and
+    ``row:<N>`` StudyResult ids stay stable across runs.
+    """
+
+    kind: Literal[Files.SQL] = Field(Files.SQL, description="Source kind; must be 'sql'.")
+    table: str | None = Field(None, description="Table to scan; scanned in rowid order. Mutually exclusive with `query`.")
+    query: str | None = Field(None, description="Full SELECT query; must carry an ORDER BY clause. Mutually exclusive with `table`.")
+
+    @model_validator(mode="after")
+    def exactly_one_selector(self: Self) -> Self:
+        if bool(self.table) == bool(self.query):
+            raise TablassertValidationError(
+                "A `sql` source needs exactly one of `table` or `query` (mutually exclusive).", code="sql-table-and-query-conflict"
+            )
+
+        return self
 
 
 class Regex(TablaBase):
@@ -995,7 +1017,7 @@ class Annotation(Encoding):
 class Section(TablaBase):
     """Pydantic section model and coercion target for a single table configuration."""
 
-    source: Excel | Text | Parquet | IPC | NDJSON = Field(..., description="Input source definition for reading tabular rows.")
+    source: Excel | Text | Parquet | IPC | NDJSON | SQL = Field(..., description="Input source definition for reading tabular rows.")
     statement: Statement = Field(..., description="Subject-object statement mapping for this section.")
     provenance: Provenance = Field(..., description="Provenance metadata applied to all produced edges.")
     annotations: list[Annotation] | None = Field(None, description="Optional extra encoded columns added to each row.")
