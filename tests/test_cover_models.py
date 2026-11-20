@@ -215,3 +215,16 @@ def test_sql_source_requires_exactly_one_selector() -> None:
         SQL.model_validate(base)
     with pytest.raises(ValidationError):
         SQL.model_validate({**base, "table": "t", "query": "SELECT 1 ORDER BY 1"})
+
+
+def test_section_source_requires_kind() -> None:
+    """The discriminated ``Source`` union rejects payloads omitting ``kind``."""
+    from pydantic import ValidationError
+
+    payload: dict[str, Any] = {
+        "source": {"local": "./table.csv", "url": ["https://example.com/table.csv"]},
+        "statement": {"subject": {"method": "value", "encoding": "BRCA1"}, "object": {"method": "value", "encoding": "TP53"}},
+        "provenance": {"repo": "PMC", "publication": "PMC0000000"},
+    }
+    with pytest.raises(ValidationError, match="union_tag_not_found"):
+        Section.model_validate(payload)
