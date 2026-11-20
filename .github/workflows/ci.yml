@@ -204,3 +204,32 @@ jobs:
           args: rust/
       - name: Cargo test
         run: cargo test --manifest-path rust/Cargo.toml
+
+  webui-frontend:
+    name: webui-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+      - name: Check TypeScript/TSX formatting
+        working-directory: frontend
+        run: bun run format:check
+      - name: Lint TypeScript/TSX
+        working-directory: frontend
+        run: bun run lint
+      - name: Typecheck SolidJS 2.0 frontend
+        working-directory: frontend
+        run: bun run typecheck
+      - name: Build static Web UI bundle
+        working-directory: frontend
+        run: bun run build
+      - name: Run frontend tests
+        working-directory: frontend
+        run: bun test

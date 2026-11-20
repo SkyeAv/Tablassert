@@ -54,6 +54,7 @@ The `Makefile` is intentionally small and mirrors the underlying commands:
 | `make build` | Release editable extension build |
 | `make test` | Python tests with coverage |
 | `make test-rust` | Rust tests |
+| `make webui-check` | Bun install (`--frozen-lockfile`), Biome format check & lint, SolidJS 2.0 typecheck, Vite build, and `bun test` |
 | `make lint` | Ruff lint |
 | `make fmt` | Ruff format and `cargo fmt` |
 | `make fmt-check` | Ruff format check and `cargo fmt --check` |

@@ -1,4 +1,4 @@
-.PHONY: setup build dev test test-rust lint fmt fmt-check typecheck deadcode check patch minor major clean paper paper-check paper-pdf paper-image preprint preprint-pdf
+.PHONY: setup build dev test test-rust webui-check lint fmt fmt-check typecheck deadcode check patch minor major clean paper paper-check paper-pdf paper-image preprint preprint-pdf
 
 # Install Python dev dependencies, CLI/QC/log extras, and the editable Rust extension.
 setup:
@@ -16,6 +16,10 @@ dev:
 # Run the Python test suite.
 test:
 	uv run pytest
+
+# Format-check, lint, typecheck, build, and test the SolidJS 2.0 Web UI frontend with Bun.
+webui-check:
+	cd frontend && bun install --frozen-lockfile && bun run format:check && bun run lint && bun run typecheck && bun run build && bun test
 
 # Run the Rust test suite.
 test-rust:

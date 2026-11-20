@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web",
-    "types": ["vite/client"]
+    "types": ["vite/client", "bun"]
   },
   "include": ["src"]
 }

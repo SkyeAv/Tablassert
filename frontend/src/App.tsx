@@ -287,11 +287,15 @@ export default function App() {
               <div class="grid gap-4 md:grid-cols-2">
                 <div>
                   <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">tables/table.yaml</h3>
-                  <pre class="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">{res().table_yaml}</pre>
+                  <pre class="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+                    {res().table_yaml}
+                  </pre>
                 </div>
                 <div>
                   <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">graph.yaml</h3>
-                  <pre class="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">{res().graph_yaml}</pre>
+                  <pre class="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+                    {res().graph_yaml}
+                  </pre>
                 </div>
               </div>
             </div>
