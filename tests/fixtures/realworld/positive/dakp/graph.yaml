@@ -155,7 +155,7 @@ rig:
       - "Gwenlyn Glusman - code author, domain expertise, data modeling"
       - "Matthew Brush - data modeling"
       - "Sierra Moxon - code, data modeling"
-      - "Skye Lane Goetz - code author, pipeline engineering, Tablassert integration"
+      - "Skye L. Goetz - code author, pipeline engineering, Tablassert integration"
       - "DAKP pipeline (https://github.com/glusman-team/dakp): source acquisition, assertion modeling"
       - "Tablassert: KGX and RIG generation"
     artifacts:

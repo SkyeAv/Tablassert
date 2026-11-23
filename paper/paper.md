@@ -1,6 +1,6 @@
 ---
-title: 'Tablassert: Declarative Extraction of NCATS Translator-Compliant Knowledge Graphs from Biomedical Tables'
-authors: [{"name":"Skye Lane Goetz","affiliation":1,"orcid":"0009-0007-8373-2352"},{"name":"Jared C. Roach","affiliation":1,"orcid":"0000-0003-4524-0107"},{"name":"Gwênlyn Glusman","affiliation":1,"orcid":"0000-0001-8060-5955"}]
+title: 'Tablassert: Declarative Extraction of Knowledge Graphs from Biomedical Tables'
+authors: [{"name":"Skye L. Goetz","affiliation":1,"orcid":"0009-0007-8373-2352"},{"name":"Jared C. Roach","affiliation":1,"orcid":"0000-0003-4524-0107"},{"name":"Gwênlyn Glusman","affiliation":1,"orcid":"0000-0001-8060-5955"}]
 affiliations: [{"index":1,"name":"Institute for Systems Biology"}]
 date: 20 October 2026
 lang: en-US

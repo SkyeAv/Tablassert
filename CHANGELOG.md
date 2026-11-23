@@ -6,13 +6,12 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **SQL (SQLite) is a sixth table source kind.** `kind: sql` reads a table or query result from a SQLite database via the stdlib `sqlite3` driver (zero new dependencies), with `local` carrying the database file and exactly one of `table` / `query` selecting the rows. `table` scans in `rowid` order and a `query` must carry its own `ORDER BY` (coded `sql-query-needs-order-by` otherwise), so row indices and `row:<N>` StudyResult ids stay reproducible across runs; columns rename positionally to `column_1..` per the reader contract. ([#285](https://github.com/SkyeAv/Tablassert/pull/285), [#263](https://github.com/SkyeAv/Tablassert/issues/263))
+
 ### Changed
 
+- **Author metadata, the manuscript title, and paper citations use consistent publication forms.** Skye L. Goetz now appears across package, citation, documentation, license, fixture, and manuscript metadata; the manuscript title is shortened; and every personal bibliography author uses initialized given and middle names, including Goetz, S. L., Roach, J. C., and Glusman, G., preventing given-name disambiguation in author-date citations.
 - **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
-
-### Added
-
-- **SQL (SQLite) is a sixth table source kind.** `kind: sql` reads a table or query result from a SQLite database via the stdlib `sqlite3` driver (zero new dependencies), with `local` carrying the database file and exactly one of `table` / `query` selecting the rows. `table` scans in `rowid` order and a `query` must carry its own `ORDER BY` (coded `sql-query-needs-order-by` otherwise), so row indices and `row:<N>` StudyResult ids stay reproducible across runs; columns rename positionally to `column_1..` per the reader contract. ([#285](https://github.com/SkyeAv/Tablassert/pull/285), [#263](https://github.com/SkyeAv/Tablassert/issues/263))
 
 ## 22.4.0 - 2026-11-19
 

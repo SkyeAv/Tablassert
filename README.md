@@ -204,7 +204,7 @@ request guidelines.
 If you use Tablassert, please cite it as described in [CITATION.cff](CITATION.cff). The approach is
 described in:
 
-> Skye Lane Goetz, Amy K. Glen, and Gwênlyn Glusman. "MicrobiomeKG: bridging microbiome research
+> Skye L. Goetz, Amy K. Glen, and Gwênlyn Glusman. "MicrobiomeKG: bridging microbiome research
 > and host health through knowledge graphs." *Frontiers in Systems Biology* 5 (2025).
 > [doi:10.3389/fsysb.2025.1544432](https://doi.org/10.3389/fsysb.2025.1544432)
 
@@ -214,6 +214,6 @@ described in:
 
 ## Contributors
 
-- [Skye Lane Goetz](mailto:sgoetz@isbscience.org), Institute for Systems Biology
+- [Skye L. Goetz](mailto:sgoetz@isbscience.org), Institute for Systems Biology
 - [Gwênlyn Glusman](mailto:gglusman@isbscience.org), Institute for Systems Biology
 - [Jared C. Roach](mailto:jroach@isbscience.org), Institute for Systems Biology
