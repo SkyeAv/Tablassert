@@ -98,6 +98,9 @@ qc = [
 log = [
     "loguru>=0.7.3",
 ]
+hf = [
+    "huggingface-hub>=0.25.0",
+]
 
 [dependency-groups]
 test = [
