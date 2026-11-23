@@ -13,6 +13,10 @@ All notable changes to this project are documented in this file.
 - **Author metadata, the manuscript title, and paper citations use consistent publication forms.** Skye L. Goetz now appears across package, citation, documentation, license, fixture, and manuscript metadata; the manuscript title is shortened; and every personal bibliography author uses initialized given and middle names, including Goetz, S. L., Roach, J. C., and Glusman, G., preventing given-name disambiguation in author-date citations.
 - **BREAKING: Single `Source` discriminated union replaces repeated source unions in `models.py` and requires `kind`.** `Source` is now defined as `Annotated[Excel | Text | Parquet | IPC | NDJSON | SQL, Field(discriminator="kind")]` and used by both `Section.source` and `_section_source_label`. Configs that omit `source.kind` (which previously fell back to `Excel`) now fail validation with `union_tag_not_found`. ([#289](https://github.com/SkyeAv/Tablassert/pull/289), [#286](https://github.com/SkyeAv/Tablassert/issues/286))
 
+### Fixed
+
+- **Release detection tolerates force-pushes.** The shared version detector fetches `github.event.before` from `origin` when a shallow checkout lacks that orphaned commit, so CI, tagging, and PyPI publishing can still compare `project.version`; an unfetchable previous commit still fails explicitly.
+
 ## 22.4.0 - 2026-11-19
 
 ### Added
