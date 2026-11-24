@@ -23,6 +23,7 @@ DOCS: Path = ROOT / "docs"
 COMMAND_NAME_DOCS: dict[str, tuple[str, ...]] = {
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
+    "init": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
     "validate-kgx": ("cli.md",),
@@ -30,6 +31,7 @@ COMMAND_NAME_DOCS: dict[str, tuple[str, ...]] = {
 COMMAND_FLAG_DOCS: dict[str, tuple[str, ...]] = {
     "build-fullmap": ("cli.md", "fullmap.md"),
     "build-kg": ("cli.md",),
+    "init": ("cli.md",),
     "quick-map": ("cli.md", "fullmap.md"),
     "validate": ("cli.md",),
     "validate-kgx": ("cli.md",),
